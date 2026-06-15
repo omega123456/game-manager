@@ -15,6 +15,7 @@ use crate::db::connection;
 use crate::error::{AppError, AppResult};
 use crate::keep_awake::{self, KeepAwake, NoopSleepBlocker, SleepBlocker};
 use crate::launch::cancel::CancelToken;
+use crate::priority::{self, NoopProcessPrioritizer, ProcessPrioritizer};
 
 /// Application state container injected into command implementations.
 pub struct AppState {
@@ -29,6 +30,8 @@ pub struct AppState {
     launches: Mutex<HashMap<i64, CancelToken>>,
     /// Suppresses system sleep while any launch is registered.
     keep_awake: KeepAwake,
+    /// Raises the running game's process priority when the setting is enabled.
+    prioritizer: Box<dyn ProcessPrioritizer>,
 }
 
 impl AppState {
@@ -39,18 +42,30 @@ impl AppState {
 
     /// Construct an `AppState` with an explicit writable app-data directory.
     pub fn new_with_app_data_dir(db: Connection, app_data_dir: PathBuf) -> Self {
-        Self::with_blocker(db, app_data_dir, keep_awake::default_blocker())
+        Self::with_seams(
+            db,
+            app_data_dir,
+            keep_awake::default_blocker(),
+            priority::default_prioritizer(),
+        )
     }
 
-    /// Construct an `AppState` over an explicit sleep blocker (the seam used by
-    /// the constructors above and by `test-utils` to inject a recording fake).
-    fn with_blocker(db: Connection, app_data_dir: PathBuf, blocker: Box<dyn SleepBlocker>) -> Self {
+    /// Construct an `AppState` over explicit OS seams (sleep blocker + process
+    /// prioritizer). Used by the constructors above and by `test-utils` to inject
+    /// recording fakes.
+    fn with_seams(
+        db: Connection,
+        app_data_dir: PathBuf,
+        blocker: Box<dyn SleepBlocker>,
+        prioritizer: Box<dyn ProcessPrioritizer>,
+    ) -> Self {
         AppState {
             app_name: "Game Manager".to_string(),
             db: Mutex::new(db),
             app_data_dir,
             launches: Mutex::new(HashMap::new()),
             keep_awake: KeepAwake::new(blocker),
+            prioritizer,
         }
     }
 
@@ -60,10 +75,11 @@ impl AppState {
     /// migrated by [`connection::open_in_memory`]. Uses a no-op sleep blocker so
     /// tests never spawn the keep-awake worker or touch real OS sleep state.
     pub fn in_memory() -> AppResult<Self> {
-        Ok(AppState::with_blocker(
+        Ok(AppState::with_seams(
             connection::open_in_memory()?,
             std::env::temp_dir().join("game-manager"),
             Box::new(NoopSleepBlocker),
+            Box::new(NoopProcessPrioritizer),
         ))
     }
 
@@ -126,6 +142,30 @@ impl AppState {
         }
     }
 
+    /// Raise the game process `pid` to High priority when the
+    /// `raise_game_priority` setting is enabled (the default when unset).
+    ///
+    /// Best-effort: a disabled setting, a read error, or an OS failure is logged
+    /// and swallowed so the launch is never blocked.
+    pub fn raise_priority_if_enabled(&self, pid: u32) {
+        let enabled = self
+            .with_db(|conn| crate::db::repo::settings::get(conn, "raise_game_priority"))
+            .ok()
+            .flatten()
+            // Default ON: only an explicit "false" disables the boost.
+            .map(|value| value != "false")
+            .unwrap_or(true);
+        if !enabled {
+            return;
+        }
+        if let Err(err) = self.prioritizer.set_high(pid) {
+            tracing::warn!(
+                category = "launch",
+                "failed to raise priority for pid {pid}: {err}"
+            );
+        }
+    }
+
     /// Cancel an in-flight launch for `game_id`. Returns whether one was active.
     pub fn cancel_launch(&self, game_id: i64) -> bool {
         match self.launches.lock() {
@@ -146,10 +186,24 @@ impl AppState {
     /// Construct an in-memory `AppState` over a caller-supplied sleep blocker so
     /// tests can assert that launches engage/release the keep-awake controller.
     pub fn in_memory_with_blocker(blocker: Box<dyn SleepBlocker>) -> AppResult<Self> {
-        Ok(AppState::with_blocker(
+        Ok(AppState::with_seams(
             connection::open_in_memory()?,
             std::env::temp_dir().join("game-manager"),
             blocker,
+            Box::new(NoopProcessPrioritizer),
+        ))
+    }
+
+    /// Construct an in-memory `AppState` over a caller-supplied process
+    /// prioritizer so tests can assert that launches raise the game's priority.
+    pub fn in_memory_with_prioritizer(
+        prioritizer: Box<dyn ProcessPrioritizer>,
+    ) -> AppResult<Self> {
+        Ok(AppState::with_seams(
+            connection::open_in_memory()?,
+            std::env::temp_dir().join("game-manager"),
+            Box::new(NoopSleepBlocker),
+            prioritizer,
         ))
     }
 

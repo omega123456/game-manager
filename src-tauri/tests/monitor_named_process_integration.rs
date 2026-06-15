@@ -163,6 +163,36 @@ async fn detects_named_process_and_writes_accurate_session() {
 }
 
 #[tokio::test]
+async fn raises_detected_process_priority_on_start() {
+    #[derive(Clone, Default)]
+    struct RecordingPrioritizer {
+        pids: Arc<std::sync::Mutex<Vec<u32>>>,
+    }
+    impl game_manager_lib::priority::ProcessPrioritizer for RecordingPrioritizer {
+        fn set_high(&self, pid: u32) -> game_manager_lib::error::AppResult<()> {
+            self.pids.lock().unwrap().push(pid);
+            Ok(())
+        }
+    }
+
+    let recorder = RecordingPrioritizer::default();
+    let state = AppState::in_memory_with_prioritizer(Box::new(recorder.clone())).unwrap();
+    let game_id = seed_named_game(&state, "steam://run/123", None, "Real.exe");
+
+    let table = FakeTable::new("real.exe", vec![vec![], vec![4242]], Duration::from_millis(10));
+    let monitor = NamedProcessMonitor::new(table, ArcLauncher(Arc::new(FakeLauncher::default())));
+    let cancel = CancelToken::new();
+
+    monitor.wait_for_start(&state, game_id, &cancel).await.unwrap();
+
+    assert_eq!(
+        *recorder.pids.lock().unwrap(),
+        vec![4242],
+        "the detected game pid must be boosted on start"
+    );
+}
+
+#[tokio::test]
 async fn cancellation_before_detection_opens_no_session() {
     let state = AppState::in_memory().unwrap();
     let game_id = seed_named_game(&state, "steam://run/never", None, "Never.exe");

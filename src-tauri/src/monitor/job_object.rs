@@ -60,6 +60,10 @@ pub trait JobLauncher: Send + Sync {
 /// A handle to a launched job-object tree.
 #[async_trait]
 pub trait JobHandle: Send + Sync {
+    /// The pid of the process we launched into the job (the game for direct
+    /// launches), used to raise its priority once it is running.
+    fn pid(&self) -> u32;
+
     /// Block until the job reports `ACTIVE_PROCESS_ZERO`, or `cancel` fires.
     ///
     /// Returns `true` when the tree exited on its own; `false` when cancellation
@@ -152,6 +156,9 @@ where
         // session row opened at "start" (so the UI shows playing immediately),
         // open it here and carry the handle through a boxed slot.
         let session_id = state.with_db(|conn| sessions::start(conn, game_id))?;
+        // The launched process is now running (for direct launches it is the
+        // game itself): bump it to High priority when the setting is enabled.
+        state.raise_priority_if_enabled(handle.pid());
         tracing::info!(
             category = "monitor",
             "job-object launched '{}'; session {session_id} started",
@@ -273,6 +280,9 @@ mod windows_impl {
     pub struct WindowsJobHandle {
         job: HANDLE,
         port: HANDLE,
+        // The pid of the launched process, surfaced so the monitor can raise its
+        // priority once it is running.
+        pid: u32,
         // Keep the launched child alive so its primary handle is not closed out
         // from under the job before the tree is timed.
         _child: Arc<Child>,
@@ -373,6 +383,7 @@ mod windows_impl {
         Ok(WindowsJobHandle {
             job,
             port,
+            pid,
             _child: Arc::new(child),
         })
     }
@@ -459,6 +470,10 @@ mod windows_impl {
 
     #[async_trait]
     impl JobHandle for WindowsJobHandle {
+        fn pid(&self) -> u32 {
+            self.pid
+        }
+
         async fn wait_for_tree_exit(&self, cancel: &CancelToken) -> AppResult<bool> {
             let job = self.job;
             let port = self.port;

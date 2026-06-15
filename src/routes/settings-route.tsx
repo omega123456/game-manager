@@ -1,6 +1,7 @@
 import { ApiKeysSection } from '@/features/settings/api-keys-section'
 import { AppearanceSection } from '@/features/settings/appearance-section'
 import { GlobalScriptsSection } from '@/features/settings/global-scripts-section'
+import { LaunchSection } from '@/features/settings/launch-section'
 
 /**
  * Settings page. Sectioned layout: Global Scripts (placeholder until C2), API
@@ -18,6 +19,7 @@ export function SettingsRoute(): React.JSX.Element {
       </header>
       <div className="space-y-6">
         <GlobalScriptsSection />
+        <LaunchSection />
         <ApiKeysSection />
         <AppearanceSection />
       </div>

@@ -51,6 +51,8 @@ gm-test-integration = [
   "monitor_mode_selection_integration",
   "--test",
   "keep_awake_integration",
+  "--test",
+  "priority_integration",
 ]
 
 gm-llvm-cov = [
@@ -103,6 +105,8 @@ gm-llvm-cov = [
   "monitor_mode_selection_integration",
   "--test",
   "keep_awake_integration",
+  "--test",
+  "priority_integration",
   "--fail-under-lines",
   "90",
   "--fail-under-functions",

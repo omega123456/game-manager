@@ -43,13 +43,22 @@ fn splits_arguments_honoring_quotes() {
 
 // ----- fake launcher / handle -----------------------------------------------
 
+/// Pid the fake launcher reports for the process it "launches", so tests can
+/// assert it is the value handed to the priority boost.
+const FAKE_LAUNCH_PID: u32 = 4242;
+
 struct FakeHandle {
+    pid: u32,
     exit_after: Duration,
     waited: Arc<AtomicBool>,
 }
 
 #[async_trait]
 impl JobHandle for FakeHandle {
+    fn pid(&self) -> u32 {
+        self.pid
+    }
+
     async fn wait_for_tree_exit(&self, cancel: &CancelToken) -> game_manager_lib::error::AppResult<bool> {
         self.waited.store(true, Ordering::SeqCst);
         tokio::select! {
@@ -79,6 +88,7 @@ impl JobLauncher for FakeLauncher {
         }
         *self.last_target.lock().unwrap() = Some(launch_target.to_string());
         Ok(FakeHandle {
+            pid: FAKE_LAUNCH_PID,
             exit_after: self.exit_after,
             waited: self.waited.clone(),
         })
@@ -131,6 +141,41 @@ async fn launches_tree_and_writes_accurate_session() {
     let sessions = state.with_db(|conn| sessions::list_for_game(conn, game_id)).unwrap();
     assert_eq!(sessions.len(), 1);
     assert!(sessions[0].ended_at.is_some());
+}
+
+#[tokio::test]
+async fn raises_launched_process_priority_on_start() {
+    use std::sync::Mutex as StdMutex;
+
+    #[derive(Clone, Default)]
+    struct RecordingPrioritizer {
+        pids: Arc<StdMutex<Vec<u32>>>,
+    }
+    impl game_manager_lib::priority::ProcessPrioritizer for RecordingPrioritizer {
+        fn set_high(&self, pid: u32) -> game_manager_lib::error::AppResult<()> {
+            self.pids.lock().unwrap().push(pid);
+            Ok(())
+        }
+    }
+
+    let recorder = RecordingPrioritizer::default();
+    let state = AppState::in_memory_with_prioritizer(Box::new(recorder.clone())).unwrap();
+    let game_id = seed_tree_game(&state, "C:/Games/Direct.exe");
+
+    let monitor = JobObjectMonitor::new(FakeLauncher {
+        exit_after: Duration::from_millis(20),
+        last_target: Arc::new(std::sync::Mutex::new(None)),
+        waited: Arc::new(AtomicBool::new(false)),
+        fail: false,
+    });
+    let cancel = CancelToken::new();
+    monitor.wait_for_start(&state, game_id, &cancel).await.unwrap();
+
+    assert_eq!(
+        *recorder.pids.lock().unwrap(),
+        vec![FAKE_LAUNCH_PID],
+        "the launched process pid must be boosted on start"
+    );
 }
 
 #[tokio::test]

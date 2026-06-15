@@ -13,6 +13,7 @@ pub mod keep_awake;
 pub mod logging;
 pub mod launch;
 pub mod monitor;
+pub mod priority;
 pub mod state;
 
 use std::path::{Path, PathBuf};

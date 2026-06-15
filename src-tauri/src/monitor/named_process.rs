@@ -152,6 +152,9 @@ impl<T: ProcessTable, L: NamedProcessLauncher> Monitor for NamedProcessMonitor<T
                     category = "monitor",
                     "named-process '{target}' detected (pid {pid}); session {session_id} started"
                 );
+                // The detected process is the real game (the launcher has handed
+                // off), so this is the right pid to bump to High priority.
+                state.raise_priority_if_enabled(pid);
                 return Ok(StartOutcome::Started(encode_pid_session(session_id, pid)));
             }
             if poll_delay_or_cancel(cancel).await {
