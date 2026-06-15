@@ -1,13 +1,7 @@
-import { RoutePlaceholder } from '@/routes/route-placeholder'
+import { ScriptManagerContent } from '@/features/scripts/script-manager-content'
 
 export function ScriptsRoute(): React.JSX.Element {
-  return (
-    <RoutePlaceholder
-      icon="code"
-      title="Script Manager"
-      description="Create and assign automation scripts here in Phase C2."
-    />
-  )
+  return <ScriptManagerContent />
 }
 
 export default ScriptsRoute

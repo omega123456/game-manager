@@ -3,6 +3,7 @@ import { HashRouter } from 'react-router-dom'
 import { useState } from 'react'
 
 import { ThemeProvider } from '@/components/theme/theme-provider'
+import { Toaster } from '@/components/ui/toaster'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { createQueryClient } from '@/lib/query-client'
 import { AppRoutes } from '@/routes/app-routes'
@@ -22,6 +23,7 @@ export default function App(): React.JSX.Element {
           <HashRouter>
             <AppRoutes />
           </HashRouter>
+          <Toaster />
         </TooltipProvider>
       </ThemeProvider>
     </QueryClientProvider>

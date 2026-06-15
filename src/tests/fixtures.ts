@@ -39,6 +39,16 @@ export const IPC_FIXTURES: Record<string, IpcHandler> = {
   set_game_groups: (args) => args?.groupIds ?? [],
   set_game_scripts: (args) => args?.scriptIds ?? [],
 
+  // --- Scripts. Phase C1 introduces the backend + wrappers; defaults keep the
+  //     harness quiet until tests override specific flows. ---
+  list_scripts: () => [],
+  get_script: () => null,
+  create_script: (args) => args?.input,
+  update_script: (args) => ({ id: args?.id, ...(args?.input as object) }),
+  delete_script: () => undefined,
+  set_script_dependencies: (args) => args?.dependsOn ?? [],
+  set_script_kind: (args) => ({ id: args?.id, kind: args?.kind }),
+
   // --- Art + metadata. Phase B3 adds the backend used by the future Add Game
   //     wizard. Defaults stay deterministic and cheap. ---
   search_art: () => [],

@@ -1,0 +1,38 @@
+# Permissions for the scripts command surface.
+
+"$schema" = "../gen/schemas/desktop-schema.json"
+
+[[permission]]
+identifier = "allow-list-scripts"
+description = "Allows the frontend to list all scripts via list_scripts."
+commands.allow = ["list_scripts"]
+
+[[permission]]
+identifier = "allow-get-script"
+description = "Allows the frontend to read a single script via get_script."
+commands.allow = ["get_script"]
+
+[[permission]]
+identifier = "allow-create-script"
+description = "Allows the frontend to create a script via create_script."
+commands.allow = ["create_script"]
+
+[[permission]]
+identifier = "allow-update-script"
+description = "Allows the frontend to update a script via update_script."
+commands.allow = ["update_script"]
+
+[[permission]]
+identifier = "allow-delete-script"
+description = "Allows the frontend to delete a script via delete_script."
+commands.allow = ["delete_script"]
+
+[[permission]]
+identifier = "allow-set-script-dependencies"
+description = "Allows the frontend to replace a script's require edges via set_script_dependencies."
+commands.allow = ["set_script_dependencies"]
+
+[[permission]]
+identifier = "allow-set-script-kind"
+description = "Allows the frontend to change a script's kind via set_script_kind."
+commands.allow = ["set_script_kind"]

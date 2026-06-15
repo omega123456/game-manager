@@ -95,4 +95,22 @@ for (const theme of THEMES) {
     await page.getByTestId('game-detail-edit').waitFor({ state: 'visible' })
     await expect(page).toHaveScreenshot(`game-detail-edit-${theme}.png`)
   })
+
+  test(`script manager normal editor — ${theme}`, async ({ page }) => {
+    await gotoApp(page)
+    await setTheme(page, theme)
+    await page.getByRole('link', { name: /Script Manager/ }).click()
+    await page.getByRole('button', { name: 'Edit Auto-Save Manager' }).click()
+    await page.getByTestId('script-phases-layout').waitFor({ state: 'visible' })
+    await expect(page).toHaveScreenshot(`script-manager-normal-${theme}.png`)
+  })
+
+  test(`script manager utility editor — ${theme}`, async ({ page }) => {
+    await gotoApp(page)
+    await setTheme(page, theme)
+    await page.getByRole('link', { name: /Script Manager/ }).click()
+    await page.getByRole('button', { name: 'Edit SaveLib' }).click()
+    await page.getByTestId('script-utility-layout').waitFor({ state: 'visible' })
+    await expect(page).toHaveScreenshot(`script-manager-utility-${theme}.png`)
+  })
 }

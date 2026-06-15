@@ -70,10 +70,11 @@ impl ScriptKind {
 }
 
 /// How a phase (or utility snippet) is sourced.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum PhaseMode {
     /// Phase/snippet not configured.
+    #[default]
     None,
     /// An external script/executable already on disk.
     Path,

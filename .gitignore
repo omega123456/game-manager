@@ -23,3 +23,4 @@ e2e/**/*-snapshots/**-actual.png
 
 .agent
 .vscode
+.claude

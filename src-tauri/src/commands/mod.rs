@@ -9,4 +9,5 @@
 pub mod art;
 pub mod games;
 pub mod logging;
+pub mod scripts;
 pub mod settings;

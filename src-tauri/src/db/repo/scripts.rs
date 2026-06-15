@@ -195,6 +195,37 @@ pub fn require_ids(conn: &Connection, script_id: i64) -> AppResult<Vec<i64>> {
     super::collect_ids(&mut stmt, params![script_id])
 }
 
+/// Fetch only a script's current kind, returning `None` when the row is absent.
+///
+/// Lighter than [`get`] and, unlike it, does not produce a not-found error so
+/// callers can preserve their own missing-row messaging.
+pub fn kind_of(conn: &Connection, id: i64) -> AppResult<Option<ScriptKind>> {
+    let mut stmt = conn.prepare("SELECT kind FROM scripts WHERE id = ?1")?;
+    let mut rows = stmt.query_map(params![id], |row| row.get::<_, String>("kind"))?;
+    match rows.next() {
+        Some(raw) => {
+            let raw = raw?;
+            let kind = ScriptKind::from_db_str(&raw).ok_or_else(|| {
+                AppError::database(format!("script {id} has invalid kind '{raw}'"))
+            })?;
+            Ok(Some(kind))
+        }
+        None => Ok(None),
+    }
+}
+
+/// The ascending list of script ids that require (depend on) `script_id`.
+///
+/// These are the inbound require edges; used to guard against reclassifying a
+/// utility away from `utility` while other scripts still require it.
+pub fn dependent_ids(conn: &Connection, script_id: i64) -> AppResult<Vec<i64>> {
+    let mut stmt = conn.prepare(
+        "SELECT script_id FROM script_dependencies
+         WHERE depends_on_script_id = ?1 ORDER BY script_id",
+    )?;
+    super::collect_ids(&mut stmt, params![script_id])
+}
+
 /// Replace the `requires` edges for a script. Validation/cycle checks belong in C1.
 pub fn set_dependencies(conn: &Connection, script_id: i64, depends_on: &[i64]) -> AppResult<()> {
     let tx = conn.unchecked_transaction()?;

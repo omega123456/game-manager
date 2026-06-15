@@ -1,5 +1,7 @@
 import { invoke } from '@tauri-apps/api/core'
 
+import { useToastStore, type ToastTone } from '@/stores/toast-store'
+
 /**
  * Frontend logging entrypoint (Phase A1 stub).
  *
@@ -36,4 +38,46 @@ export function logFrontend(
     // Last-resort sink only — IPC unavailable or backend command not yet registered.
     console.error('[app-log]', level, message, err)
   })
+}
+
+/** Options for a user-visible toast (with an optional description and log details). */
+export interface ToastOptions {
+  description?: string
+  /** Log category recorded alongside the toast. */
+  category?: string
+  /** Extra log details (e.g. the underlying error string). */
+  details?: string
+}
+
+const TONE_LEVEL: Record<ToastTone, FrontendLogLevel> = {
+  info: 'info',
+  success: 'info',
+  error: 'error',
+}
+
+/**
+ * Show a user-visible toast and mirror it to the application log. This is the
+ * single entrypoint for surfacing operational failures/notices to the user —
+ * feature code must not call `console.*` directly.
+ */
+export function toast(tone: ToastTone, title: string, options?: ToastOptions): void {
+  logFrontend(TONE_LEVEL[tone], title, {
+    category: options?.category,
+    details: options?.details ?? options?.description,
+  })
+  useToastStore.getState().push({
+    tone,
+    title,
+    description: options?.description,
+  })
+}
+
+/** Convenience: surface an error toast (logged at `error` level). */
+export function toastError(title: string, options?: ToastOptions): void {
+  toast('error', title, options)
+}
+
+/** Convenience: surface a success toast (logged at `info` level). */
+export function toastSuccess(title: string, options?: ToastOptions): void {
+  toast('success', title, options)
 }
