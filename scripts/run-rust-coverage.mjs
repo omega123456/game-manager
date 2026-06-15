@@ -2,8 +2,8 @@
  * Run the Rust coverage gate via the `gm-llvm-cov` cargo alias.
  *
  * Resolves the rustup-managed llvm-cov / llvm-profdata so cargo-llvm-cov works
- * regardless of which `cargo` binary is first on PATH, then runs the alias with
- * the working directory set to `src-tauri` (where `.cargo/config.toml` lives).
+ * regardless of which `cargo` binary is first on PATH, then runs the alias from
+ * the repository root (where `.cargo/config.toml` lives).
  */
 import { execFileSync, spawn } from 'node:child_process'
 import { existsSync } from 'node:fs'
@@ -11,7 +11,6 @@ import { fileURLToPath } from 'node:url'
 import path from 'node:path'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
-const tauriDir = path.join(root, 'src-tauri')
 
 function tryReadCommand(command, args) {
   try {
@@ -63,17 +62,16 @@ function ensureRustCoverageTools(env) {
 
 const env = ensureRustCoverageTools({ ...process.env })
 
-// `--cfg coverage` excludes the Tauri-runtime entrypoint (lib::run / main) from
-// instrumentation — it cannot be exercised in a headless coverage run.
-env.RUSTFLAGS = `${env.RUSTFLAGS ? `${env.RUSTFLAGS} ` : ''}--cfg coverage`
-
+// Use `rustup run stable cargo` to ensure the rustup-managed rustc is used,
+// so cargo-llvm-cov resolves llvm-profdata via the correct sysroot regardless
+// of which `cargo` binary PATH resolves to (e.g. Homebrew vs rustup shim).
 const hasRustup = Boolean(tryReadCommand('rustup', ['--version']))
 const [command, commandArgs] = hasRustup
   ? ['rustup', ['run', 'stable', 'cargo', 'gm-llvm-cov']]
   : ['cargo', ['gm-llvm-cov']]
 
 const child = spawn(command, commandArgs, {
-  cwd: tauriDir,
+  cwd: root,
   env,
   stdio: 'inherit',
   shell: process.platform === 'win32',

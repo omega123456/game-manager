@@ -8,6 +8,10 @@ rust-version = "1.77"
 name = "game_manager_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
+[features]
+default = []
+test-utils = []
+
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
 
@@ -27,6 +31,7 @@ urlencoding = "2"
 
 [dev-dependencies]
 tempfile = "3"
+tauri = { version = "2", features = ["test"] }
 
 [lints.rust]
 # `coverage` is a custom cfg set by the cargo-llvm-cov run to exclude the Tauri

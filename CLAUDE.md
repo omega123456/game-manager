@@ -19,16 +19,16 @@ pnpm tauri build        # Native app bundle (MSI)
 pnpm test:all           # Vitest coverage + Rust coverage + full Playwright
 pnpm test:coverage      # Vitest with v8 coverage (90% threshold lines/functions/statements)
 pnpm test:rust          # Rust tests via nextest, no coverage instrumentation (fast)
-pnpm test:rust:coverage # Rust tests via cargo-llvm-cov (needs cargo-llvm-cov + llvm-tools-preview)
+pnpm test:rust:coverage # Rust tests via cargo llvm-cov nextest (needs cargo-llvm-cov + llvm-tools-preview)
 pnpm test:e2e           # All Playwright specs under e2e/ (includes screenshots.spec.ts)
 
 # Single Vitest test file
 pnpm exec vitest run src/tests/path/to/file.test.ts
 
-# Single Rust test suite (from src-tauri/)
-cargo nextest run --test <suite_name>
+# Single Rust test suite (from repo root)
+cargo nextest run --manifest-path src-tauri/Cargo.toml --features test-utils --test <suite_name>
 # Example:
-cargo nextest run --test smoke_integration
+cargo nextest run --manifest-path src-tauri/Cargo.toml --features test-utils --test smoke_integration
 
 # Regenerate Playwright screenshot baselines after intentional visual changes
 pnpm test:e2e -- --update-snapshots
@@ -94,9 +94,11 @@ src/
   styles/              # Tailwind globals + theme token CSS vars under [data-theme]
   tests/               # Mirrors src/; setup.ts, ipc-mock.ts, fixtures.ts, playwright-fixtures/
 
+.cargo/
+  config.toml          # Test aliases: gm-test-integration, gm-llvm-cov (run from repo root)
+
 src-tauri/
-  Cargo.toml, tauri.conf.json, build.rs
-  .cargo/config.toml   # Test aliases: gm-test-integration, gm-llvm-cov
+  Cargo.toml, tauri.conf.json, build.rs, nextest.toml
   migrations/          # NNN_*.sql compiled via include_str! + MIGRATIONS array
   permissions/         # *.toml — one [[permission]] block per command
   capabilities/        # default.json — grants permissions to the "main" window
@@ -154,8 +156,8 @@ Keep every test in a dedicated file under the appropriate test root (`src/tests/
 
 - Tests only in `src-tauri/tests/<area>_<focus>_integration.rs`. Name files after what they test, not meta-goals like `coverage_boost`.
 - Use in-memory SQLite (`Connection::open_in_memory()`) — never mock the DB layer.
-- After adding a new test file, register it in **both** aliases in `.cargo/config.toml`: `gm-test-integration` (the nextest run) and `gm-llvm-cov`.
-- Run with `pnpm test:rust` for fast iteration; `pnpm test:rust:coverage` for the coverage gate. The coverage run sets `--cfg coverage` to exclude the Tauri runtime entrypoint (`lib::run` / `main`) from instrumentation; do not add other code behind `cfg(coverage)` to dodge coverage.
+- After adding a new test file, register it in **both** aliases in the repo-root `.cargo/config.toml`: `gm-test-integration` and `gm-llvm-cov`.
+- Run with `pnpm test:rust` for fast iteration; `pnpm test:rust:coverage` for the coverage gate (`cargo llvm-cov nextest`). `cargo-llvm-cov` sets `--cfg coverage` to exclude the Tauri runtime entrypoint (`lib::run` / `main`); do not add other code behind `cfg(coverage)` to dodge coverage.
 
 ### Playwright (E2E + Visual Regression)
 

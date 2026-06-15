@@ -2,7 +2,7 @@
 //!
 //! ALL Rust tests live under `src-tauri/tests/` — never inline `#[cfg(test)]` in
 //! `src-tauri/src/`. After adding a new test file, register it in both aliases in
-//! `src-tauri/.cargo/config.toml`.
+//! the repo-root `.cargo/config.toml`.
 
 use game_manager_lib::error::{AppError, AppResult};
 use game_manager_lib::logging::init_tracing;
