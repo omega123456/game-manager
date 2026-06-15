@@ -3,7 +3,7 @@
 use game_manager_lib::db::connection::open_in_memory;
 use game_manager_lib::db::repo::{games, groups, scripts, sessions, settings};
 use game_manager_lib::domain::{
-    Interpreter, LaunchPhase, LogLevel, MonitorMode, PhaseConfig, PhaseMode, Provenance,
+    Interpreter, LogLevel, MonitorMode, PhaseConfig, PhaseMode, Provenance, ScriptPhase,
     ResolvedScript, ScriptKind,
 };
 
@@ -25,6 +25,7 @@ fn games_crud_and_assignments() {
     let fetched = games::get(&conn, id).unwrap();
     assert_eq!(fetched.name, "Elden Ring");
     assert_eq!(fetched.arguments.as_deref(), Some("-windowed"));
+    assert!(fetched.group_ids.is_empty());
     assert_eq!(fetched.total_playtime_seconds, 0);
     assert!(fetched.last_played_at.is_none());
 
@@ -311,7 +312,7 @@ fn dto_serializes_camel_case() {
         script_id: 1,
         name: "S".into(),
         priority: 5,
-        phase: LaunchPhase::Before,
+        phase: ScriptPhase::Before,
         provenance: Provenance::Group,
         group_name: Some("G".into()),
         order: 1,

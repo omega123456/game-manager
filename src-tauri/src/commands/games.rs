@@ -9,8 +9,9 @@
 use serde::Deserialize;
 
 use crate::db::repo::{games, scripts};
-use crate::domain::{Game, MonitorMode, ScriptKind};
+use crate::domain::{Game, MonitorMode, ResolvedScript, ScriptKind};
 use crate::error::{AppError, AppResult};
+use crate::launch::resolver;
 use crate::state::AppState;
 
 /// Frontend payload used by create/update operations.
@@ -153,6 +154,11 @@ pub fn set_game_scripts_impl(
     })
 }
 
+/// Resolve the effective execution entries for a game's script pipeline.
+pub fn get_resolved_scripts_impl(state: &AppState, game_id: i64) -> AppResult<Vec<ResolvedScript>> {
+    state.with_db(|conn| resolver::resolve_for_game(conn, game_id))
+}
+
 /// Thin `#[tauri::command]` wrapper delegating to [`list_games_impl`].
 #[cfg(not(coverage))]
 #[tauri::command]
@@ -212,4 +218,14 @@ pub fn set_game_scripts(
     script_ids: Vec<i64>,
 ) -> AppResult<Vec<i64>> {
     set_game_scripts_impl(&state, game_id, script_ids)
+}
+
+/// Thin `#[tauri::command]` wrapper delegating to [`get_resolved_scripts_impl`].
+#[cfg(not(coverage))]
+#[tauri::command]
+pub fn get_resolved_scripts(
+    state: tauri::State<'_, AppState>,
+    game_id: i64,
+) -> AppResult<Vec<ResolvedScript>> {
+    get_resolved_scripts_impl(&state, game_id)
 }

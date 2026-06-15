@@ -1,6 +1,6 @@
 import { invoke } from '@tauri-apps/api/core'
 
-import type { Game, MonitorMode } from '@/types/domain'
+import type { Game, MonitorMode, ResolvedScript } from '@/types/domain'
 
 export interface SaveGameInput {
   name: string
@@ -44,4 +44,9 @@ export function setGameGroups(gameId: number, groupIds: number[]): Promise<numbe
 /** Replace the set of directly assigned normal scripts for a game. */
 export function setGameScripts(gameId: number, scriptIds: number[]): Promise<number[]> {
   return invoke<number[]>('set_game_scripts', { gameId, scriptIds })
+}
+
+/** Resolve the effective execution entries for a game's script pipeline. */
+export function getResolvedScripts(gameId: number): Promise<ResolvedScript[]> {
+  return invoke<ResolvedScript[]>('get_resolved_scripts', { gameId })
 }

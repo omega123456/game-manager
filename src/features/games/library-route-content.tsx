@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 
 import { useGamesQuery } from '@/lib/queries/use-games'
+import { useGroupsQuery } from '@/lib/queries/use-groups'
 import { useUiStore } from '@/stores/ui-store'
 import { AddGameWizard } from '@/features/games/add-game-wizard'
 import { CurrentlyPlayingHero } from '@/features/games/currently-playing-hero'
@@ -36,14 +37,19 @@ export function LibraryRouteContent(): React.JSX.Element {
   const setActiveOverlay = useUiStore((s) => s.setActiveOverlay)
   const setSelectedGameId = useUiStore((s) => s.setSelectedGameId)
   const [sortKey, setSortKey] = useState<LibrarySortKey>('recent')
+  const [groupFilter, setGroupFilter] = useState<'all' | number>('all')
 
   const gamesQuery = useGamesQuery()
+  const groupsQuery = useGroupsQuery()
   const normalizedSearch = searchQuery.trim().toLocaleLowerCase()
 
   const visibleGames = useMemo(() => {
     const games = gamesQuery.data ?? []
+    const groupFiltered =
+      groupFilter === 'all' ? games : games.filter((game) => game.groupIds.includes(groupFilter))
+
     const filtered = normalizedSearch
-      ? games.filter((game) => {
+      ? groupFiltered.filter((game) => {
           const haystack = [
             game.name,
             game.launchTarget,
@@ -54,7 +60,7 @@ export function LibraryRouteContent(): React.JSX.Element {
             .toLocaleLowerCase()
           return haystack.includes(normalizedSearch)
         })
-      : games.slice()
+      : groupFiltered.slice()
 
     switch (sortKey) {
       case 'name':
@@ -65,7 +71,7 @@ export function LibraryRouteContent(): React.JSX.Element {
       default:
         return filtered.sort(compareByRecent)
     }
-  }, [gamesQuery.data, normalizedSearch, sortKey])
+  }, [gamesQuery.data, groupFilter, normalizedSearch, sortKey])
 
   const totalGameCount = gamesQuery.data?.length ?? 0
 
@@ -84,6 +90,9 @@ export function LibraryRouteContent(): React.JSX.Element {
           visibleCount={visibleGames.length}
           searchQuery={searchQuery}
           sortKey={sortKey}
+          groups={groupsQuery.data ?? []}
+          groupFilter={groupFilter}
+          onGroupFilterChange={setGroupFilter}
           onSortChange={setSortKey}
           onAddGame={openAddGame}
         />

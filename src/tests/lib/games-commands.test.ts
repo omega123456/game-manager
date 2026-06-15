@@ -4,6 +4,7 @@ import {
   createGame,
   deleteGame,
   getGame,
+  getResolvedScripts,
   listGames,
   setGameGroups,
   setGameScripts,
@@ -16,6 +17,8 @@ const GAME_ROW = {
   name: 'Elden Ring',
   launchTarget: 'C:/Games/EldenRing.exe',
   monitorMode: 'tree' as const,
+  groupIds: [],
+  scriptIds: [],
   createdAt: '2026-01-01T00:00:00Z',
   totalPlaytimeSeconds: 3600,
 }
@@ -76,5 +79,11 @@ describe('games-commands', () => {
     ipc.override('set_game_scripts', () => [11])
     await expect(setGameScripts(8, [11])).resolves.toEqual([11])
     expect(ipc.calls('set_game_scripts')).toEqual([{ gameId: 8, scriptIds: [11] }])
+  })
+
+  it('loads resolved scripts for a game', async () => {
+    ipc.override('get_resolved_scripts', () => [{ scriptId: 11, phase: 'before' }])
+    await expect(getResolvedScripts(8)).resolves.toEqual([{ scriptId: 11, phase: 'before' }])
+    expect(ipc.calls('get_resolved_scripts')).toEqual([{ gameId: 8 }])
   })
 })

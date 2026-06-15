@@ -36,3 +36,8 @@ commands.allow = ["set_game_groups"]
 identifier = "allow-set-game-scripts"
 description = "Allows the frontend to replace a game's directly assigned script ids via set_game_scripts."
 commands.allow = ["set_game_scripts"]
+
+[[permission]]
+identifier = "allow-get-resolved-scripts"
+description = "Allows the frontend to preview a game's resolved execution scripts via get_resolved_scripts."
+commands.allow = ["get_resolved_scripts"]

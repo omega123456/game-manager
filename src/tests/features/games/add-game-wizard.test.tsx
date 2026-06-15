@@ -13,6 +13,8 @@ const EXISTING_GAMES: Game[] = [
     name: 'Balatro',
     launchTarget: 'C:/Games/Balatro.exe',
     monitorMode: 'tree',
+    groupIds: [],
+    scriptIds: [],
     createdAt: '2026-01-01T00:00:00Z',
     totalPlaytimeSeconds: 2400,
   },
@@ -52,6 +54,8 @@ function installStatefulGameMocks() {
         monitorMode: 'tree',
         arguments: (input.arguments as string | null | undefined) ?? undefined,
         imagePath: (input.imagePath as string | null | undefined) ?? undefined,
+        groupIds: [],
+        scriptIds: [],
         createdAt: '2026-06-15T12:00:00Z',
         totalPlaytimeSeconds: 0,
       }

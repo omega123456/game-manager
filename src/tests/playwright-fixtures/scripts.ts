@@ -31,6 +31,18 @@ export const SCRIPT_ROWS: Script[] = [
     requires: [3],
   },
   {
+    id: 4,
+    name: 'Gamma Sweep',
+    kind: 'normal',
+    priority: 6,
+    beforeLaunch: { mode: 'inline', inline: 'Run-Gamma', interpreter: 'powershell' },
+    afterLaunch: NONE,
+    onExit: NONE,
+    snippet: NONE,
+    createdAt: '2026-01-05T00:00:00Z',
+    requires: [],
+  },
+  {
     id: 3,
     name: 'SaveLib',
     description: 'Shared helper functions.',

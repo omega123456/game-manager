@@ -10,6 +10,7 @@ pub mod db;
 pub mod domain;
 pub mod error;
 pub mod logging;
+pub mod launch;
 pub mod state;
 
 use std::path::{Path, PathBuf};
@@ -120,6 +121,13 @@ pub fn run() {
             commands::games::delete_game,
             commands::games::set_game_groups,
             commands::games::set_game_scripts,
+            commands::games::get_resolved_scripts,
+            commands::groups::list_groups,
+            commands::groups::get_group,
+            commands::groups::create_group,
+            commands::groups::update_group,
+            commands::groups::delete_group,
+            commands::groups::set_group_scripts,
             commands::scripts::list_scripts,
             commands::scripts::get_script,
             commands::scripts::create_script,

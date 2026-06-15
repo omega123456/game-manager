@@ -23,6 +23,7 @@ import { Icon } from '@/components/ui/icon'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { getLibraryMeta } from '@/features/games/library-format'
 import { GameEditForm } from '@/features/games/game-edit-form'
+import { GameDetailScriptsTab } from '@/features/games/game-detail-scripts-tab'
 import { toCoverImageUrl } from '@/lib/asset-url'
 import { logFrontend } from '@/lib/app-log-commands'
 import { useDeleteGameMutation, useGameQuery } from '@/lib/queries/use-games'
@@ -97,8 +98,7 @@ function GameDetailModalInner({ selectedGameId }: GameDetailModalInnerProps): Re
               </p>
               <DialogTitle className="text-2xl">{game?.name ?? 'Loading game…'}</DialogTitle>
               <DialogDescription>
-                Tune launch details now. Script assignment and launch orchestration land in later
-                phases.
+                Tune launch details, script inheritance, and the resolved execution preview in one place.
               </DialogDescription>
             </div>
             <div className="flex items-center gap-1">
@@ -296,25 +296,7 @@ function GameDetailModalInner({ selectedGameId }: GameDetailModalInnerProps): Re
           </TabsContent>
 
           <TabsContent value="scripts" className="mt-0">
-            <section
-              className="rounded-[1.8rem] border border-dashed border-border bg-surface-low/70 p-8"
-              data-testid="game-detail-scripts-placeholder"
-            >
-              <div className="flex max-w-2xl items-start gap-4">
-                <span className="mt-1 flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 text-primary">
-                  <Icon name="deployed_code" className="text-[24px]" />
-                </span>
-                <div className="space-y-2">
-                  <h2 className="font-heading text-xl font-semibold text-foreground">
-                    Scripts land after assignments exist
-                  </h2>
-                  <p className="text-sm text-muted-foreground">
-                    Script assignment available after Scripts/Groups are set up. This tab will show
-                    direct assignments, inherited scripts, and resolved order in Phase D3.
-                  </p>
-                </div>
-              </div>
-            </section>
+            {game ? <GameDetailScriptsTab game={game} /> : null}
           </TabsContent>
         </div>
       </Tabs>

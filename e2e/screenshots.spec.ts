@@ -49,6 +49,16 @@ for (const theme of THEMES) {
     await expect(page).toHaveScreenshot(`library-loading-${theme}.png`)
   })
 
+  test(`library group filter — ${theme}`, async ({ page }) => {
+    await gotoApp(page)
+    await setTheme(page, theme)
+    await page.getByRole('combobox', { name: 'Filter library by group' }).click()
+    await page.getByRole('option', { name: 'HDR Games' }).click()
+    await page.getByRole('button', { name: 'Open Alan Wake 2' }).waitFor({ state: 'visible' })
+    await scrollRouteOutletToTop(page)
+    await expect(page).toHaveScreenshot(`library-group-filter-${theme}.png`)
+  })
+
   test(`add game wizard step 1 — ${theme}`, async ({ page }) => {
     await gotoApp(page)
     await setTheme(page, theme)
@@ -96,6 +106,15 @@ for (const theme of THEMES) {
     await expect(page).toHaveScreenshot(`game-detail-edit-${theme}.png`)
   })
 
+  test(`game detail scripts — ${theme}`, async ({ page }) => {
+    await gotoApp(page)
+    await setTheme(page, theme)
+    await page.getByRole('button', { name: 'Open Alan Wake 2' }).click()
+    await page.getByRole('tab', { name: 'Scripts' }).click()
+    await page.getByTestId('game-detail-scripts-tab').waitFor({ state: 'visible' })
+    await expect(page).toHaveScreenshot(`game-detail-scripts-${theme}.png`)
+  })
+
   test(`script manager normal editor — ${theme}`, async ({ page }) => {
     await gotoApp(page)
     await setTheme(page, theme)
@@ -112,5 +131,14 @@ for (const theme of THEMES) {
     await page.getByRole('button', { name: 'Edit SaveLib' }).click()
     await page.getByTestId('script-utility-layout').waitFor({ state: 'visible' })
     await expect(page).toHaveScreenshot(`script-manager-utility-${theme}.png`)
+  })
+
+  test(`group manager detail — ${theme}`, async ({ page }) => {
+    await gotoApp(page)
+    await setTheme(page, theme)
+    await page.getByRole('link', { name: /Group Manager/ }).click()
+    await page.getByRole('button', { name: 'Edit HDR Games' }).click()
+    await page.getByTestId('group-detail-panel').waitFor({ state: 'visible' })
+    await expect(page).toHaveScreenshot(`group-manager-detail-${theme}.png`)
   })
 }

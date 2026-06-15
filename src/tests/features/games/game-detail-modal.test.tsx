@@ -13,6 +13,8 @@ const BASE_GAME: Game = {
   launchTarget: 'C:/Games/AlanWake2.exe',
   monitorMode: 'tree',
   imagePath: 'https://images.example.test/alan-wake-2.png',
+  groupIds: [1],
+  scriptIds: [2],
   totalPlaytimeSeconds: 8420,
   lastPlayedAt: '2026-06-14T21:00:00Z',
   createdAt: '2026-01-01T00:00:00Z',
@@ -24,6 +26,72 @@ function installGameMocks(overrides?: Partial<Game>) {
   overrideIpcCommands({
     list_games: () => [storedGame],
     get_game: () => storedGame,
+    list_groups: () => [
+      { id: 1, name: 'HDR Games', description: 'Shared HDR setup', scriptIds: [4], gameIds: [1] },
+      { id: 2, name: 'Deck Verified', description: null, scriptIds: [5], gameIds: [] },
+    ],
+    list_scripts: () => [
+      {
+        id: 2,
+        name: 'Auto-Save Manager',
+        kind: 'normal',
+        description: null,
+        priority: 7,
+        beforeLaunch: { mode: 'path', path: 'C:/Commands/autosave.ps1' },
+        afterLaunch: { mode: 'none' },
+        onExit: { mode: 'none' },
+        snippet: { mode: 'none' },
+        createdAt: '2026-01-02T00:00:00Z',
+        requires: [3],
+      },
+      {
+        id: 4,
+        name: 'Gamma Sweep',
+        kind: 'normal',
+        description: null,
+        priority: 6,
+        beforeLaunch: { mode: 'inline', inline: 'Run-Gamma', interpreter: 'powershell' },
+        afterLaunch: { mode: 'none' },
+        onExit: { mode: 'none' },
+        snippet: { mode: 'none' },
+        createdAt: '2026-01-04T00:00:00Z',
+        requires: [],
+      },
+      {
+        id: 3,
+        name: 'SaveLib',
+        kind: 'utility',
+        description: null,
+        priority: 5,
+        beforeLaunch: { mode: 'none' },
+        afterLaunch: { mode: 'none' },
+        onExit: { mode: 'none' },
+        snippet: { mode: 'inline', inline: 'function Save-State {}', interpreter: 'powershell' },
+        createdAt: '2026-01-03T00:00:00Z',
+        requires: [],
+      },
+    ],
+    get_resolved_scripts: () => [
+      {
+        scriptId: 2,
+        name: 'Auto-Save Manager',
+        priority: 7,
+        phase: 'before',
+        provenance: 'direct',
+        order: 1,
+        requiredUtilityNames: ['SaveLib'],
+      },
+      {
+        scriptId: 4,
+        name: 'Gamma Sweep',
+        priority: 6,
+        phase: 'before',
+        provenance: 'group',
+        groupName: 'HDR Games',
+        order: 2,
+        requiredUtilityNames: [],
+      },
+    ],
     update_game: (args) => {
       const input = args?.input as Record<string, unknown>
       storedGame = {
@@ -35,8 +103,18 @@ function installGameMocks(overrides?: Partial<Game>) {
         monitorProcessName: (input.monitorProcessName as string | null | undefined) ?? undefined,
         arguments: (input.arguments as string | null | undefined) ?? undefined,
         imagePath: (input.imagePath as string | null | undefined) ?? undefined,
+        groupIds: storedGame.groupIds,
+        scriptIds: storedGame.scriptIds,
       }
       return storedGame
+    },
+    set_game_scripts: (args) => {
+      storedGame = { ...storedGame, scriptIds: ((args?.scriptIds as number[]) ?? []).slice() }
+      return storedGame.scriptIds
+    },
+    set_game_groups: (args) => {
+      storedGame = { ...storedGame, groupIds: ((args?.groupIds as number[]) ?? []).slice() }
+      return storedGame.groupIds
     },
   })
 
@@ -50,7 +128,7 @@ describe('GameDetailModal', () => {
     resetUiStore()
   })
 
-  it('opens from a library card, shows the scripts placeholder, and closes cleanly', async () => {
+  it('opens from a library card, shows resolved scripts, and closes cleanly', async () => {
     installGameMocks()
     const user = userEvent.setup()
 
@@ -66,15 +144,137 @@ describe('GameDetailModal', () => {
     ).toBeDisabled()
 
     await user.click(within(dialog).getByRole('tab', { name: 'Scripts' }))
-    expect(await screen.findByTestId('game-detail-scripts-placeholder')).toBeInTheDocument()
-    expect(
-      screen.getByText(/Script assignment available after Scripts\/Groups are set up\./)
-    ).toBeInTheDocument()
+    expect(await screen.findByTestId('game-detail-scripts-tab')).toBeInTheDocument()
+    expect(screen.getByText('Resolved execution order')).toBeInTheDocument()
+    expect(screen.getByText('Group: HDR Games')).toBeInTheDocument()
 
     await user.click(within(dialog).getByRole('button', { name: 'Close game detail' }))
     await waitFor(() => {
       expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
     })
+  })
+
+  it('updates direct scripts and group membership from the scripts tab', async () => {
+    installGameMocks()
+    const user = userEvent.setup()
+
+    renderWithProviders(<AppRoutes />, { route: '/library' })
+
+    await screen.findByText('Alan Wake 2')
+    await user.click(screen.getByRole('button', { name: 'Open Alan Wake 2' }))
+    await user.click(await screen.findByRole('tab', { name: 'Scripts' }))
+
+    await user.click(screen.getByRole('button', { name: 'Add script' }))
+    await user.click(await screen.findByRole('option', { name: 'Gamma Sweep' }))
+    await waitFor(() => {
+      expect(ipc.calls('set_game_scripts')).toHaveLength(1)
+    })
+    expect(ipc.calls('set_game_scripts')[0]).toEqual({ gameId: 1, scriptIds: [2, 4] })
+
+    await user.click(screen.getByRole('button', { name: 'Add group' }))
+    await user.click(await screen.findByRole('option', { name: 'Deck Verified' }))
+    await waitFor(() => {
+      expect(ipc.calls('set_game_groups')).toHaveLength(1)
+    })
+    expect(ipc.calls('set_game_groups')[0]).toEqual({ gameId: 1, groupIds: [1, 2] })
+  })
+
+  it('keeps inherited scripts tied to selected groups instead of resolved preview entries', async () => {
+    installGameMocks()
+    overrideIpcCommands({
+      list_groups: () => [
+        { id: 1, name: 'HDR Games', description: 'Shared HDR setup', scriptIds: [], gameIds: [1] },
+        { id: 2, name: 'Deck Verified', description: null, scriptIds: [5], gameIds: [] },
+      ],
+      get_resolved_scripts: () => [
+        {
+          scriptId: 4,
+          name: 'Gamma Sweep',
+          priority: 6,
+          phase: 'before',
+          provenance: 'group',
+          groupName: 'HDR Games',
+          order: 1,
+          requiredUtilityNames: [],
+        },
+      ],
+    })
+    const user = userEvent.setup()
+
+    renderWithProviders(<AppRoutes />, { route: '/library' })
+
+    await screen.findByText('Alan Wake 2')
+    await user.click(screen.getByRole('button', { name: 'Open Alan Wake 2' }))
+    await user.click(await screen.findByRole('tab', { name: 'Scripts' }))
+
+    expect(await screen.findByText('No inherited scripts yet.')).toBeInTheDocument()
+    expect(screen.getByText('Group: HDR Games')).toBeInTheDocument()
+  })
+
+  it('preserves optimistic group membership across sequential edits', async () => {
+    let releaseFirstMutation: (() => void) | null = null
+    installGameMocks()
+    ipc.override(
+      'set_game_groups',
+      (args) =>
+        new Promise<number[]>((resolve) => {
+          if ((args?.groupIds as number[]).includes(2)) {
+            releaseFirstMutation = () => resolve((args?.groupIds as number[]) ?? [])
+            return
+          }
+          resolve((args?.groupIds as number[]) ?? [])
+        })
+    )
+    const user = userEvent.setup()
+
+    renderWithProviders(<AppRoutes />, { route: '/library' })
+
+    await screen.findByText('Alan Wake 2')
+    await user.click(screen.getByRole('button', { name: 'Open Alan Wake 2' }))
+    await user.click(await screen.findByRole('tab', { name: 'Scripts' }))
+
+    await user.click(screen.getByRole('button', { name: 'Add group' }))
+    await user.click(await screen.findByRole('option', { name: 'Deck Verified' }))
+
+    expect(await screen.findByText('Deck Verified')).toBeInTheDocument()
+    expect(screen.getByLabelText('Remove HDR Games')).toBeDisabled()
+
+    releaseFirstMutation?.()
+    await waitFor(() => {
+      expect(ipc.calls('set_game_groups')).toHaveLength(1)
+    })
+
+    await user.click(await screen.findByLabelText('Remove HDR Games'))
+    await waitFor(() => {
+      expect(ipc.calls('set_game_groups')).toHaveLength(2)
+    })
+    expect(ipc.calls('set_game_groups')[1]).toEqual({ gameId: 1, groupIds: [2] })
+  })
+
+  it('drops optimistic group membership once refreshed game data disagrees', async () => {
+    const state = installGameMocks()
+    ipc.override('set_game_groups', (_args) => {
+      state.getGame().groupIds = [1]
+      return [1]
+    })
+    const user = userEvent.setup()
+
+    renderWithProviders(<AppRoutes />, { route: '/library' })
+
+    await screen.findByText('Alan Wake 2')
+    await user.click(screen.getByRole('button', { name: 'Open Alan Wake 2' }))
+    await user.click(await screen.findByRole('tab', { name: 'Scripts' }))
+
+    await user.click(screen.getByRole('button', { name: 'Add group' }))
+    await user.click(await screen.findByRole('option', { name: 'Deck Verified' }))
+
+    await waitFor(() => {
+      expect(ipc.calls('set_game_groups')).toHaveLength(1)
+    })
+    await waitFor(() => {
+      expect(screen.queryByText('Deck Verified')).not.toBeInTheDocument()
+    })
+    expect(screen.getByText('HDR Games')).toBeInTheDocument()
   })
 
   it('edits and saves a game, deriving the monitor process name from the selected executable', async () => {

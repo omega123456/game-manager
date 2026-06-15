@@ -7,6 +7,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import type { Group } from '@/types/domain'
 import type { LibrarySortKey } from '@/features/games/library-types'
 
 export interface LibraryToolbarProps {
@@ -14,6 +15,9 @@ export interface LibraryToolbarProps {
   visibleCount: number
   searchQuery: string
   sortKey: LibrarySortKey
+  groups: Group[]
+  groupFilter: 'all' | number
+  onGroupFilterChange: (value: 'all' | number) => void
   onSortChange: (value: LibrarySortKey) => void
   onAddGame: () => void
 }
@@ -23,6 +27,9 @@ export function LibraryToolbar({
   visibleCount,
   searchQuery,
   sortKey,
+  groups,
+  groupFilter,
+  onGroupFilterChange,
   onSortChange,
   onAddGame,
 }: LibraryToolbarProps): React.JSX.Element {
@@ -46,11 +53,49 @@ export function LibraryToolbar({
         <p className="text-sm text-muted-foreground">
           {searchQuery
             ? `Filtered by "${searchQuery}". Top bar search applies here.`
-            : 'Browse cover art, sort by recent activity, and jump into adding new games.'}
+            : 'Browse cover art, filter by group, sort by recent activity, and jump into adding new games.'}
         </p>
       </div>
 
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+        <div className="w-full sm:w-56">
+          <label
+            htmlFor="library-group-filter"
+            className="mb-2 block text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground"
+          >
+            Group
+          </label>
+          <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              variant={groupFilter === 'all' ? 'default' : 'outline'}
+              size="sm"
+              onClick={() => onGroupFilterChange('all')}
+            >
+              All Games
+            </Button>
+            <Select
+              value={groupFilter === 'all' ? 'all' : String(groupFilter)}
+              onValueChange={(value) =>
+                onGroupFilterChange(value === 'all' ? 'all' : Number(value))
+              }
+              disabled={groups.length === 0}
+            >
+              <SelectTrigger id="library-group-filter" aria-label="Filter library by group">
+                <SelectValue placeholder="All groups" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All groups</SelectItem>
+                {groups.map((group) => (
+                  <SelectItem key={group.id} value={String(group.id)}>
+                    {group.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+
         <div className="w-full sm:w-56">
           <label
             htmlFor="library-sort"

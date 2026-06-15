@@ -38,6 +38,21 @@ export const IPC_FIXTURES: Record<string, IpcHandler> = {
   delete_game: () => undefined,
   set_game_groups: (args) => args?.groupIds ?? [],
   set_game_scripts: (args) => args?.scriptIds ?? [],
+  get_resolved_scripts: () => [],
+
+  // --- Groups. Phase D1 introduces the backend + wrappers; defaults keep the
+  //     harness quiet until tests override specific flows. ---
+  list_groups: () => [],
+  get_group: () => null,
+  create_group: (args) => ({ scriptIds: [], gameIds: [], ...(args?.input as object) }),
+  update_group: (args) => ({
+    id: args?.id,
+    scriptIds: [],
+    gameIds: [],
+    ...(args?.input as object),
+  }),
+  delete_group: () => undefined,
+  set_group_scripts: (args) => args?.scriptIds ?? [],
 
   // --- Scripts. Phase C1 introduces the backend + wrappers; defaults keep the
   //     harness quiet until tests override specific flows. ---

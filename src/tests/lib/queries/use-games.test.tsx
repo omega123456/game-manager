@@ -4,14 +4,19 @@ import { renderHook, waitFor } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 
 import {
+  gameDetailQueryKey,
+  resolvedScriptsQueryKey,
   useCreateGameMutation,
   useDeleteGameMutation,
   useGameQuery,
   useGamesQuery,
+  useResolvedScriptsQuery,
   useSetGameGroupsMutation,
   useSetGameScriptsMutation,
   useUpdateGameMutation,
 } from '@/lib/queries/use-games'
+import { useGroupsQuery } from '@/lib/queries/use-groups'
+import { GAMES_QUERY_KEY, GROUPS_QUERY_KEY } from '@/lib/queries/query-keys'
 import { ipc } from '../../ipc-mock'
 
 const GAME_ROW = {
@@ -19,6 +24,8 @@ const GAME_ROW = {
   name: 'Alan Wake 2',
   launchTarget: 'C:/Games/AlanWake2.exe',
   monitorMode: 'tree' as const,
+  groupIds: [],
+  scriptIds: [],
   createdAt: '2026-01-01T00:00:00Z',
   totalPlaytimeSeconds: 0,
 }
@@ -29,6 +36,19 @@ function wrapper() {
   })
   return function Wrapper({ children }: { children: ReactNode }) {
     return <QueryClientProvider client={client}>{children}</QueryClientProvider>
+  }
+}
+
+function createWrapper() {
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  })
+
+  return {
+    client,
+    Wrapper({ children }: { children: ReactNode }) {
+      return <QueryClientProvider client={client}>{children}</QueryClientProvider>
+    },
   }
 }
 
@@ -52,6 +72,15 @@ describe('useGameQuery', () => {
   it('stays idle without an id', () => {
     const { result } = renderHook(() => useGameQuery(null), { wrapper: wrapper() })
     expect(result.current.fetchStatus).toBe('idle')
+  })
+})
+
+describe('useResolvedScriptsQuery', () => {
+  it('loads resolved scripts when an id is provided', async () => {
+    ipc.override('get_resolved_scripts', () => [{ scriptId: 3, name: 'HDR', phase: 'before' }])
+    const { result } = renderHook(() => useResolvedScriptsQuery(3), { wrapper: wrapper() })
+    await waitFor(() => expect(result.current.isSuccess).toBe(true))
+    expect(result.current.data).toEqual([{ scriptId: 3, name: 'HDR', phase: 'before' }])
   })
 })
 
@@ -103,11 +132,55 @@ describe('game mutations', () => {
     expect(ipc.calls('set_game_groups')).toEqual([{ gameId: 4, groupIds: [2, 1] }])
   })
 
+  it('updates cached game data immediately and refreshes groups after membership changes', async () => {
+    let groupsVersion = 0
+    ipc.override('set_game_groups', () => [2, 1])
+    ipc.override('list_groups', () => {
+      groupsVersion += 1
+      return [{ id: 9, name: 'HDR', description: null, scriptIds: [], gameIds: [1, 2] }]
+    })
+
+    const { client, Wrapper } = createWrapper()
+    client.setQueryData(GAMES_QUERY_KEY, [GAME_ROW])
+    client.setQueryData(gameDetailQueryKey(1), GAME_ROW)
+    client.setQueryData(GROUPS_QUERY_KEY, [{ id: 9, name: 'HDR', description: null, scriptIds: [], gameIds: [1] }])
+
+    const groupsQuery = renderHook(() => useGroupsQuery(), { wrapper: Wrapper })
+    const mutation = renderHook(() => useSetGameGroupsMutation(), { wrapper: Wrapper })
+
+    await mutation.result.current.mutateAsync({ gameId: 1, groupIds: [2, 1] })
+
+    expect(client.getQueryData(GAMES_QUERY_KEY)).toEqual([{ ...GAME_ROW, groupIds: [2, 1] }])
+    expect(client.getQueryData(gameDetailQueryKey(1))).toEqual({ ...GAME_ROW, groupIds: [2, 1] })
+    await waitFor(() => expect(groupsVersion).toBeGreaterThan(0))
+    await waitFor(() =>
+      expect(client.getQueryData(GROUPS_QUERY_KEY)).toEqual([
+        { id: 9, name: 'HDR', description: null, scriptIds: [], gameIds: [1, 2] },
+      ])
+    )
+    groupsQuery.unmount()
+  })
+
   it('replaces script ids', async () => {
     ipc.override('set_game_scripts', () => [8])
     const { result } = renderHook(() => useSetGameScriptsMutation(), { wrapper: wrapper() })
     await result.current.mutateAsync({ gameId: 4, scriptIds: [8] })
     await waitFor(() => expect(result.current.isSuccess).toBe(true))
     expect(ipc.calls('set_game_scripts')).toEqual([{ gameId: 4, scriptIds: [8] }])
+  })
+
+  it('updates cached scripts immediately for the edited game', async () => {
+    ipc.override('set_game_scripts', () => [8])
+    const { client, Wrapper } = createWrapper()
+    client.setQueryData(GAMES_QUERY_KEY, [GAME_ROW])
+    client.setQueryData(gameDetailQueryKey(1), GAME_ROW)
+    client.setQueryData(resolvedScriptsQueryKey(1), [])
+
+    const mutation = renderHook(() => useSetGameScriptsMutation(), { wrapper: Wrapper })
+    await mutation.result.current.mutateAsync({ gameId: 1, scriptIds: [8] })
+
+    expect(client.getQueryData(GAMES_QUERY_KEY)).toEqual([{ ...GAME_ROW, scriptIds: [8] }])
+    expect(client.getQueryData(gameDetailQueryKey(1))).toEqual({ ...GAME_ROW, scriptIds: [8] })
+    expect(client.getQueryState(resolvedScriptsQueryKey(1))?.isInvalidated).toBe(true)
   })
 })

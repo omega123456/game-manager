@@ -185,6 +185,18 @@ pub enum LaunchPhase {
     Ended,
 }
 
+/// One of the three executable script phases used by the resolver/executor.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum ScriptPhase {
+    /// Run before launching the game.
+    Before,
+    /// Run after the target process has been detected.
+    After,
+    /// Run after the game exits.
+    OnExit,
+}
+
 /// Provenance of a resolved script entry.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -258,6 +270,10 @@ pub struct Game {
     /// Cover-art image path.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub image_path: Option<String>,
+    /// Ids of groups this game belongs to.
+    pub group_ids: Vec<i64>,
+    /// Ids of scripts directly assigned to this game.
+    pub script_ids: Vec<i64>,
     /// Creation timestamp (RFC 3339).
     pub created_at: String,
     /// Computed total playtime across all sessions, in seconds.
@@ -353,7 +369,7 @@ pub struct ResolvedScript {
     /// Effective priority.
     pub priority: i64,
     /// The phase this entry belongs to.
-    pub phase: LaunchPhase,
+    pub phase: ScriptPhase,
     /// Provenance of the entry.
     pub provenance: Provenance,
     /// The group name when provenance is `Group`.

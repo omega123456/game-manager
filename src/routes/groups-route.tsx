@@ -1,13 +1,7 @@
-import { RoutePlaceholder } from '@/routes/route-placeholder'
+import { GroupManagerContent } from '@/features/groups/group-manager-content'
 
 export function GroupsRoute(): React.JSX.Element {
-  return (
-    <RoutePlaceholder
-      icon="groups"
-      title="Group Manager"
-      description="Organize games into groups and assign shared scripts here in Phase D2."
-    />
-  )
+  return <GroupManagerContent />
 }
 
 export default GroupsRoute

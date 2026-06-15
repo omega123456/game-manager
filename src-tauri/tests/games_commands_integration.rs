@@ -66,6 +66,7 @@ fn create_update_get_and_list_games_round_trip() {
     assert_eq!(created.name, "Elden Ring");
     assert_eq!(created.arguments.as_deref(), Some("-windowed"));
     assert_eq!(created.image_path.as_deref(), Some("C:/Art/cover.png"));
+    assert!(created.group_ids.is_empty());
     assert_eq!(created.total_playtime_seconds, 0);
 
     let listed = list_games_impl(&state).unwrap();
@@ -143,6 +144,7 @@ fn set_assignments_and_delete_game_cascades_sessions_and_junctions() {
     assert_eq!(scripts, vec![script_normal]);
 
     let hydrated = get_game_impl(&state, created.id).unwrap();
+    assert_eq!(hydrated.group_ids, vec![group_a, group_b]);
     assert_eq!(hydrated.total_playtime_seconds, 2700);
     assert_eq!(
         hydrated.last_played_at.as_deref(),

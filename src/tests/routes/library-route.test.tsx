@@ -15,6 +15,8 @@ const GAMES: Game[] = [
     launchTarget: 'C:/Games/AlanWake2.exe',
     monitorMode: 'tree',
     imagePath: 'https://example.com/alan-wake-2.png',
+    groupIds: [1],
+    scriptIds: [],
     totalPlaytimeSeconds: 7200,
     lastPlayedAt: '2026-06-10T12:00:00Z',
     createdAt: '2026-01-01T00:00:00Z',
@@ -25,6 +27,8 @@ const GAMES: Game[] = [
     launchTarget: 'C:/Games/Balatro.exe',
     monitorMode: 'named',
     monitorProcessName: 'Balatro.exe',
+    groupIds: [2],
+    scriptIds: [],
     totalPlaytimeSeconds: 18000,
     lastPlayedAt: '2026-06-14T12:00:00Z',
     createdAt: '2026-01-01T00:00:00Z',
@@ -34,6 +38,8 @@ const GAMES: Game[] = [
     name: 'Cocoon',
     launchTarget: 'C:/Games/Cocoon.exe',
     monitorMode: 'tree',
+    groupIds: [],
+    scriptIds: [],
     totalPlaytimeSeconds: 0,
     createdAt: '2026-01-01T00:00:00Z',
   },
@@ -43,6 +49,10 @@ describe('LibraryRoute', () => {
   beforeEach(() => {
     resetUiStore()
     ipc.override('list_games', () => GAMES)
+    ipc.override('list_groups', () => [
+      { id: 1, name: 'HDR Games', description: null, scriptIds: [], gameIds: [1] },
+      { id: 2, name: 'Deck Verified', description: null, scriptIds: [], gameIds: [2] },
+    ])
     ipc.override('get_game', (args) => GAMES.find((game) => game.id === args?.id) ?? null)
   })
 
@@ -88,6 +98,31 @@ describe('LibraryRoute', () => {
       'Open Balatro',
       'Open Cocoon',
     ])
+  })
+
+  it('filters by group and resets back to all games', async () => {
+    const user = userEvent.setup()
+    renderWithProviders(<AppRoutes />, { route: '/library' })
+
+    await screen.findByText('Alan Wake 2')
+    await user.click(screen.getByRole('combobox', { name: 'Filter library by group' }))
+    await user.click(screen.getByRole('option', { name: 'HDR Games' }))
+
+    await waitFor(() => {
+      const buttons = within(screen.getByTestId('library-grid')).getAllByRole('button', {
+        name: /Open /,
+      })
+      expect(buttons.map((button) => button.getAttribute('aria-label'))).toEqual([
+        'Open Alan Wake 2',
+      ])
+    })
+
+    await user.click(screen.getByRole('button', { name: 'All Games' }))
+    await waitFor(() => {
+      expect(
+        within(screen.getByTestId('library-grid')).getAllByRole('button', { name: /Open / })
+      ).toHaveLength(3)
+    })
   })
 
   it('sorts by playtime and uses recent activity as a tie-breaker', async () => {

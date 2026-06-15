@@ -40,10 +40,19 @@ fn map_game(row: &Row<'_>) -> rusqlite::Result<Game> {
         monitor_process_name: row.get("monitor_process_name")?,
         arguments: row.get("arguments")?,
         image_path: row.get("image_path")?,
+        group_ids: parse_group_ids(row.get("group_ids")?),
+        script_ids: parse_group_ids(row.get("script_ids")?),
         created_at: row.get("created_at")?,
         total_playtime_seconds: row.get("total_playtime_seconds")?,
         last_played_at: row.get("last_played_at")?,
     })
+}
+
+fn parse_group_ids(raw: Option<String>) -> Vec<i64> {
+    raw.unwrap_or_default()
+        .split(',')
+        .filter_map(|value| value.trim().parse::<i64>().ok())
+        .collect()
 }
 
 /// The SELECT body shared by list/get, computing aggregates from play_sessions.
@@ -56,6 +65,24 @@ SELECT
   g.monitor_process_name,
   g.arguments,
   g.image_path,
+  (
+    SELECT group_concat(gg.group_id)
+    FROM (
+      SELECT group_id
+      FROM game_groups
+      WHERE game_id = g.id
+      ORDER BY group_id
+    ) gg
+  ) AS group_ids,
+  (
+    SELECT group_concat(gs.script_id)
+    FROM (
+      SELECT script_id
+      FROM game_scripts
+      WHERE game_id = g.id
+      ORDER BY script_id
+    ) gs
+  ) AS script_ids,
   g.created_at,
   COALESCE(SUM(
     CASE WHEN s.ended_at IS NOT NULL

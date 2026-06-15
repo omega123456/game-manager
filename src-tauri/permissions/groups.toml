@@ -1,0 +1,33 @@
+# Permissions for the groups command surface.
+
+"$schema" = "../gen/schemas/desktop-schema.json"
+
+[[permission]]
+identifier = "allow-list-groups"
+description = "Allows the frontend to list all groups via list_groups."
+commands.allow = ["list_groups"]
+
+[[permission]]
+identifier = "allow-get-group"
+description = "Allows the frontend to read a single group via get_group."
+commands.allow = ["get_group"]
+
+[[permission]]
+identifier = "allow-create-group"
+description = "Allows the frontend to create a group via create_group."
+commands.allow = ["create_group"]
+
+[[permission]]
+identifier = "allow-update-group"
+description = "Allows the frontend to update a group via update_group."
+commands.allow = ["update_group"]
+
+[[permission]]
+identifier = "allow-delete-group"
+description = "Allows the frontend to delete a group via delete_group."
+commands.allow = ["delete_group"]
+
+[[permission]]
+identifier = "allow-set-group-scripts"
+description = "Allows the frontend to replace a group's script assignments via set_group_scripts."
+commands.allow = ["set_group_scripts"]

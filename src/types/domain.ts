@@ -23,6 +23,9 @@ export type LogLevel = 'debug' | 'info' | 'warn' | 'error'
 /** A phase in the launch lifecycle (event payload phase). */
 export type LaunchPhase = 'before' | 'waitingForProcess' | 'playing' | 'onExit' | 'ended'
 
+/** One of the three executable script phases used by the resolver/executor. */
+export type ScriptPhase = 'before' | 'after' | 'onExit'
+
 /** Provenance of a resolved script entry. */
 export type Provenance = 'global' | 'group' | 'direct'
 
@@ -46,6 +49,8 @@ export interface Game {
   monitorProcessName?: string
   arguments?: string
   imagePath?: string
+  groupIds: number[]
+  scriptIds: number[]
   createdAt: string
   totalPlaytimeSeconds: number
   lastPlayedAt?: string
@@ -89,7 +94,7 @@ export interface ResolvedScript {
   scriptId: number
   name: string
   priority: number
-  phase: LaunchPhase
+  phase: ScriptPhase
   provenance: Provenance
   groupName?: string
   /** 1-based order within the phase. */

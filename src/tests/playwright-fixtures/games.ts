@@ -10,6 +10,8 @@ export const GAME_ROWS: Game[] = [
     monitorMode: 'tree',
     createdAt: '2026-01-01T00:00:00Z',
     imagePath: 'https://images.example.test/alan-wake-2.png',
+    groupIds: [1],
+    scriptIds: [2],
     totalPlaytimeSeconds: 8420,
     lastPlayedAt: '2026-06-14T21:00:00Z',
   },
@@ -21,6 +23,8 @@ export const GAME_ROWS: Game[] = [
     monitorProcessName: 'Balatro.exe',
     createdAt: '2026-01-02T00:00:00Z',
     imagePath: 'https://images.example.test/balatro.png',
+    groupIds: [2],
+    scriptIds: [],
     totalPlaytimeSeconds: 24010,
     lastPlayedAt: '2026-06-13T20:00:00Z',
   },
@@ -30,6 +34,8 @@ export const GAME_ROWS: Game[] = [
     launchTarget: 'C:/Games/Cocoon.exe',
     monitorMode: 'tree',
     createdAt: '2026-01-03T00:00:00Z',
+    groupIds: [],
+    scriptIds: [],
     totalPlaytimeSeconds: 0,
   },
   {
@@ -39,6 +45,8 @@ export const GAME_ROWS: Game[] = [
     monitorMode: 'tree',
     createdAt: '2026-01-04T00:00:00Z',
     imagePath: 'https://images.example.test/hades-2.png',
+    groupIds: [1],
+    scriptIds: [],
     totalPlaytimeSeconds: 1800,
     lastPlayedAt: '2026-05-21T19:30:00Z',
   },
@@ -71,12 +79,16 @@ export const gamesFixtures: Record<string, PlaywrightFixtureHandler> = {
   get_game: (args) => GAME_ROWS.find((game) => game.id === args?.id) ?? null,
   create_game: (args) => ({
     id: 99,
+    groupIds: [],
+    scriptIds: [],
     createdAt: '2026-01-02T00:00:00Z',
     totalPlaytimeSeconds: 0,
     ...(args?.input as object),
   }),
   update_game: (args) => ({
     id: args?.id ?? 1,
+    groupIds: [],
+    scriptIds: [],
     createdAt: '2026-01-01T00:00:00Z',
     totalPlaytimeSeconds: 0,
     ...(args?.input as object),
@@ -84,4 +96,39 @@ export const gamesFixtures: Record<string, PlaywrightFixtureHandler> = {
   delete_game: () => undefined,
   set_game_groups: (args) => args?.groupIds ?? [],
   set_game_scripts: (args) => args?.scriptIds ?? [],
+  get_resolved_scripts: (args) => {
+    const gameId = Number(args?.gameId ?? 0)
+    if (gameId === 1) {
+      return [
+        {
+          scriptId: 2,
+          name: 'Auto-Save Manager',
+          priority: 7,
+          phase: 'before',
+          provenance: 'direct',
+          order: 1,
+          requiredUtilityNames: ['SaveLib'],
+        },
+        {
+          scriptId: 1,
+          name: 'HDR Toggle',
+          priority: 8,
+          phase: 'before',
+          provenance: 'global',
+          order: 2,
+          requiredUtilityNames: ['SaveLib'],
+        },
+        {
+          scriptId: 1,
+          name: 'HDR Toggle',
+          priority: 8,
+          phase: 'onExit',
+          provenance: 'global',
+          order: 1,
+          requiredUtilityNames: ['SaveLib'],
+        },
+      ]
+    }
+    return []
+  },
 }
