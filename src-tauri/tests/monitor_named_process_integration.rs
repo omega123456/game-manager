@@ -20,6 +20,10 @@ use game_manager_lib::monitor::named_process::{
 use game_manager_lib::monitor::{Monitor, StartOutcome};
 use game_manager_lib::state::AppState;
 
+/// Tiny confirmation grace period so the cross-platform tests stay fast while
+/// still exercising the confirm-before-start path.
+const TEST_CONFIRM_DELAY: Duration = Duration::from_millis(10);
+
 // ----- normalization --------------------------------------------------------
 
 #[test]
@@ -144,7 +148,8 @@ async fn detects_named_process_and_writes_accurate_session() {
     let game_id = seed_named_game(&state, "steam://run/123", Some("--flag value"), "Real.exe");
 
     let table = FakeTable::new("real.exe", vec![vec![], vec![], vec![4242]], Duration::from_millis(20));
-    let monitor = NamedProcessMonitor::new(table, ArcLauncher(Arc::new(FakeLauncher::default())));
+    let monitor = NamedProcessMonitor::new(table, ArcLauncher(Arc::new(FakeLauncher::default())))
+        .with_confirm_delay(TEST_CONFIRM_DELAY);
     let cancel = CancelToken::new();
 
     let outcome = monitor.wait_for_start(&state, game_id, &cancel).await.unwrap();
@@ -180,7 +185,8 @@ async fn raises_detected_process_priority_on_start() {
     let game_id = seed_named_game(&state, "steam://run/123", None, "Real.exe");
 
     let table = FakeTable::new("real.exe", vec![vec![], vec![4242]], Duration::from_millis(10));
-    let monitor = NamedProcessMonitor::new(table, ArcLauncher(Arc::new(FakeLauncher::default())));
+    let monitor = NamedProcessMonitor::new(table, ArcLauncher(Arc::new(FakeLauncher::default())))
+        .with_confirm_delay(TEST_CONFIRM_DELAY);
     let cancel = CancelToken::new();
 
     monitor.wait_for_start(&state, game_id, &cancel).await.unwrap();
@@ -242,7 +248,8 @@ async fn ignores_pre_existing_matching_processes_and_waits_for_new_pid() {
     let monitor = NamedProcessMonitor::new(
         ArcTable(table.clone()),
         ArcLauncher(Arc::new(FakeLauncher::default())),
-    );
+    )
+    .with_confirm_delay(TEST_CONFIRM_DELAY);
     let cancel = CancelToken::new();
 
     let token = match monitor.wait_for_start(&state, game_id, &cancel).await.unwrap() {
@@ -252,6 +259,72 @@ async fn ignores_pre_existing_matching_processes_and_waits_for_new_pid() {
     let _ = monitor.wait_for_end(&state, token, &cancel).await.unwrap();
 
     assert_eq!(*table.saw_pid.lock().unwrap(), Some(2222));
+}
+
+#[tokio::test]
+async fn ignores_transient_bootstrapper_and_holds_the_stable_pid() {
+    // A launcher bootstrapper matches the configured name for a split second
+    // (pid 9999) then exits as the launcher hands off; the real game appears
+    // later under pid 5555. The monitor must skip the transient pid and open the
+    // session against the stable one.
+    let state = AppState::in_memory().unwrap();
+    let game_id = seed_named_game(&state, "steam://run/123", None, "Real.exe");
+
+    let table = Arc::new(FakeTable::new(
+        "real.exe",
+        vec![
+            vec![],     // pre-launch snapshot: nothing running
+            vec![9999], // bootstrapper detected
+            vec![],     // confirmation re-check: bootstrapper already gone
+            vec![5555], // real game detected
+            vec![5555], // confirmation re-check: still alive
+        ],
+        Duration::from_millis(10),
+    ));
+    let monitor = NamedProcessMonitor::new(
+        ArcTable(table.clone()),
+        ArcLauncher(Arc::new(FakeLauncher::default())),
+    )
+    .with_confirm_delay(TEST_CONFIRM_DELAY);
+    let cancel = CancelToken::new();
+
+    let token = match monitor.wait_for_start(&state, game_id, &cancel).await.unwrap() {
+        StartOutcome::Started(token) => token,
+        StartOutcome::Cancelled => panic!("expected the stable process to be detected"),
+    };
+    let _ = monitor.wait_for_end(&state, token, &cancel).await.unwrap();
+
+    assert_eq!(
+        *table.saw_pid.lock().unwrap(),
+        Some(5555),
+        "the monitor must hold the stable game pid, not the transient bootstrapper"
+    );
+    let sessions = state.with_db(|conn| sessions::list_for_game(conn, game_id)).unwrap();
+    assert_eq!(sessions.len(), 1, "exactly one session for the confirmed game");
+}
+
+#[tokio::test]
+async fn cancellation_during_confirmation_opens_no_session() {
+    // The process is detected but cancellation fires while we wait out the
+    // confirmation window — no session may be opened.
+    let state = AppState::in_memory().unwrap();
+    let game_id = seed_named_game(&state, "steam://run/123", None, "Real.exe");
+
+    let table = FakeTable::new("real.exe", vec![vec![], vec![4242], vec![4242]], Duration::ZERO);
+    let monitor = NamedProcessMonitor::new(table, ArcLauncher(Arc::new(FakeLauncher::default())))
+        .with_confirm_delay(Duration::from_secs(30));
+    let cancel = CancelToken::new();
+
+    let cancel_handle = cancel.clone();
+    let waiter = tokio::spawn(async move {
+        monitor.wait_for_start(&state, game_id, &cancel).await.unwrap()
+    });
+    // Give the loop time to detect and enter the confirmation wait, then cancel.
+    tokio::time::sleep(Duration::from_millis(50)).await;
+    cancel_handle.cancel();
+
+    let outcome = waiter.await.unwrap();
+    assert_eq!(outcome, StartOutcome::Cancelled);
 }
 
 #[tokio::test]
@@ -280,7 +353,8 @@ async fn wait_for_end_threads_the_detected_pid() {
     let monitor = NamedProcessMonitor::new(
         ArcTable(table.clone()),
         ArcLauncher(Arc::new(FakeLauncher::default())),
-    );
+    )
+    .with_confirm_delay(TEST_CONFIRM_DELAY);
     let cancel = CancelToken::new();
 
     let token = match monitor.wait_for_start(&state, game_id, &cancel).await.unwrap() {
@@ -302,9 +376,10 @@ async fn launches_configured_target_before_polling_process_name() {
     );
     let launcher = Arc::new(FakeLauncher::default());
     let monitor = NamedProcessMonitor::new(
-        FakeTable::new("real.exe", vec![vec![], vec![7777]], Duration::ZERO),
+        FakeTable::new("real.exe", vec![vec![], vec![7777], vec![7777]], Duration::ZERO),
         ArcLauncher(launcher.clone()),
-    );
+    )
+    .with_confirm_delay(TEST_CONFIRM_DELAY);
     let cancel = CancelToken::new();
 
     let outcome = monitor.wait_for_start(&state, game_id, &cancel).await.unwrap();
@@ -355,7 +430,9 @@ async fn windows_times_a_real_named_process() {
     let state = AppState::in_memory().unwrap();
     let game_id = seed_named_game(&state, "ping.exe", Some("-n 2 127.0.0.1"), "ping.exe");
 
-    let monitor = windows_monitor();
+    // Use a short confirmation window: `ping -n 2` lives ~1s, comfortably longer
+    // than the grace period, so it confirms rather than being treated transient.
+    let monitor = windows_monitor().with_confirm_delay(Duration::from_millis(200));
     let cancel = CancelToken::new();
 
     // The monitor must launch `ping.exe` itself, then detect that named process.

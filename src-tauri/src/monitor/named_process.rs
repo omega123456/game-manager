@@ -30,6 +30,13 @@ use crate::state::AppState;
 /// appear. Short enough to feel responsive; well under the 5s test ceiling.
 const POLL_INTERVAL: Duration = Duration::from_millis(500);
 
+/// How long a freshly-detected process must stay alive before it is treated as
+/// the real game. Store/launcher bootstrappers spawn a short-lived process that
+/// matches the configured name for a split second, then exit as the launcher
+/// takes over. Without this grace period the session (and the After-Process
+/// scripts) would fire against that transient bootstrapper rather than the game.
+const DEFAULT_CONFIRM_DELAY: Duration = Duration::from_secs(3);
+
 /// Abstraction over the OS process table used by Mode B.
 ///
 /// Implemented for real by [`WindowsProcessTable`] (ToolHelp snapshot +
@@ -87,17 +94,62 @@ async fn poll_delay_or_cancel(cancel: &CancelToken) -> bool {
     }
 }
 
+/// Outcome of waiting out the confirmation grace period on a candidate pid.
+enum ConfirmOutcome {
+    /// The candidate was still alive after the grace period: it is the game.
+    Confirmed,
+    /// The candidate exited during the grace period (a transient bootstrapper).
+    Vanished,
+    /// Cancellation won the race during the grace period.
+    Cancelled,
+}
+
 /// Mode B monitor: times a named (store/launcher) game process.
 pub struct NamedProcessMonitor<T: ProcessTable, L: NamedProcessLauncher = WindowsNamedProcessLauncher>
 {
     table: T,
     launcher: L,
+    confirm_delay: Duration,
 }
 
 impl<T: ProcessTable, L: NamedProcessLauncher> NamedProcessMonitor<T, L> {
     /// Construct a Mode B monitor over the given process-table primitive.
     pub fn new(table: T, launcher: L) -> Self {
-        NamedProcessMonitor { table, launcher }
+        NamedProcessMonitor {
+            table,
+            launcher,
+            confirm_delay: DEFAULT_CONFIRM_DELAY,
+        }
+    }
+
+    /// Override the post-detection confirmation grace period (defaults to
+    /// [`DEFAULT_CONFIRM_DELAY`]). Tests use a tiny value to stay fast.
+    pub fn with_confirm_delay(mut self, confirm_delay: Duration) -> Self {
+        self.confirm_delay = confirm_delay;
+        self
+    }
+
+    /// Wait out the confirmation grace period, then re-check that `pid` is still
+    /// running under `target`. Used to reject transient launcher bootstrappers
+    /// that match the configured name for only a split second.
+    async fn confirm_still_running(
+        &self,
+        target: &str,
+        pid: u32,
+        cancel: &CancelToken,
+    ) -> AppResult<ConfirmOutcome> {
+        tokio::select! {
+            _ = tokio::time::sleep(self.confirm_delay) => {}
+            _ = cancel.cancelled() => return Ok(ConfirmOutcome::Cancelled),
+        }
+        if cancel.is_cancelled() {
+            return Ok(ConfirmOutcome::Cancelled);
+        }
+        if self.table.find_pids_by_name(target)?.contains(&pid) {
+            Ok(ConfirmOutcome::Confirmed)
+        } else {
+            Ok(ConfirmOutcome::Vanished)
+        }
     }
 }
 
@@ -136,7 +188,8 @@ impl<T: ProcessTable, L: NamedProcessLauncher> Monitor for NamedProcessMonitor<T
         self.launcher
             .launch(&game.launch_target, game.arguments.as_deref())?;
 
-        // Poll until the configured process appears or we are cancelled.
+        // Poll until the configured process appears, survives the confirmation
+        // grace period, or we are cancelled.
         loop {
             if cancel.is_cancelled() {
                 return Ok(StartOutcome::Cancelled);
@@ -147,15 +200,31 @@ impl<T: ProcessTable, L: NamedProcessLauncher> Monitor for NamedProcessMonitor<T
                 .into_iter()
                 .find(|pid| !existing_pids.contains(pid))
             {
-                let session_id = state.with_db(|conn| sessions::start(conn, game_id))?;
-                tracing::info!(
-                    category = "monitor",
-                    "named-process '{target}' detected (pid {pid}); session {session_id} started"
-                );
-                // The detected process is the real game (the launcher has handed
-                // off), so this is the right pid to bump to High priority.
-                state.raise_priority_if_enabled(pid);
-                return Ok(StartOutcome::Started(encode_pid_session(session_id, pid)));
+                // A matching process appeared, but it may be a short-lived
+                // launcher bootstrapper. Only treat it as the game once it has
+                // stayed alive through the confirmation grace period.
+                match self.confirm_still_running(&target, pid, cancel).await? {
+                    ConfirmOutcome::Confirmed => {
+                        let session_id = state.with_db(|conn| sessions::start(conn, game_id))?;
+                        tracing::info!(
+                            category = "monitor",
+                            "named-process '{target}' confirmed (pid {pid}); session {session_id} started"
+                        );
+                        // The detected process is the real game (the launcher has
+                        // handed off), so this is the right pid to bump priority.
+                        state.raise_priority_if_enabled(pid);
+                        return Ok(StartOutcome::Started(encode_pid_session(session_id, pid)));
+                    }
+                    ConfirmOutcome::Cancelled => return Ok(StartOutcome::Cancelled),
+                    ConfirmOutcome::Vanished => {
+                        tracing::info!(
+                            category = "monitor",
+                            "named-process '{target}' (pid {pid}) exited during confirmation; \
+                             treating as a transient launcher process and continuing to poll"
+                        );
+                        // Fall through to keep polling for the real game process.
+                    }
+                }
             }
             if poll_delay_or_cancel(cancel).await {
                 return Ok(StartOutcome::Cancelled);

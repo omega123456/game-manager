@@ -18,6 +18,7 @@
 
 use std::collections::HashMap;
 use std::sync::Mutex;
+use std::time::Duration;
 
 use async_trait::async_trait;
 
@@ -27,6 +28,13 @@ use crate::db::repo::{games, sessions};
 use crate::error::AppResult;
 use crate::launch::cancel::CancelToken;
 use crate::state::AppState;
+
+/// How long the launched job tree must keep at least one live process before it
+/// is treated as the running game. Some launch targets are thin bootstrappers
+/// that exit within a split second (handing off to a detached launcher) — without
+/// this grace period the session (and the After-Process scripts) would fire
+/// against that transient process rather than the real game.
+const DEFAULT_CONFIRM_DELAY: Duration = Duration::from_secs(3);
 
 // ----- Self-defined JOB_OBJECT_MSG_* constants ------------------------------
 //
@@ -64,6 +72,12 @@ pub trait JobHandle: Send + Sync {
     /// launches), used to raise its priority once it is running.
     fn pid(&self) -> u32;
 
+    /// The number of live processes currently in the job tree.
+    ///
+    /// Used during the start grace period to confirm the launched tree survived
+    /// (count > 0) rather than being a transient bootstrapper (count == 0).
+    fn active_process_count(&self) -> AppResult<u32>;
+
     /// Block until the job reports `ACTIVE_PROCESS_ZERO`, or `cancel` fires.
     ///
     /// Returns `true` when the tree exited on its own; `false` when cancellation
@@ -99,9 +113,20 @@ pub fn split_arguments(arguments: Option<&str>) -> Vec<String> {
     args
 }
 
+/// Outcome of the post-launch confirmation grace period for the job tree.
+enum ConfirmOutcome {
+    /// The tree still had a live process after the grace period: the game is up.
+    Confirmed,
+    /// The tree emptied during the grace period (a transient bootstrapper).
+    Vanished,
+    /// Cancellation won the race during the grace period.
+    Cancelled,
+}
+
 /// Mode A monitor: launches the game into a job object and times the tree.
 pub struct JobObjectMonitor<L: JobLauncher> {
     launcher: L,
+    confirm_delay: Duration,
     /// Live job handles parked between `wait_for_start` and `wait_for_end`,
     /// keyed by the session id token the trait carries.
     parked: std::sync::OnceLock<Mutex<HashMap<i64, Box<dyn std::any::Any + Send>>>>,
@@ -112,7 +137,37 @@ impl<L: JobLauncher> JobObjectMonitor<L> {
     pub fn new(launcher: L) -> Self {
         JobObjectMonitor {
             launcher,
+            confirm_delay: DEFAULT_CONFIRM_DELAY,
             parked: std::sync::OnceLock::new(),
+        }
+    }
+
+    /// Override the post-launch confirmation grace period (defaults to
+    /// [`DEFAULT_CONFIRM_DELAY`]). Tests use a tiny value to stay fast.
+    pub fn with_confirm_delay(mut self, confirm_delay: Duration) -> Self {
+        self.confirm_delay = confirm_delay;
+        self
+    }
+
+    /// Wait out the confirmation grace period, then check the job tree still has
+    /// a live process. Rejects launch targets that exit in a split second after
+    /// handing off to a detached launcher.
+    async fn confirm_running<H: JobHandle>(
+        &self,
+        handle: &H,
+        cancel: &CancelToken,
+    ) -> AppResult<ConfirmOutcome> {
+        tokio::select! {
+            _ = tokio::time::sleep(self.confirm_delay) => {}
+            _ = cancel.cancelled() => return Ok(ConfirmOutcome::Cancelled),
+        }
+        if cancel.is_cancelled() {
+            return Ok(ConfirmOutcome::Cancelled);
+        }
+        if handle.active_process_count()? > 0 {
+            Ok(ConfirmOutcome::Confirmed)
+        } else {
+            Ok(ConfirmOutcome::Vanished)
         }
     }
 }
@@ -149,15 +204,31 @@ where
             .launcher
             .launch(&game.launch_target, game.arguments.as_deref())?;
 
-        // The process is now running: open the session and stash the handle so
-        // wait_for_end can block on it. We thread the handle via the registry on
-        // the monitor instance — but since the trait is stateless across calls,
-        // we instead run the whole start+wait in wait_for_end. To keep the
-        // session row opened at "start" (so the UI shows playing immediately),
-        // open it here and carry the handle through a boxed slot.
+        // The target was launched, but it may be a thin bootstrapper that exits
+        // immediately. Only treat the launch as a real session once the job tree
+        // has kept a live process through the confirmation grace period.
+        match self.confirm_running(&handle, cancel).await? {
+            ConfirmOutcome::Confirmed => {}
+            ConfirmOutcome::Cancelled => return Ok(StartOutcome::Cancelled),
+            ConfirmOutcome::Vanished => {
+                tracing::warn!(
+                    category = "monitor",
+                    "job-object tree for '{}' emptied during confirmation; treating launch as \
+                     transient (no session opened)",
+                    game.launch_target
+                );
+                // `handle` drops here; kill_on_job_close cleans up any survivors.
+                return Ok(StartOutcome::Cancelled);
+            }
+        }
+
+        // Confirmed running: open the session and stash the handle so
+        // wait_for_end can block on it. The session row is opened now (rather
+        // than in wait_for_end) so the UI shows "playing" as soon as the game is
+        // confirmed up, and the boxed handle is carried through a parked slot.
         let session_id = state.with_db(|conn| sessions::start(conn, game_id))?;
-        // The launched process is now running (for direct launches it is the
-        // game itself): bump it to High priority when the setting is enabled.
+        // The launched process is confirmed running (for direct launches it is
+        // the game itself): bump it to High priority when the setting is enabled.
         state.raise_priority_if_enabled(handle.pid());
         tracing::info!(
             category = "monitor",
@@ -261,10 +332,11 @@ mod windows_impl {
     use windows::core::PCWSTR;
     use windows::Win32::Foundation::{CloseHandle, HANDLE};
     use windows::Win32::System::JobObjects::{
-        AssignProcessToJobObject, CreateJobObjectW, SetInformationJobObject,
-        JOBOBJECT_ASSOCIATE_COMPLETION_PORT, JOBOBJECT_EXTENDED_LIMIT_INFORMATION,
+        AssignProcessToJobObject, CreateJobObjectW, QueryInformationJobObject,
+        SetInformationJobObject, JOBOBJECT_ASSOCIATE_COMPLETION_PORT,
+        JOBOBJECT_BASIC_ACCOUNTING_INFORMATION, JOBOBJECT_EXTENDED_LIMIT_INFORMATION,
         JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE, JobObjectAssociateCompletionPortInformation,
-        JobObjectExtendedLimitInformation,
+        JobObjectBasicAccountingInformation, JobObjectExtendedLimitInformation,
     };
     use windows::Win32::System::Threading::OpenProcess;
     use windows::Win32::System::Threading::PROCESS_SET_QUOTA;
@@ -472,6 +544,24 @@ mod windows_impl {
     impl JobHandle for WindowsJobHandle {
         fn pid(&self) -> u32 {
             self.pid
+        }
+
+        fn active_process_count(&self) -> AppResult<u32> {
+            let mut info = JOBOBJECT_BASIC_ACCOUNTING_INFORMATION::default();
+            let mut returned: u32 = 0;
+            // SAFETY: `self.job` is a valid owned job handle; the out-pointer and
+            // size describe a valid stack struct for this info class.
+            unsafe {
+                QueryInformationJobObject(
+                    self.job,
+                    JobObjectBasicAccountingInformation,
+                    &mut info as *mut _ as *mut core::ffi::c_void,
+                    std::mem::size_of::<JOBOBJECT_BASIC_ACCOUNTING_INFORMATION>() as u32,
+                    Some(&mut returned),
+                )
+            }
+            .map_err(|err| AppError::other(format!("QueryInformationJobObject failed: {err}")))?;
+            Ok(info.ActiveProcesses)
         }
 
         async fn wait_for_tree_exit(&self, cancel: &CancelToken) -> AppResult<bool> {

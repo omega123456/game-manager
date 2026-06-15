@@ -47,9 +47,14 @@ fn splits_arguments_honoring_quotes() {
 /// assert it is the value handed to the priority boost.
 const FAKE_LAUNCH_PID: u32 = 4242;
 
+/// Tiny confirmation grace period so the cross-platform tests stay fast while
+/// still exercising the confirm-before-start path.
+const TEST_CONFIRM_DELAY: Duration = Duration::from_millis(10);
+
 struct FakeHandle {
     pid: u32,
     exit_after: Duration,
+    active_processes: u32,
     waited: Arc<AtomicBool>,
 }
 
@@ -57,6 +62,10 @@ struct FakeHandle {
 impl JobHandle for FakeHandle {
     fn pid(&self) -> u32 {
         self.pid
+    }
+
+    fn active_process_count(&self) -> game_manager_lib::error::AppResult<u32> {
+        Ok(self.active_processes)
     }
 
     async fn wait_for_tree_exit(&self, cancel: &CancelToken) -> game_manager_lib::error::AppResult<bool> {
@@ -73,6 +82,10 @@ struct FakeLauncher {
     last_target: Arc<std::sync::Mutex<Option<String>>>,
     waited: Arc<AtomicBool>,
     fail: bool,
+    /// Live process count the launched handle reports during confirmation. Set
+    /// to 1 for a normal game; 0 simulates a transient bootstrapper whose tree
+    /// empties before confirmation.
+    active_processes: u32,
 }
 
 impl JobLauncher for FakeLauncher {
@@ -90,6 +103,7 @@ impl JobLauncher for FakeLauncher {
         Ok(FakeHandle {
             pid: FAKE_LAUNCH_PID,
             exit_after: self.exit_after,
+            active_processes: self.active_processes,
             waited: self.waited.clone(),
         })
     }
@@ -125,7 +139,9 @@ async fn launches_tree_and_writes_accurate_session() {
         last_target: last_target.clone(),
         waited: waited.clone(),
         fail: false,
-    });
+        active_processes: 1,
+    })
+    .with_confirm_delay(TEST_CONFIRM_DELAY);
     let cancel = CancelToken::new();
 
     let session_id = match monitor.wait_for_start(&state, game_id, &cancel).await.unwrap() {
@@ -167,7 +183,9 @@ async fn raises_launched_process_priority_on_start() {
         last_target: Arc::new(std::sync::Mutex::new(None)),
         waited: Arc::new(AtomicBool::new(false)),
         fail: false,
-    });
+        active_processes: 1,
+    })
+    .with_confirm_delay(TEST_CONFIRM_DELAY);
     let cancel = CancelToken::new();
     monitor.wait_for_start(&state, game_id, &cancel).await.unwrap();
 
@@ -188,7 +206,9 @@ async fn cancellation_during_wait_still_closes_session() {
         last_target: Arc::new(std::sync::Mutex::new(None)),
         waited: Arc::new(AtomicBool::new(false)),
         fail: false,
-    });
+        active_processes: 1,
+    })
+    .with_confirm_delay(TEST_CONFIRM_DELAY);
     let cancel = CancelToken::new();
     let session_id = match monitor.wait_for_start(&state, game_id, &cancel).await.unwrap() {
         StartOutcome::Started(id) => id,
@@ -203,6 +223,56 @@ async fn cancellation_during_wait_still_closes_session() {
 }
 
 #[tokio::test]
+async fn transient_tree_opens_no_session_and_skips_priority_boost() {
+    use std::sync::Mutex as StdMutex;
+
+    #[derive(Clone, Default)]
+    struct RecordingPrioritizer {
+        pids: Arc<StdMutex<Vec<u32>>>,
+    }
+    impl game_manager_lib::priority::ProcessPrioritizer for RecordingPrioritizer {
+        fn set_high(&self, pid: u32) -> game_manager_lib::error::AppResult<()> {
+            self.pids.lock().unwrap().push(pid);
+            Ok(())
+        }
+    }
+
+    // A bootstrapper: the launched tree reports zero live processes by the time
+    // confirmation runs (it exited and handed off to a detached launcher).
+    let recorder = RecordingPrioritizer::default();
+    let state = AppState::in_memory_with_prioritizer(Box::new(recorder.clone())).unwrap();
+    let game_id = seed_tree_game(&state, "C:/Games/Bootstrapper.exe");
+
+    let waited = Arc::new(AtomicBool::new(false));
+    let monitor = JobObjectMonitor::new(FakeLauncher {
+        exit_after: Duration::ZERO,
+        last_target: Arc::new(std::sync::Mutex::new(None)),
+        waited: waited.clone(),
+        fail: false,
+        active_processes: 0,
+    })
+    .with_confirm_delay(TEST_CONFIRM_DELAY);
+    let cancel = CancelToken::new();
+
+    let outcome = monitor.wait_for_start(&state, game_id, &cancel).await.unwrap();
+    assert_eq!(
+        outcome,
+        StartOutcome::Cancelled,
+        "a tree that empties during confirmation must not be treated as started"
+    );
+    let sessions = state.with_db(|conn| sessions::list_for_game(conn, game_id)).unwrap();
+    assert!(sessions.is_empty(), "no session opened for a transient bootstrapper");
+    assert!(
+        recorder.pids.lock().unwrap().is_empty(),
+        "priority must not be raised for a transient process"
+    );
+    assert!(
+        !waited.load(Ordering::SeqCst),
+        "the tree-exit wait must not run when the launch was never confirmed"
+    );
+}
+
+#[tokio::test]
 async fn cancel_before_start_opens_no_session() {
     let state = AppState::in_memory().unwrap();
     let game_id = seed_tree_game(&state, "C:/Games/X.exe");
@@ -211,6 +281,7 @@ async fn cancel_before_start_opens_no_session() {
         last_target: Arc::new(std::sync::Mutex::new(None)),
         waited: Arc::new(AtomicBool::new(false)),
         fail: false,
+        active_processes: 1,
     });
     let cancel = CancelToken::new();
     cancel.cancel();
@@ -229,6 +300,7 @@ async fn launch_failure_propagates() {
         last_target: Arc::new(std::sync::Mutex::new(None)),
         waited: Arc::new(AtomicBool::new(false)),
         fail: true,
+        active_processes: 0,
     });
     let cancel = CancelToken::new();
     let result = monitor.wait_for_start(&state, game_id, &cancel).await;
@@ -247,6 +319,7 @@ async fn wait_for_end_without_parked_handle_still_closes() {
         last_target: Arc::new(std::sync::Mutex::new(None)),
         waited: Arc::new(AtomicBool::new(false)),
         fail: false,
+        active_processes: 1,
     });
     // Open a session directly, then call wait_for_end with no parked handle.
     let session_id = state.with_db(|conn| sessions::start(conn, game_id)).unwrap();
@@ -282,7 +355,9 @@ async fn windows_times_a_real_tree_to_exit() {
         })
         .unwrap();
 
-    let monitor = windows_monitor();
+    // Short confirmation window: the cmd/ping tree lives ~1s, comfortably longer
+    // than the grace period, so it confirms rather than being treated transient.
+    let monitor = windows_monitor().with_confirm_delay(Duration::from_millis(200));
     let cancel = CancelToken::new();
     let session_id = match monitor.wait_for_start(&state, game_id, &cancel).await.unwrap() {
         StartOutcome::Started(id) => id,
