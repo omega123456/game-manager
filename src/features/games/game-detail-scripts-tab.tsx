@@ -93,44 +93,39 @@ export function GameDetailScriptsTab({ game }: GameDetailScriptsTabProps): React
 
   return (
     <div className="space-y-5" data-testid="game-detail-scripts-tab">
-      <div className="grid gap-5 xl:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]">
-        <div className="space-y-5">
-          <GameScriptAssignment
-            scripts={scripts}
-            assignedScriptIds={directScriptIds}
-            title="Direct scripts"
-            description="Only normal scripts can be assigned directly to a game."
-            emptyLabel="No direct scripts assigned yet."
-            triggerLabel="Add script"
-            disabled={assignmentsPending}
-            onAssign={(scriptId) => void updateScriptIds([...directScriptIds, scriptId])}
-            onRemove={(scriptId) =>
-              void updateScriptIds(directScriptIds.filter((currentId) => currentId !== scriptId))
-            }
-          />
-          <GameScriptAssignment
-            scripts={scripts}
-            assignedScriptIds={inheritedScriptIds}
-            title="Inherited scripts"
-            description="These come from the groups this game belongs to and are read-only here."
-            emptyLabel="No inherited scripts yet."
-            triggerLabel=""
-            disabled
-            onAssign={() => undefined}
-          />
-          <GameGroupMembership
-            groups={groups}
-            selectedGroupIds={selectedGroupIds}
-            disabled={assignmentsPending}
-            onAssign={(groupId) => void updateGroupIds([...selectedGroupIds, groupId])}
-            onRemove={(groupId) =>
-              void updateGroupIds(selectedGroupIds.filter((currentId) => currentId !== groupId))
-            }
-          />
-        </div>
-
-        <ResolvedScriptPreview scripts={resolvedScriptsQuery.data ?? []} />
-      </div>
+      <GameScriptAssignment
+        scripts={scripts}
+        assignedScriptIds={directScriptIds}
+        title="Direct scripts"
+        description="Only normal scripts can be assigned directly to a game."
+        emptyLabel="No direct scripts assigned yet."
+        triggerLabel="Add script"
+        disabled={assignmentsPending}
+        onAssign={(scriptId) => void updateScriptIds([...directScriptIds, scriptId])}
+        onRemove={(scriptId) =>
+          void updateScriptIds(directScriptIds.filter((currentId) => currentId !== scriptId))
+        }
+      />
+      <GameScriptAssignment
+        scripts={scripts}
+        assignedScriptIds={inheritedScriptIds}
+        title="Inherited scripts"
+        description="These come from the groups this game belongs to and are read-only here."
+        emptyLabel="No inherited scripts yet."
+        triggerLabel=""
+        disabled
+        onAssign={() => undefined}
+      />
+      <GameGroupMembership
+        groups={groups}
+        selectedGroupIds={selectedGroupIds}
+        disabled={assignmentsPending}
+        onAssign={(groupId) => void updateGroupIds([...selectedGroupIds, groupId])}
+        onRemove={(groupId) =>
+          void updateGroupIds(selectedGroupIds.filter((currentId) => currentId !== groupId))
+        }
+      />
+      <ResolvedScriptPreview scripts={resolvedScriptsQuery.data ?? []} />
     </div>
   )
 }
