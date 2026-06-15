@@ -13,25 +13,25 @@ default = []
 test-utils = []
 
 [build-dependencies]
-tauri-build = { version = "2", features = [] }
+tauri-build = { version = "~2.6.2", features = [] }
 
 [dependencies]
-tauri = { version = "2", features = ["protocol-asset"] }
-tauri-plugin-dialog = "2"
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"
-thiserror = "2"
-tracing = "0.1"
-tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
-rusqlite = { version = "0.32", features = ["bundled"] }
-chrono = { version = "0.4", default-features = false, features = ["clock", "serde"] }
-reqwest = { version = "0.12", default-features = false, features = ["blocking", "json", "rustls-tls"] }
-sha2 = "0.10"
-urlencoding = "2"
+tauri = { version = "~2.11.2", features = ["protocol-asset"] }
+tauri-plugin-dialog = "~2.7.1"
+serde = { version = "~1.0.228", features = ["derive"] }
+serde_json = "~1.0.150"
+thiserror = "~2.0.18"
+tracing = "~0.1.44"
+tracing-subscriber = { version = "~0.3.23", features = ["env-filter", "fmt"] }
+rusqlite = { version = "~0.32.1", features = ["bundled"] }
+chrono = { version = "~0.4.45", default-features = false, features = ["clock", "serde"] }
+reqwest = { version = "~0.12.28", default-features = false, features = ["blocking", "json", "rustls-tls"] }
+sha2 = "~0.10.9"
+urlencoding = "~2.1.3"
 
 [dev-dependencies]
-tempfile = "3"
-tauri = { version = "2", features = ["test"] }
+tempfile = "~3.27.0"
+tauri = { version = "~2.11.2", features = ["test"] }
 
 [lints.rust]
 # `coverage` is a custom cfg set by the cargo-llvm-cov run to exclude the Tauri
