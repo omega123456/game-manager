@@ -149,7 +149,9 @@ describe('AddGameWizard', () => {
     await user.click(screen.getByRole('button', { name: 'Continue to cover art' }))
 
     expect(
-      await screen.findByText('No cover art matched this search. Try another title or use a local file.')
+      await screen.findByText(
+        'No cover art matched this search. Try another title or use a local file.'
+      )
     ).toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: 'Continue without cover' }))

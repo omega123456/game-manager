@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button'
 export function CurrentlyPlayingHero(): React.JSX.Element {
   return (
     <section className="relative overflow-hidden rounded-[1.75rem] border border-border bg-surface-container p-6">
-      <div className="absolute inset-x-0 top-0 h-24 bg-gradient-to-r from-primary/20 via-secondary/10 to-transparent" />
+      <div className="absolute inset-x-0 top-0 h-24 bg-linear-to-r from-primary/20 via-secondary/10 to-transparent" />
       <div className="relative flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
         <div className="max-w-2xl space-y-4">
           <span className="inline-flex items-center gap-2 rounded-full border border-primary/30 bg-primary/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.24em] text-primary">
@@ -20,8 +20,8 @@ export function CurrentlyPlayingHero(): React.JSX.Element {
               Your launch deck lives here.
             </h1>
             <p className="max-w-xl text-sm text-muted-foreground sm:text-base">
-              Phase B2 ships the library shell now. Live launch status, elapsed time, and
-              controls connect in the later launch phases.
+              Phase B2 ships the library shell now. Live launch status, elapsed time, and controls
+              connect in the later launch phases.
             </p>
           </div>
         </div>

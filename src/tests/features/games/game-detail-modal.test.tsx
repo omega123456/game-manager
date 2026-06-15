@@ -61,11 +61,15 @@ describe('GameDetailModal', () => {
 
     const dialog = await screen.findByRole('dialog')
     expect(within(dialog).getByRole('tab', { name: 'Overview' })).toBeInTheDocument()
-    expect(within(dialog).getByRole('button', { name: 'Launch available in Phase E' })).toBeDisabled()
+    expect(
+      within(dialog).getByRole('button', { name: 'Launch available in Phase E' })
+    ).toBeDisabled()
 
     await user.click(within(dialog).getByRole('tab', { name: 'Scripts' }))
     expect(await screen.findByTestId('game-detail-scripts-placeholder')).toBeInTheDocument()
-    expect(screen.getByText(/Script assignment available after Scripts\/Groups are set up\./)).toBeInTheDocument()
+    expect(
+      screen.getByText(/Script assignment available after Scripts\/Groups are set up\./)
+    ).toBeInTheDocument()
 
     await user.click(within(dialog).getByRole('button', { name: 'Close game detail' }))
     await waitFor(() => {
@@ -153,7 +157,9 @@ describe('GameDetailModal', () => {
     expect(screen.queryByLabelText('Monitor executable')).not.toBeInTheDocument()
 
     await user.click(screen.getByRole('switch', { name: 'Enable launcher monitoring' }))
-    expect(await screen.findByDisplayValue('C:/SteamLibrary/common/Balatro/Balatro.exe')).toBeInTheDocument()
+    expect(
+      await screen.findByDisplayValue('C:/SteamLibrary/common/Balatro/Balatro.exe')
+    ).toBeInTheDocument()
     expect(
       screen.getByText((_, element) => element?.textContent === 'Saved process name: Balatro.exe')
     ).toBeInTheDocument()
@@ -178,8 +184,49 @@ describe('GameDetailModal', () => {
     await user.click(screen.getByRole('switch', { name: 'Enable launcher monitoring' }))
     await user.click(screen.getByRole('button', { name: 'Save changes' }))
     expect(
-      await screen.findByText('Choose the executable the app should watch after the launcher opens.')
+      await screen.findByText(
+        'Choose the executable the app should watch after the launcher opens.'
+      )
     ).toBeInTheDocument()
     expect(ipc.calls('update_game')).toHaveLength(0)
+  })
+
+  it('requires a launch target before saving edits', async () => {
+    installGameMocks()
+    const user = userEvent.setup()
+
+    renderWithProviders(<AppRoutes />, { route: '/library' })
+
+    await screen.findByText('Alan Wake 2')
+    await user.click(screen.getByRole('button', { name: 'Open Alan Wake 2' }))
+    await user.click(await screen.findByRole('tab', { name: 'Edit' }))
+
+    await user.clear(screen.getByLabelText('Launch target'))
+    await user.click(screen.getByRole('button', { name: 'Save changes' }))
+
+    expect(
+      await screen.findByText('Choose the executable Game Manager should launch.')
+    ).toBeInTheDocument()
+    expect(ipc.calls('update_game')).toHaveLength(0)
+  })
+
+  it('surfaces save failures from the backend', async () => {
+    installGameMocks()
+    ipc.override('update_game', () => {
+      throw new Error('disk full')
+    })
+    const user = userEvent.setup()
+
+    renderWithProviders(<AppRoutes />, { route: '/library' })
+
+    await screen.findByText('Alan Wake 2')
+    await user.click(screen.getByRole('button', { name: 'Open Alan Wake 2' }))
+    await user.click(await screen.findByRole('tab', { name: 'Edit' }))
+    await user.click(screen.getByRole('button', { name: 'Save changes' }))
+
+    expect(
+      await screen.findByText('Could not save the game right now. Check the fields and try again.')
+    ).toBeInTheDocument()
+    expect(ipc.calls('log_frontend').length).toBeGreaterThan(0)
   })
 })

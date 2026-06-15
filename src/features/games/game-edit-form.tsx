@@ -157,7 +157,7 @@ export function GameEditForm({ game, onSaved }: GameEditFormProps): React.JSX.El
     <section className="grid gap-6 lg:grid-cols-[19rem_1fr]" data-testid="game-detail-edit">
       <div className="space-y-4">
         <div className="overflow-hidden rounded-[1.8rem] border border-border bg-card shadow-sm">
-          <div className="aspect-[3/4] overflow-hidden bg-surface-high">
+          <div className="aspect-3/4 overflow-hidden bg-surface-high">
             {coverPreviewUrl ? (
               <img
                 src={coverPreviewUrl}
@@ -165,14 +165,16 @@ export function GameEditForm({ game, onSaved }: GameEditFormProps): React.JSX.El
                 className="h-full w-full object-cover"
               />
             ) : (
-              <div className="flex h-full items-center justify-center bg-gradient-to-br from-primary/20 via-transparent to-secondary/15 text-primary">
+              <div className="flex h-full items-center justify-center bg-linear-to-br from-primary/20 via-transparent to-secondary/15 text-primary">
                 <Icon name="photo" className="text-[52px]" />
               </div>
             )}
           </div>
         </div>
         <div className="rounded-[1.4rem] border border-border bg-surface-low p-4">
-          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Cover art</p>
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+            Cover art
+          </p>
           <p className="mt-2 text-sm text-muted-foreground">
             Swap in a local file now. Search-based art replacement stays in the add flow.
           </p>
@@ -223,7 +225,11 @@ export function GameEditForm({ game, onSaved }: GameEditFormProps): React.JSX.El
                 setForm((current) => ({ ...current, launchTarget: event.target.value }))
               }
             />
-            <Button type="button" variant="outline" onClick={() => void browseForExecutable('launch')}>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => void browseForExecutable('launch')}
+            >
               <Icon name="folder_open" className="text-[18px]" />
               Browse
             </Button>
@@ -240,7 +246,8 @@ export function GameEditForm({ game, onSaved }: GameEditFormProps): React.JSX.El
                 Watch the real game executable after a launcher starts
               </h3>
               <p className="max-w-2xl text-sm text-muted-foreground">
-                Keep direct games on tree monitoring. Switch this on for launcher flows where the launched process is only a bootstrapper.
+                Keep direct games on tree monitoring. Switch this on for launcher flows where the
+                launched process is only a bootstrapper.
               </p>
             </div>
             <div className="flex items-center gap-3 rounded-full border border-border bg-surface-low px-4 py-2">
@@ -284,7 +291,10 @@ export function GameEditForm({ game, onSaved }: GameEditFormProps): React.JSX.El
                   </div>
                 </Field>
                 <p className="mt-3 text-sm text-muted-foreground">
-                  Saved process name: <span className="font-medium text-foreground">{monitorProcessName ?? 'Not set yet'}</span>
+                  Saved process name:{' '}
+                  <span className="font-medium text-foreground">
+                    {monitorProcessName ?? 'Not set yet'}
+                  </span>
                 </p>
               </div>
             </div>
@@ -308,7 +318,11 @@ export function GameEditForm({ game, onSaved }: GameEditFormProps): React.JSX.El
             <Icon name="play_circle" className="text-[18px]" />
             Launch wiring later
           </Button>
-          <Button type="button" onClick={() => void saveGame()} disabled={updateGameMutation.isPending}>
+          <Button
+            type="button"
+            onClick={() => void saveGame()}
+            disabled={updateGameMutation.isPending}
+          >
             <Icon name="save" className="text-[18px]" />
             {updateGameMutation.isPending ? 'Saving…' : 'Save changes'}
           </Button>

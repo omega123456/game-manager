@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import {
   parseAccentKey,
@@ -41,5 +41,23 @@ describe('theme-storage', () => {
     expect(parseAccentKey('emerald')).toBe('emerald')
     expect(parseAccentKey('chartreuse')).toBeNull()
     expect(parseAccentKey(null)).toBeNull()
+  })
+
+  it('falls back when localStorage is unavailable', () => {
+    vi.stubGlobal('localStorage', {
+      getItem: () => {
+        throw new Error('blocked')
+      },
+      setItem: () => {
+        throw new Error('blocked')
+      },
+    })
+
+    expect(readStoredTheme()).toBe('system')
+    expect(readStoredAccent()).toBe('default')
+    expect(() => writeStoredTheme('dark')).not.toThrow()
+    expect(() => writeStoredAccent('emerald')).not.toThrow()
+
+    vi.unstubAllGlobals()
   })
 })

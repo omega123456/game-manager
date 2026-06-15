@@ -1,23 +1,22 @@
 /* Per-theme fonts (loaded via @fontsource; tree-shaken weights). */
-@import '@fontsource/inter/400.css';
-@import '@fontsource/inter/500.css';
-@import '@fontsource/inter/600.css';
-@import '@fontsource/inter/700.css';
-@import '@fontsource/inter/800.css';
-@import '@fontsource/jetbrains-mono/400.css';
-@import '@fontsource/jetbrains-mono/500.css';
-@import '@fontsource/hanken-grotesk/600.css';
-@import '@fontsource/hanken-grotesk/700.css';
-@import '@fontsource/hanken-grotesk/800.css';
-@import '@fontsource/geist-sans/400.css';
-@import '@fontsource/geist-sans/500.css';
-@import '@fontsource/geist-sans/600.css';
+@import '@fontsource/inter/400.css' layer(base);
+@import '@fontsource/inter/500.css' layer(base);
+@import '@fontsource/inter/600.css' layer(base);
+@import '@fontsource/inter/700.css' layer(base);
+@import '@fontsource/inter/800.css' layer(base);
+@import '@fontsource/jetbrains-mono/400.css' layer(base);
+@import '@fontsource/jetbrains-mono/500.css' layer(base);
+@import '@fontsource/hanken-grotesk/600.css' layer(base);
+@import '@fontsource/hanken-grotesk/700.css' layer(base);
+@import '@fontsource/hanken-grotesk/800.css' layer(base);
+@import '@fontsource/geist-sans/400.css' layer(base);
+@import '@fontsource/geist-sans/500.css' layer(base);
+@import '@fontsource/geist-sans/600.css' layer(base);
 /* Material Symbols (Rounded) icon font. */
-@import 'material-symbols/rounded.css';
+@import 'material-symbols/rounded.css' layer(base);
 
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import 'tailwindcss';
+@config '../../tailwind.config.ts';
 
 /*
  * Design tokens — authoritative palettes generated from

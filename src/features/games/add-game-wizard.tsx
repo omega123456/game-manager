@@ -117,7 +117,9 @@ export function AddGameWizard(): React.JSX.Element {
   const searchRequestIdRef = useRef(0)
   const stepCopy = STEP_COPY[step]
   const hasExecutable = wizard.executablePath.trim().length > 0
-  const canContinueFromArt = Boolean(wizard.selectedCandidate || wizard.selectedImagePath || artError)
+  const canContinueFromArt = Boolean(
+    wizard.selectedCandidate || wizard.selectedImagePath || artError
+  )
 
   const closeWizard = () => {
     setActiveOverlay('none')
@@ -241,7 +243,10 @@ export function AddGameWizard(): React.JSX.Element {
     lastSearchTermRef.current = term
 
     try {
-      const [artResult, metadataResult] = await Promise.allSettled([searchArt(term), fetchMetadata(term)])
+      const [artResult, metadataResult] = await Promise.allSettled([
+        searchArt(term),
+        fetchMetadata(term),
+      ])
 
       // Drop stale responses: a newer search started while this one was in flight.
       if (searchRequestIdRef.current !== requestId) {
@@ -411,7 +416,9 @@ export function AddGameWizard(): React.JSX.Element {
         }))
       } catch (error) {
         const details = error instanceof Error ? error.message : String(error)
-        setArtError('Could not cache the selected cover art. Try another image or use a local file.')
+        setArtError(
+          'Could not cache the selected cover art. Try another image or use a local file.'
+        )
         logFrontend('warn', 'Cover art caching failed in Add Game wizard.', {
           category: 'games.wizard',
           details,
@@ -463,9 +470,7 @@ export function AddGameWizard(): React.JSX.Element {
                 >
                   {stepCopy.eyebrow}
                 </p>
-                <DialogTitle className="mt-2 text-2xl">
-                  {stepCopy.title}
-                </DialogTitle>
+                <DialogTitle className="mt-2 text-2xl">{stepCopy.title}</DialogTitle>
               </div>
               <div className="flex items-center gap-2" aria-hidden="true">
                 {[1, 2, 3].map((value) => (
@@ -528,7 +533,11 @@ export function AddGameWizard(): React.JSX.Element {
                   Pick the Windows executable that should launch when you press Play.
                 </p>
                 <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center">
-                  <Button type="button" onClick={() => void browseForExecutable()} ref={browseButtonRef}>
+                  <Button
+                    type="button"
+                    onClick={() => void browseForExecutable()}
+                    ref={browseButtonRef}
+                  >
                     <Icon name="folder_open" className="text-[18px]" />
                     Browse for executable
                   </Button>
@@ -585,7 +594,11 @@ export function AddGameWizard(): React.JSX.Element {
                       <Icon name="search" className="text-[18px]" />
                       {isSearchingArt ? 'Searching…' : 'Search'}
                     </Button>
-                    <Button type="button" variant="outline" onClick={() => void browseForLocalArt()}>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => void browseForLocalArt()}
+                    >
                       <Icon name="image" className="text-[18px]" />
                       Use Local File
                     </Button>
@@ -593,7 +606,8 @@ export function AddGameWizard(): React.JSX.Element {
                 </div>
 
                 <p className="text-sm text-muted-foreground">
-                  Search started from <span className="font-medium text-foreground">{wizard.executablePath}</span>
+                  Search started from{' '}
+                  <span className="font-medium text-foreground">{wizard.executablePath}</span>
                 </p>
               </div>
 
@@ -608,7 +622,9 @@ export function AddGameWizard(): React.JSX.Element {
                     </span>
                     <div className="space-y-2">
                       <h3 className="font-heading text-lg font-semibold text-foreground">
-                        {candidates.length === 0 ? 'Art search needs a fallback' : 'Art search updated'}
+                        {candidates.length === 0
+                          ? 'Art search needs a fallback'
+                          : 'Art search updated'}
                       </h3>
                       <p className="text-sm text-muted-foreground">{artError}</p>
                       <div className="flex flex-wrap gap-2">
@@ -634,7 +650,9 @@ export function AddGameWizard(): React.JSX.Element {
                 <div className="flex items-center justify-between">
                   <h3 className="font-heading text-lg font-semibold">Cover candidates</h3>
                   <span className="text-sm text-muted-foreground">
-                    {isSearchingArt ? 'Searching…' : `${candidates.length} result${candidates.length === 1 ? '' : 's'}`}
+                    {isSearchingArt
+                      ? 'Searching…'
+                      : `${candidates.length} result${candidates.length === 1 ? '' : 's'}`}
                   </span>
                 </div>
 
@@ -659,12 +677,14 @@ export function AddGameWizard(): React.JSX.Element {
                           tabIndex={selected || index === 0 ? 0 : -1}
                           className={cn(
                             'group overflow-hidden rounded-2xl border bg-card text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
-                            selected ? 'border-primary shadow-[0_0_0_1px_hsl(var(--primary))]' : 'border-border'
+                            selected
+                              ? 'border-primary shadow-[0_0_0_1px_hsl(var(--primary))]'
+                              : 'border-border'
                           )}
                           onClick={() => moveCandidateFocus(index)}
                           onKeyDown={(event) => handleCandidateKeyDown(event, index)}
                         >
-                          <div className="aspect-[3/4] overflow-hidden bg-surface-high">
+                          <div className="aspect-3/4 overflow-hidden bg-surface-high">
                             <img
                               src={candidate.imageUrl}
                               alt={`${wizard.gameName || wizard.searchTerm} cover option ${index + 1}`}
@@ -672,7 +692,9 @@ export function AddGameWizard(): React.JSX.Element {
                             />
                           </div>
                           <div className="space-y-1 p-3">
-                            <p className="text-sm font-semibold text-foreground">{candidate.providerName}</p>
+                            <p className="text-sm font-semibold text-foreground">
+                              {candidate.providerName}
+                            </p>
                             <p className="text-xs text-muted-foreground">
                               {candidate.width} × {candidate.height}
                             </p>
@@ -692,7 +714,11 @@ export function AddGameWizard(): React.JSX.Element {
                 <Button type="button" variant="ghost" onClick={() => setStep(1)}>
                   Back
                 </Button>
-                <Button type="button" onClick={() => void continueFromArt()} disabled={!canContinueFromArt || isPreparingArt}>
+                <Button
+                  type="button"
+                  onClick={() => void continueFromArt()}
+                  disabled={!canContinueFromArt || isPreparingArt}
+                >
                   {isPreparingArt ? 'Preparing cover…' : 'Continue to details'}
                 </Button>
               </DialogFooter>
@@ -703,7 +729,7 @@ export function AddGameWizard(): React.JSX.Element {
             <section className="space-y-5" data-testid="add-game-step-3">
               <div className="grid gap-5 md:grid-cols-[12rem_1fr]">
                 <div className="rounded-2xl border border-border bg-surface-low p-4">
-                  <div className="flex aspect-[3/4] items-center justify-center overflow-hidden rounded-xl bg-background">
+                  <div className="flex aspect-3/4 items-center justify-center overflow-hidden rounded-xl bg-background">
                     {toCoverImageUrl(wizard.selectedImagePreview) ? (
                       <img
                         src={toCoverImageUrl(wizard.selectedImagePreview) ?? undefined}
@@ -774,7 +800,8 @@ export function AddGameWizard(): React.JSX.Element {
                   </div>
 
                   <div className="rounded-xl border border-border bg-background px-4 py-3 text-sm text-muted-foreground">
-                    Monitor mode will start as <span className="font-medium text-foreground">tree</span>. Launcher-specific
+                    Monitor mode will start as{' '}
+                    <span className="font-medium text-foreground">tree</span>. Launcher-specific
                     monitoring lands in the edit modal next.
                   </div>
                 </div>

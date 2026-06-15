@@ -49,7 +49,9 @@ describe('LibraryRoute', () => {
   it('renders mocked games with hero, toolbar, and card metadata', async () => {
     renderWithProviders(<AppRoutes />, { route: '/library' })
 
-    expect(await screen.findByRole('heading', { name: 'Your launch deck lives here.' })).toBeInTheDocument()
+    expect(
+      await screen.findByRole('heading', { name: 'Your launch deck lives here.' })
+    ).toBeInTheDocument()
     expect(await screen.findByRole('heading', { name: 'Your collection' })).toBeInTheDocument()
 
     const cards = await screen.findAllByRole('button', { name: /Open / })
@@ -88,6 +90,44 @@ describe('LibraryRoute', () => {
     ])
   })
 
+  it('sorts by playtime and uses recent activity as a tie-breaker', async () => {
+    ipc.override('list_games', () => [
+      {
+        ...GAMES[0],
+        name: 'Older Twin',
+        totalPlaytimeSeconds: 3600,
+        lastPlayedAt: '2026-06-01T12:00:00Z',
+      },
+      {
+        ...GAMES[1],
+        name: 'Newer Twin',
+        totalPlaytimeSeconds: 3600,
+        lastPlayedAt: '2026-06-15T12:00:00Z',
+      },
+      {
+        ...GAMES[2],
+        name: 'Low Playtime',
+        totalPlaytimeSeconds: 60,
+      },
+    ])
+
+    const user = userEvent.setup()
+    renderWithProviders(<AppRoutes />, { route: '/library' })
+
+    await screen.findByText('Older Twin')
+    await user.click(screen.getByRole('combobox', { name: 'Sort library' }))
+    await user.click(screen.getByRole('option', { name: 'Total time' }))
+
+    const sortedButtons = within(screen.getByTestId('library-grid')).getAllByRole('button', {
+      name: /Open /,
+    })
+    expect(sortedButtons.map((button) => button.getAttribute('aria-label'))).toEqual([
+      'Open Newer Twin',
+      'Open Older Twin',
+      'Open Low Playtime',
+    ])
+  })
+
   it('renders the empty state when the library has no games', async () => {
     ipc.override('list_games', () => [])
     renderWithProviders(<AppRoutes />, { route: '/library' })
@@ -103,7 +143,9 @@ describe('LibraryRoute', () => {
     await screen.findByText('Alan Wake 2')
     await user.type(screen.getByRole('searchbox', { name: 'Search games' }), 'zzz')
 
-    expect(await screen.findByRole('heading', { name: 'No games match this search' })).toBeInTheDocument()
+    expect(
+      await screen.findByRole('heading', { name: 'No games match this search' })
+    ).toBeInTheDocument()
   })
 
   it('renders the loading skeleton while the games query is pending', async () => {

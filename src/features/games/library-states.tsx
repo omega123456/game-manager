@@ -10,7 +10,7 @@ export function LibraryLoadingState(): React.JSX.Element {
             key={index}
             className="overflow-hidden rounded-[1.4rem] border border-border bg-card"
           >
-            <div className="aspect-[3/4] animate-pulse bg-surface-high" />
+            <div className="aspect-3/4 animate-pulse bg-surface-high" />
             <div className="space-y-3 p-4">
               <div className="h-5 w-2/3 animate-pulse rounded bg-surface-high" />
               <div className="h-4 w-1/2 animate-pulse rounded bg-surface-high" />

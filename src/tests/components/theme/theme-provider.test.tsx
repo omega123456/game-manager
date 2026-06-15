@@ -118,6 +118,29 @@ describe('ThemeProvider', () => {
     expect(result.current.accent).toBe('emerald')
   })
 
+  it('ignores backend settings when unmounted before hydration completes', async () => {
+    installMatchMedia(false)
+    ipc.override(
+      'get_all_settings',
+      () =>
+        new Promise<Array<{ key: string; value: string }>>((resolve) => {
+          setTimeout(() => resolve([{ key: 'theme', value: 'dark' }]), 25)
+        })
+    )
+
+    const { unmount } = render(
+      <ThemeProvider>
+        <span>child</span>
+      </ThemeProvider>
+    )
+    unmount()
+
+    await new Promise((resolve) => {
+      setTimeout(resolve, 50)
+    })
+    expect(document.documentElement.getAttribute('data-theme')).toBe('light')
+  })
+
   it('hydrates theme and accent from the backend settings (source of truth)', async () => {
     installMatchMedia(false)
     ipc.override('get_all_settings', () => [
