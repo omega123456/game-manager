@@ -1,6 +1,16 @@
 import { useState } from 'react'
 
-import { Button } from '@/components/ui/button'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
+import { Button, buttonVariants } from '@/components/ui/button'
 import {
   Dialog,
   DialogContent,
@@ -13,7 +23,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { getLibraryMeta } from '@/features/games/library-format'
 import { GameEditForm } from '@/features/games/game-edit-form'
 import { toCoverImageUrl } from '@/lib/asset-url'
-import { useGameQuery } from '@/lib/queries/use-games'
+import { logFrontend } from '@/lib/app-log-commands'
+import { useDeleteGameMutation, useGameQuery } from '@/lib/queries/use-games'
 import { cn } from '@/lib/utils'
 import { useUiStore } from '@/stores/ui-store'
 
@@ -46,10 +57,30 @@ interface GameDetailModalInnerProps {
 
 function GameDetailModalInner({ selectedGameId }: GameDetailModalInnerProps): React.JSX.Element {
   const [activeTab, setActiveTab] = useState<GameDetailTab>('overview')
+  const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
   const gameQuery = useGameQuery(selectedGameId)
+  const deleteGameMutation = useDeleteGameMutation()
 
   const game = gameQuery.data
   const meta = game ? getLibraryMeta(game.totalPlaytimeSeconds, game.lastPlayedAt) : null
+
+  async function handleDelete(): Promise<void> {
+    if (!selectedGameId) return
+    setDeleteError(null)
+    try {
+      await deleteGameMutation.mutateAsync(selectedGameId)
+      closeDetailModal()
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : 'Could not delete the game right now.'
+      setDeleteError(message)
+      logFrontend('error', 'Failed to delete game.', {
+        category: 'games.delete',
+        details: message,
+      })
+    }
+  }
 
   return (
     <DialogContent
@@ -69,15 +100,29 @@ function GameDetailModalInner({ selectedGameId }: GameDetailModalInnerProps): Re
                 phases.
               </DialogDescription>
             </div>
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              onClick={closeDetailModal}
-              aria-label="Close game detail"
-            >
-              <Icon name="close" className="text-[18px]" />
-            </Button>
+            <div className="flex items-center gap-1">
+              {game ? (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => setIsDeleteConfirmOpen(true)}
+                  aria-label="Delete game"
+                  className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+                >
+                  <Icon name="delete" className="text-[18px]" />
+                </Button>
+              ) : null}
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                onClick={closeDetailModal}
+                aria-label="Close game detail"
+              >
+                <Icon name="close" className="text-[18px]" />
+              </Button>
+            </div>
           </div>
         </DialogHeader>
       </div>
@@ -272,6 +317,31 @@ function GameDetailModalInner({ selectedGameId }: GameDetailModalInnerProps): Re
           </TabsContent>
         </div>
       </Tabs>
+
+      <AlertDialog open={isDeleteConfirmOpen} onOpenChange={setIsDeleteConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete {game?.name}?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently remove the game and all its play history. This cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          {deleteError ? <p className="text-sm text-destructive">{deleteError}</p> : null}
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleteGameMutation.isPending}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className={buttonVariants({ variant: 'destructive' })}
+              onClick={(e) => {
+                e.preventDefault()
+                void handleDelete()
+              }}
+              disabled={deleteGameMutation.isPending}
+            >
+              {deleteGameMutation.isPending ? 'Deleting…' : 'Delete game'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </DialogContent>
   )
 }

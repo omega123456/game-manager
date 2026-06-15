@@ -229,4 +229,91 @@ describe('GameDetailModal', () => {
     ).toBeInTheDocument()
     expect(ipc.calls('log_frontend').length).toBeGreaterThan(0)
   })
+
+  it('shows a delete button once the game has loaded', async () => {
+    installGameMocks()
+    const user = userEvent.setup()
+
+    renderWithProviders(<AppRoutes />, { route: '/library' })
+
+    await screen.findByText('Alan Wake 2')
+    await user.click(screen.getByRole('button', { name: 'Open Alan Wake 2' }))
+
+    expect(await screen.findByRole('button', { name: 'Delete game' })).toBeInTheDocument()
+  })
+
+  it('opens a confirmation dialog when delete is clicked', async () => {
+    installGameMocks()
+    const user = userEvent.setup()
+
+    renderWithProviders(<AppRoutes />, { route: '/library' })
+
+    await screen.findByText('Alan Wake 2')
+    await user.click(screen.getByRole('button', { name: 'Open Alan Wake 2' }))
+    await user.click(await screen.findByRole('button', { name: 'Delete game' }))
+
+    expect(await screen.findByRole('alertdialog')).toBeInTheDocument()
+    expect(screen.getByText('Delete Alan Wake 2?')).toBeInTheDocument()
+    expect(
+      screen.getByText(/permanently remove the game and all its play history/)
+    ).toBeInTheDocument()
+  })
+
+  it('cancels deletion and keeps the modal open', async () => {
+    installGameMocks()
+    const user = userEvent.setup()
+
+    renderWithProviders(<AppRoutes />, { route: '/library' })
+
+    await screen.findByText('Alan Wake 2')
+    await user.click(screen.getByRole('button', { name: 'Open Alan Wake 2' }))
+    await user.click(await screen.findByRole('button', { name: 'Delete game' }))
+    await user.click(await screen.findByRole('button', { name: 'Cancel' }))
+
+    await waitFor(() => {
+      expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
+    })
+    expect(screen.getByRole('dialog')).toBeInTheDocument()
+    expect(ipc.calls('delete_game')).toHaveLength(0)
+  })
+
+  it('confirms deletion, calls delete_game, and closes the modal', async () => {
+    installGameMocks()
+    const user = userEvent.setup()
+
+    renderWithProviders(<AppRoutes />, { route: '/library' })
+
+    await screen.findByText('Alan Wake 2')
+    await user.click(screen.getByRole('button', { name: 'Open Alan Wake 2' }))
+    await user.click(await screen.findByRole('button', { name: 'Delete game' }))
+    await user.click(await screen.findByRole('button', { name: 'Delete game' }))
+
+    await waitFor(() => {
+      expect(ipc.calls('delete_game')).toHaveLength(1)
+    })
+    expect(ipc.calls('delete_game')[0]).toEqual({ id: 1 })
+
+    await waitFor(() => {
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    })
+  })
+
+  it('surfaces delete failures from the backend', async () => {
+    installGameMocks()
+    ipc.override('delete_game', () => {
+      throw new Error('foreign key constraint')
+    })
+    const user = userEvent.setup()
+
+    renderWithProviders(<AppRoutes />, { route: '/library' })
+
+    await screen.findByText('Alan Wake 2')
+    await user.click(screen.getByRole('button', { name: 'Open Alan Wake 2' }))
+    await user.click(await screen.findByRole('button', { name: 'Delete game' }))
+    await user.click(await screen.findByRole('button', { name: 'Delete game' }))
+
+    expect(await screen.findByText('foreign key constraint')).toBeInTheDocument()
+    expect(ipc.calls('log_frontend').length).toBeGreaterThan(0)
+    expect(screen.getByRole('alertdialog')).toBeInTheDocument()
+  })
 })
