@@ -148,3 +148,52 @@ fn resolved_scripts_merge_dedupe_sort_and_exclude_utilities() {
     assert_eq!(on_exit[0].script_id, group_only_id);
     assert_eq!(on_exit[1].script_id, global_id);
 }
+
+#[test]
+fn resolved_scripts_skip_utility_scripts_assigned_to_groups() {
+    let state = state();
+    let game = create_game_impl(&state, game_input("Utility Group")).unwrap();
+
+    let (group_id, utility_id, normal_id) = state
+        .with_db(|conn| {
+            let group_id = groups::create(
+                conn,
+                &groups::NewGroup {
+                    name: "Helpers".into(),
+                    description: None,
+                },
+            )?;
+            let utility_id = scripts::create(conn, &utility_script("Shared Helpers", &[]))?;
+            let normal_id = scripts::create(conn, &normal_script("Runner", 5, true, false, false))?;
+            groups::set_scripts(conn, group_id, &[utility_id, normal_id])?;
+            Ok((group_id, utility_id, normal_id))
+        })
+        .unwrap();
+
+    set_game_groups_impl(&state, game.id, vec![group_id]).unwrap();
+
+    let resolved = get_resolved_scripts_impl(&state, game.id).unwrap();
+    assert!(resolved.iter().all(|entry| entry.script_id != utility_id));
+    assert_eq!(resolved.len(), 1);
+    assert_eq!(resolved[0].script_id, normal_id);
+}
+
+#[test]
+fn resolved_scripts_error_when_dependency_is_not_utility() {
+    let state = state();
+    let game = create_game_impl(&state, game_input("Bad Deps")).unwrap();
+
+    let normal_id = state
+        .with_db(|conn| {
+            let helper_id = scripts::create(conn, &normal_script("Helper", 5, false, false, false))?;
+            let runner_id = scripts::create(conn, &normal_script("Runner", 5, true, false, false))?;
+            scripts::set_dependencies(conn, runner_id, &[helper_id])?;
+            Ok(runner_id)
+        })
+        .unwrap();
+
+    set_game_scripts_impl(&state, game.id, vec![normal_id]).unwrap();
+
+    let err = get_resolved_scripts_impl(&state, game.id).expect_err("non-utility dependency");
+    assert!(err.to_string().contains("not a utility dependency"));
+}

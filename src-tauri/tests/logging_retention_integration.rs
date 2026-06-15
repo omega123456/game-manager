@@ -87,6 +87,21 @@ fn retention_deletes_old_rows_and_vacuums() {
 }
 
 #[test]
+fn logs_repo_rejects_invalid_stored_level() {
+    let conn = open_in_memory().unwrap();
+    conn.pragma_update(None, "ignore_check_constraints", "ON")
+        .unwrap();
+    conn.execute(
+        "INSERT INTO logs (ts, level, category, message) VALUES (?1, ?2, ?3, ?4)",
+        rusqlite::params!["2026-01-01T00:00:00Z", "not-a-level", "c", "m"],
+    )
+    .unwrap();
+    let id = conn.last_insert_rowid();
+    assert!(logs::get(&conn, id).is_err());
+    assert!(logs::list_recent(&conn, 1).is_err());
+}
+
+#[test]
 fn log_frontend_persists_row_readable_via_repo() {
     let state = AppState::in_memory().unwrap();
 

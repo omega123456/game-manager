@@ -183,4 +183,44 @@ describe('game mutations', () => {
     expect(client.getQueryData(gameDetailQueryKey(1))).toEqual({ ...GAME_ROW, scriptIds: [8] })
     expect(client.getQueryState(resolvedScriptsQueryKey(1))?.isInvalidated).toBe(true)
   })
+
+  it('rolls back optimistic group ids when set_game_groups fails', async () => {
+    ipc.override('set_game_groups', () => {
+      throw new Error('network down')
+    })
+
+    const { client, Wrapper } = createWrapper()
+    const previousGame = { ...GAME_ROW, groupIds: [5] }
+    client.setQueryData(GAMES_QUERY_KEY, [previousGame])
+    client.setQueryData(gameDetailQueryKey(1), previousGame)
+
+    const mutation = renderHook(() => useSetGameGroupsMutation(), { wrapper: Wrapper })
+
+    await expect(
+      mutation.result.current.mutateAsync({ gameId: 1, groupIds: [2, 1] })
+    ).rejects.toThrow('network down')
+
+    expect(client.getQueryData(GAMES_QUERY_KEY)).toEqual([previousGame])
+    expect(client.getQueryData(gameDetailQueryKey(1))).toEqual(previousGame)
+  })
+
+  it('rolls back optimistic script ids when set_game_scripts fails', async () => {
+    ipc.override('set_game_scripts', () => {
+      throw new Error('save failed')
+    })
+
+    const { client, Wrapper } = createWrapper()
+    const previousGame = { ...GAME_ROW, scriptIds: [3] }
+    client.setQueryData(GAMES_QUERY_KEY, [previousGame])
+    client.setQueryData(gameDetailQueryKey(1), previousGame)
+
+    const mutation = renderHook(() => useSetGameScriptsMutation(), { wrapper: Wrapper })
+
+    await expect(
+      mutation.result.current.mutateAsync({ gameId: 1, scriptIds: [8] })
+    ).rejects.toThrow('save failed')
+
+    expect(client.getQueryData(GAMES_QUERY_KEY)).toEqual([previousGame])
+    expect(client.getQueryData(gameDetailQueryKey(1))).toEqual(previousGame)
+  })
 })

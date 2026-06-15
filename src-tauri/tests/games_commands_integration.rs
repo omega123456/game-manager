@@ -186,3 +186,20 @@ fn delete_game_errors_when_missing() {
     let err = delete_game_impl(&state, 9999).expect_err("missing game should error");
     assert_eq!(err.to_string(), "game 9999 not found");
 }
+
+#[test]
+fn create_and_update_validate_required_fields() {
+    let state = state();
+
+    let mut blank_name = game_input("Valid");
+    blank_name.name = "   ".to_string();
+    assert!(create_game_impl(&state, blank_name).is_err());
+
+    let mut blank_target = game_input("Valid");
+    blank_target.launch_target = "  ".to_string();
+    assert!(create_game_impl(&state, blank_target).is_err());
+
+    let err = update_game_impl(&state, 9999, game_input("Missing"))
+        .expect_err("missing game should error on update");
+    assert_eq!(err.to_string(), "game 9999 not found");
+}

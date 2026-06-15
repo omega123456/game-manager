@@ -678,3 +678,109 @@ fn validate_remote_art_url_allows_steam_subdomains() {
     cache::validate_remote_art_url("https://cdn.akamai.steamstatic.com/steam/apps/730/library_600x900.jpg")
         .unwrap();
 }
+
+#[test]
+fn search_art_impl_logs_when_default_providers_fail() {
+    let (state, _dir) = temp_state();
+    set_setting_impl(&state, "steamgriddb_api_key", "sgdb-key").unwrap();
+    set_setting_impl(&state, "steam_api_key", "steam-key").unwrap();
+
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let addr = listener.local_addr().unwrap();
+    let handle = thread::spawn(move || {
+        for _ in 0..2 {
+            let (mut stream, _) = listener.accept().unwrap();
+            let mut buf = [0_u8; 1024];
+            let _ = stream.read(&mut buf);
+            stream
+                .write_all(
+                    b"HTTP/1.1 500 Internal Server Error\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
+                )
+                .unwrap();
+        }
+    });
+    let base = format!("http://{addr}");
+    let _search = EnvGuard::set("GM_TEST_STEAMGRIDDB_SEARCH_BASE", format!("{base}/search"));
+    let _grid = EnvGuard::set("GM_TEST_STEAMGRIDDB_GRID_BASE", format!("{base}/grids"));
+    let _steam = EnvGuard::set("GM_TEST_STEAM_APP_LIST_URL", format!("{base}/app-list"));
+
+    let art = search_art_impl(&state, "Hades").unwrap();
+    handle.join().unwrap();
+    assert!(art.is_empty());
+
+    let messages = log_messages(&state);
+    assert!(messages.contains(&"SteamGridDB art search failed".to_string()));
+    assert!(messages.contains(&"Steam metadata fallback art search failed".to_string()));
+}
+
+#[test]
+fn fetch_metadata_impl_logs_when_default_provider_fails() {
+    let (state, _dir) = temp_state();
+    set_setting_impl(&state, "steam_api_key", "steam-key").unwrap();
+
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let addr = listener.local_addr().unwrap();
+    let handle = thread::spawn(move || {
+        let (mut stream, _) = listener.accept().unwrap();
+        let mut buf = [0_u8; 1024];
+        let _ = stream.read(&mut buf);
+        stream
+            .write_all(
+                b"HTTP/1.1 500 Internal Server Error\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
+            )
+            .unwrap();
+    });
+    let _steam = EnvGuard::set("GM_TEST_STEAM_APP_LIST_URL", format!("http://{addr}/app-list"));
+
+    let metadata = fetch_metadata_impl(&state, "Hades").unwrap();
+    handle.join().unwrap();
+    assert_eq!(metadata.canonical_name, "Hades");
+    assert_eq!(metadata.source, ArtSource::Input);
+
+    let messages = log_messages(&state);
+    assert!(messages.contains(&"Steam metadata lookup failed".to_string()));
+}
+
+#[test]
+fn search_art_with_providers_logs_missing_api_keys() {
+    let (state, _dir) = temp_state();
+    let art = search_art_with_providers(
+        &state,
+        "Hades",
+        &|_, _, _| Ok(vec![]),
+        &|_, _, _| Ok(vec![]),
+    )
+    .unwrap();
+    assert!(art.is_empty());
+
+    let messages = log_messages(&state);
+    assert!(messages.contains(&"SteamGridDB art search skipped".to_string()));
+    assert!(messages.contains(&"Steam metadata fallback art search skipped".to_string()));
+}
+
+#[test]
+fn search_art_with_providers_returns_empty_for_blank_name() {
+    let (state, _dir) = temp_state();
+    let art = search_art_with_providers(
+        &state,
+        "   ",
+        &|_, _, _| panic!("providers must not run for blank input"),
+        &|_, _, _| panic!("providers must not run for blank input"),
+    )
+    .unwrap();
+    assert!(art.is_empty());
+}
+
+#[test]
+fn fetch_metadata_with_provider_logs_missing_steam_key() {
+    let (state, _dir) = temp_state();
+    let metadata = fetch_metadata_with_provider(&state, "Hades", &|_, _, _| {
+        panic!("provider must not run when steam key is missing")
+    })
+    .unwrap();
+    assert_eq!(metadata.canonical_name, "Hades");
+    assert_eq!(metadata.source, ArtSource::Input);
+
+    let messages = log_messages(&state);
+    assert!(messages.contains(&"Steam metadata lookup skipped".to_string()));
+}

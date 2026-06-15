@@ -61,3 +61,19 @@ fn init_tracing_is_idempotent() {
     init_tracing();
     init_tracing();
 }
+
+#[test]
+fn app_state_with_db_reports_poisoned_mutex() {
+    let state = AppState::in_memory().expect("in-memory state");
+    let poisoned = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        let _ = state.with_db(|_| -> AppResult<()> {
+            panic!("poison mutex for test");
+        });
+    }));
+    assert!(poisoned.is_err());
+
+    let err = state
+        .with_db(|_| Ok(()))
+        .expect_err("poisoned mutex must surface as database error");
+    assert!(err.to_string().contains("mutex poisoned"));
+}

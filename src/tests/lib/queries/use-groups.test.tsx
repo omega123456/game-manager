@@ -197,4 +197,23 @@ describe('group mutations', () => {
     await waitFor(() => expect(gamesVersion).toBeGreaterThan(0))
     gamesQuery.unmount()
   })
+
+  it('rolls back optimistic script ids when set_group_scripts fails', async () => {
+    ipc.override('set_group_scripts', () => {
+      throw new Error('save failed')
+    })
+
+    const { client, Wrapper } = createWrapper()
+    client.setQueryData(GROUPS_QUERY_KEY, [GROUP_ROW])
+    client.setQueryData(groupDetailQueryKey(1), GROUP_ROW)
+
+    const mutation = renderHook(() => useSetGroupScriptsMutation(), { wrapper: Wrapper })
+
+    await expect(
+      mutation.result.current.mutateAsync({ groupId: 1, scriptIds: [8] })
+    ).rejects.toThrow('save failed')
+
+    expect(client.getQueryData(GROUPS_QUERY_KEY)).toEqual([GROUP_ROW])
+    expect(client.getQueryData(groupDetailQueryKey(1))).toEqual(GROUP_ROW)
+  })
 })
