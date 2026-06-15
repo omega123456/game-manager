@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 
 import { GameCard } from '@/features/games/game-card'
@@ -71,6 +71,21 @@ describe('GameCard', () => {
     render(<GameCard game={BASE_GAME} groups={GROUPS} />)
     expect(screen.queryByTestId('game-card-playing-pip')).not.toBeInTheDocument()
     expect(screen.getByTestId('game-card')).toHaveClass('border-border')
+  })
+
+  it('removes a broken cover image instead of showing the browser fallback', async () => {
+    render(
+      <GameCard
+        game={{ ...BASE_GAME, imagePath: 'https://images.example.test/missing.png' }}
+        groups={GROUPS}
+      />
+    )
+
+    fireEvent.error(screen.getByRole('img', { name: 'Alan Wake 2 cover art' }))
+
+    await waitFor(() => {
+      expect(screen.queryByRole('img', { name: 'Alan Wake 2 cover art' })).not.toBeInTheDocument()
+    })
   })
 
   it('truncates long group names within a grid cell and exposes the full name', () => {

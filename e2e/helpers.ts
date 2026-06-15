@@ -37,6 +37,29 @@ export async function setTheme(page: Page, theme: Theme): Promise<void> {
   await page.evaluate((t) => document.documentElement.setAttribute('data-theme', t), theme)
 }
 
+/** Wait until library cover images finish loading or error so screenshots stay stable. */
+export async function waitForLibraryGridImagesSettled(page: Page): Promise<void> {
+  await page.getByTestId('library-grid').waitFor({ state: 'visible' })
+  await page.evaluate(async () => {
+    const images = Array.from(
+      document.querySelectorAll<HTMLImageElement>('[data-testid="library-grid"] img')
+    )
+    await Promise.all(
+      images.map(
+        (image) =>
+          new Promise<void>((resolve) => {
+            if (image.complete) {
+              resolve()
+              return
+            }
+            image.addEventListener('load', () => resolve(), { once: true })
+            image.addEventListener('error', () => resolve(), { once: true })
+          })
+      )
+    )
+  })
+}
+
 /** A launch lifecycle payload shape for deterministic E2E driving. */
 export interface LaunchLifecyclePayload {
   gameId: number

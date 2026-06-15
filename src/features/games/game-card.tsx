@@ -1,3 +1,5 @@
+import { useState } from 'react'
+
 import type { Game, Group } from '@/types/domain'
 import { Icon } from '@/components/ui/icon'
 import { cn } from '@/lib/utils'
@@ -25,6 +27,8 @@ export function GameCard({
 }: GameCardProps): React.JSX.Element {
   const meta = getLibraryMeta(game.totalPlaytimeSeconds, game.lastPlayedAt)
   const coverUrl = toCoverImageUrl(game.imagePath)
+  const [failedCoverUrl, setFailedCoverUrl] = useState<string | null>(null)
+  const coverFailed = coverUrl !== null && failedCoverUrl === coverUrl
 
   return (
     <article
@@ -53,19 +57,25 @@ export function GameCard({
               Playing · <span className="font-mono tabular-nums">{formatElapsed(elapsedSeconds)}</span>
             </span>
           ) : null}
-          {coverUrl ? (
+          {coverUrl && !coverFailed ? (
             <img
               src={coverUrl}
               alt={`${game.name} cover art`}
               className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.03]"
+              onError={() => {
+                if (coverUrl) {
+                  setFailedCoverUrl(coverUrl)
+                }
+              }}
             />
-          ) : (
+          ) : null}
+          {!coverUrl ? (
             <div className="flex h-full items-center justify-center bg-linear-to-br from-primary/20 via-transparent to-secondary/15">
               <div className="flex h-20 w-20 items-center justify-center rounded-full border border-border bg-surface-low text-primary">
                 <Icon name="sports_esports" className="text-[40px]" />
               </div>
             </div>
-          )}
+          ) : null}
           <div className="absolute inset-x-0 bottom-0 bg-linear-to-t from-background/90 via-background/45 to-transparent p-4">
             <span className="inline-flex items-center gap-1 rounded-full border border-border bg-background/80 px-2 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground backdrop-blur">
               <Icon

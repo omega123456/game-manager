@@ -7,6 +7,7 @@ import {
   scrollRouteOutletToTop,
   setTheme,
   THEMES,
+  waitForLibraryGridImagesSettled,
 } from './helpers'
 
 /**
@@ -20,6 +21,7 @@ for (const theme of THEMES) {
   test(`app shell — ${theme}`, async ({ page }) => {
     await gotoApp(page)
     await setTheme(page, theme)
+    await waitForLibraryGridImagesSettled(page)
     await scrollRouteOutletToTop(page)
     await expect(page).toHaveScreenshot(`app-shell-${theme}.png`)
   })
@@ -38,24 +40,7 @@ for (const theme of THEMES) {
     await page.getByRole('heading', { name: 'Your collection' }).waitFor({ state: 'visible' })
     await page.getByTestId('library-grid').waitFor({ state: 'visible' })
     await page.getByRole('button', { name: 'Open Alan Wake 2' }).waitFor({ state: 'visible' })
-    await page.evaluate(async () => {
-      const images = Array.from(
-        document.querySelectorAll<HTMLImageElement>('[data-testid="library-grid"] img')
-      )
-      await Promise.all(
-        images.map(
-          (image) =>
-            new Promise<void>((resolve) => {
-              if (image.complete) {
-                resolve()
-                return
-              }
-              image.addEventListener('load', () => resolve(), { once: true })
-              image.addEventListener('error', () => resolve(), { once: true })
-            })
-        )
-      )
-    })
+    await waitForLibraryGridImagesSettled(page)
     await scrollRouteOutletToTop(page)
     await expect(page).toHaveScreenshot(`library-grid-${theme}.png`)
   })
