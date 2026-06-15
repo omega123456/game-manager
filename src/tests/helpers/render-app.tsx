@@ -6,6 +6,7 @@ import { MemoryRouter } from 'react-router-dom'
 import { ThemeProvider } from '@/components/theme/theme-provider'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { createQueryClient } from '@/lib/query-client'
+import { routerFutureFlags } from '@/lib/router-future'
 import { useUiStore } from '@/stores/ui-store'
 
 /** Reset the global UI store to its defaults between tests. */
@@ -35,7 +36,9 @@ export function renderWithProviders(
   const Wrapped = (
     <QueryClientProvider client={client}>
       <TooltipProvider delayDuration={0}>
-        <MemoryRouter initialEntries={[route]}>{ui}</MemoryRouter>
+        <MemoryRouter initialEntries={[route]} future={routerFutureFlags}>
+          {ui}
+        </MemoryRouter>
       </TooltipProvider>
     </QueryClientProvider>
   )

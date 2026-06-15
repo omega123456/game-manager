@@ -5,6 +5,7 @@ import { useState } from 'react'
 import { ThemeProvider } from '@/components/theme/theme-provider'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { createQueryClient } from '@/lib/query-client'
+import { routerFutureFlags } from '@/lib/router-future'
 import { AppRoutes } from '@/routes/app-routes'
 
 /**
@@ -19,7 +20,7 @@ export default function App(): React.JSX.Element {
     <QueryClientProvider client={queryClient}>
       <ThemeProvider>
         <TooltipProvider delayDuration={200}>
-          <HashRouter>
+          <HashRouter future={routerFutureFlags}>
             <AppRoutes />
           </HashRouter>
         </TooltipProvider>
