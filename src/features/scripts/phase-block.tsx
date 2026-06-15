@@ -23,6 +23,7 @@ import { defaultInterpreter, phaseHasContent } from './script-form-types'
 
 const INTERPRETERS: readonly { value: Interpreter; label: string }[] = [
   { value: 'powershell', label: 'PowerShell' },
+  { value: 'powershell7', label: 'PowerShell 7' },
   { value: 'batch', label: 'Batch' },
 ]
 

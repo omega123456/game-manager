@@ -80,36 +80,38 @@ fn trim_optional(value: Option<String>) -> Option<String> {
 
 /// Normalize a single phase/snippet column-group, enforcing internal coherence.
 ///
+/// Every phase is optional: a mode whose payload is empty/whitespace-only is
+/// treated as `none` (the empty field is ignored) rather than rejected.
+///
 /// - `none`  → all payload fields cleared;
-/// - `path`  → a non-empty path is required; inline/interpreter cleared;
-/// - `inline`→ non-empty inline code + an interpreter are required; path cleared.
+/// - `path`  → empty path collapses to `none`; otherwise inline/interpreter cleared;
+/// - `inline`→ empty code collapses to `none`; otherwise an interpreter is required.
 fn normalize_phase(label: &str, input: PhaseInput) -> AppResult<PhaseConfig> {
     match input.mode {
         PhaseMode::None => Ok(PhaseConfig::default()),
-        PhaseMode::Path => {
-            let path = trim_optional(input.path)
-                .ok_or_else(|| AppError::other(format!("{label} path is required for path mode")))?;
-            Ok(PhaseConfig {
+        PhaseMode::Path => match trim_optional(input.path) {
+            None => Ok(PhaseConfig::default()),
+            Some(path) => Ok(PhaseConfig {
                 mode: PhaseMode::Path,
                 path: Some(path),
                 inline: None,
                 interpreter: None,
-            })
-        }
-        PhaseMode::Inline => {
-            let inline = trim_optional(input.inline).ok_or_else(|| {
-                AppError::other(format!("{label} code is required for inline mode"))
-            })?;
-            let interpreter = input.interpreter.ok_or_else(|| {
-                AppError::other(format!("{label} interpreter is required for inline mode"))
-            })?;
-            Ok(PhaseConfig {
-                mode: PhaseMode::Inline,
-                path: None,
-                inline: Some(inline),
-                interpreter: Some(interpreter),
-            })
-        }
+            }),
+        },
+        PhaseMode::Inline => match trim_optional(input.inline) {
+            None => Ok(PhaseConfig::default()),
+            Some(inline) => {
+                let interpreter = input.interpreter.ok_or_else(|| {
+                    AppError::other(format!("{label} interpreter is required for inline mode"))
+                })?;
+                Ok(PhaseConfig {
+                    mode: PhaseMode::Inline,
+                    path: None,
+                    inline: Some(inline),
+                    interpreter: Some(interpreter),
+                })
+            }
+        },
     }
 }
 

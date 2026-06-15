@@ -132,6 +132,25 @@ fn check_constraints_are_enforced() {
 }
 
 #[test]
+fn powershell7_interpreter_is_accepted() {
+    let conn = open_in_memory().expect("open");
+    let inserted = conn.execute(
+        "INSERT INTO scripts (name, kind, before_launch_mode, before_launch_inline, before_launch_interpreter, created_at)
+         VALUES ('Ps7', 'normal', 'inline', 'Write-Output 1', 'powershell7', '2026-01-01T00:00:00Z')",
+        [],
+    );
+    assert!(inserted.is_ok(), "powershell7 must pass the interpreter CHECK: {inserted:?}");
+
+    // An unknown interpreter still fails.
+    let bad = conn.execute(
+        "INSERT INTO scripts (name, kind, before_launch_mode, before_launch_inline, before_launch_interpreter, created_at)
+         VALUES ('Bad', 'normal', 'inline', 'x', 'bash', '2026-01-01T00:00:00Z')",
+        [],
+    );
+    assert!(bad.is_err(), "unknown interpreter must fail CHECK");
+}
+
+#[test]
 fn cascade_delete_removes_dependents() {
     let conn = open_in_memory().expect("open");
     conn.execute(

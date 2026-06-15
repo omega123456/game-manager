@@ -173,18 +173,22 @@ fn priority_out_of_range_is_rejected() {
 }
 
 #[test]
-fn inline_mode_requires_code_and_interpreter() {
+fn empty_inline_code_collapses_to_none() {
     let state = state();
-    let mut missing_code = normal_input("NoCode");
-    missing_code.before_launch = PhaseInput {
+    let mut empty_code = normal_input("EmptyCode");
+    empty_code.before_launch = PhaseInput {
         mode: PhaseMode::Inline,
         path: None,
         inline: Some("   ".to_string()),
         interpreter: Some(Interpreter::Powershell),
     };
-    let err = create_script_impl(&state, missing_code).expect_err("code");
-    assert!(err.to_string().contains("code is required for inline mode"));
+    let created = create_script_impl(&state, empty_code).expect("whitespace inline is ignored");
+    assert_eq!(created.before_launch.mode, PhaseMode::None);
+}
 
+#[test]
+fn inline_mode_with_code_requires_interpreter() {
+    let state = state();
     let mut missing_interp = normal_input("NoInterp");
     missing_interp.before_launch = PhaseInput {
         mode: PhaseMode::Inline,
@@ -197,7 +201,7 @@ fn inline_mode_requires_code_and_interpreter() {
 }
 
 #[test]
-fn path_mode_requires_path() {
+fn empty_path_collapses_to_none() {
     let state = state();
     let mut input = normal_input("NoPath");
     input.after_launch = PhaseInput {
@@ -206,8 +210,8 @@ fn path_mode_requires_path() {
         inline: None,
         interpreter: None,
     };
-    let err = create_script_impl(&state, input).expect_err("path");
-    assert!(err.to_string().contains("path is required for path mode"));
+    let created = create_script_impl(&state, input).expect("whitespace path is ignored");
+    assert_eq!(created.after_launch.mode, PhaseMode::None);
 }
 
 #[test]

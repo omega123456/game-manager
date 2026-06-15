@@ -134,6 +134,37 @@ async fn skips_utility_with_mismatched_interpreter() {
 }
 
 #[tokio::test]
+async fn runs_inline_powershell7_via_pwsh() {
+    // PowerShell 7 inline code runs through pwsh.exe.
+    let mut entry = script(1, "Echo7", ScriptKind::Normal);
+    entry.before_launch = inline("Write-Output 'hello-from-pwsh7'", Interpreter::Powershell7);
+    let by_id = index(&[entry.clone()]);
+
+    let result = execute_phase(&entry, ScriptPhase::Before, &by_id).await;
+    assert!(result.ran, "phase should run");
+    assert!(result.success, "stderr: {}", result.stderr);
+    assert!(result.stdout.contains("hello-from-pwsh7"), "stdout: {}", result.stdout);
+}
+
+#[tokio::test]
+async fn sources_powershell_utility_into_powershell7_entry() {
+    // A PowerShell 5.1 utility is sourced into a PowerShell 7 entry: the two are
+    // the same shell family, so it must NOT be skipped.
+    let mut util = script(2, "SharedLib", ScriptKind::Utility);
+    util.snippet = inline("function Get-Shared { 'shared-across-ps' }", Interpreter::Powershell);
+
+    let mut entry = script(1, "Pwsh7User", ScriptKind::Normal);
+    entry.requires = vec![2];
+    entry.before_launch = inline("Write-Output (Get-Shared)", Interpreter::Powershell7);
+
+    let by_id = index(&[entry.clone(), util]);
+    let result = execute_phase(&entry, ScriptPhase::Before, &by_id).await;
+    assert!(result.success, "stderr: {}", result.stderr);
+    assert!(result.stdout.contains("shared-across-ps"), "stdout: {}", result.stdout);
+    assert!(result.skipped_utilities.is_empty());
+}
+
+#[tokio::test]
 async fn runs_inline_batch_via_temp_file() {
     let mut entry = script(1, "BatchEcho", ScriptKind::Normal);
     entry.after_launch = inline("@echo off\r\necho batch-output", Interpreter::Batch);

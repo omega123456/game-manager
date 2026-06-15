@@ -101,6 +101,9 @@ fn classify_phase(config: &PhaseConfig) -> Option<(RunKind, Option<Interpreter>)
         PhaseMode::None => None,
         PhaseMode::Inline => match config.interpreter {
             Some(Interpreter::Powershell) => Some((RunKind::PowerShell, Some(Interpreter::Powershell))),
+            Some(Interpreter::Powershell7) => {
+                Some((RunKind::PowerShell, Some(Interpreter::Powershell7)))
+            }
             Some(Interpreter::Batch) => Some((RunKind::Batch, Some(Interpreter::Batch))),
             // Inline with no interpreter defaults to PowerShell.
             None => Some((RunKind::PowerShell, Some(Interpreter::Powershell))),
@@ -148,17 +151,28 @@ fn ordered_required_utilities<'a>(
     out
 }
 
+/// Whether `a` and `b` can be sourced into the same combined script. PowerShell
+/// 5.1 and PowerShell 7 share identical sourcing syntax, so utilities authored
+/// for either can be sourced into either host; batch is its own family.
+fn source_compatible(a: Interpreter, b: Interpreter) -> bool {
+    use Interpreter::{Batch, Powershell, Powershell7};
+    matches!(
+        (a, b),
+        (Powershell | Powershell7, Powershell | Powershell7) | (Batch, Batch)
+    )
+}
+
 /// Build a sourcing line / inlined block for one utility under `interpreter`.
 ///
 /// Returns `None` when the utility's snippet cannot be sourced under
-/// `interpreter` (mode `none`, or interpreter mismatch).
+/// `interpreter` (mode `none`, or interpreter family mismatch).
 fn source_utility(util: &Script, interpreter: Interpreter) -> Option<String> {
     let snippet = &util.snippet;
     match snippet.mode {
         PhaseMode::None => None,
         PhaseMode::Inline => {
             let snippet_interpreter = snippet.interpreter.unwrap_or(Interpreter::Powershell);
-            if snippet_interpreter != interpreter {
+            if !source_compatible(snippet_interpreter, interpreter) {
                 return None;
             }
             snippet.inline.clone()
@@ -166,11 +180,11 @@ fn source_utility(util: &Script, interpreter: Interpreter) -> Option<String> {
         PhaseMode::Path => {
             let path = snippet.path.as_deref().filter(|p| !p.trim().is_empty())?;
             let (_, snippet_interpreter) = classify_path(path);
-            if snippet_interpreter != Some(interpreter) {
+            if !snippet_interpreter.is_some_and(|s| source_compatible(s, interpreter)) {
                 return None;
             }
             match interpreter {
-                Interpreter::Powershell => Some(format!(". \"{path}\"")),
+                Interpreter::Powershell | Interpreter::Powershell7 => Some(format!(". \"{path}\"")),
                 Interpreter::Batch => Some(format!("call \"{path}\"")),
             }
         }
@@ -184,7 +198,7 @@ fn entry_body(config: &PhaseConfig, interpreter: Interpreter) -> String {
         PhaseMode::Path => {
             let path = config.path.clone().unwrap_or_default();
             match interpreter {
-                Interpreter::Powershell => format!(". \"{path}\""),
+                Interpreter::Powershell | Interpreter::Powershell7 => format!(". \"{path}\""),
                 Interpreter::Batch => format!("call \"{path}\""),
             }
         }
@@ -209,7 +223,7 @@ fn build_combined(
     }
     parts.push(entry_body(config, interpreter));
     let separator = match interpreter {
-        Interpreter::Powershell => "\n",
+        Interpreter::Powershell | Interpreter::Powershell7 => "\n",
         Interpreter::Batch => "\r\n",
     };
     (parts.join(separator), skipped)
@@ -290,12 +304,16 @@ pub async fn execute_phase(
     let (body, skipped) = build_combined(script, &config, interpreter, scripts_by_id);
 
     let mut command = match interpreter {
-        Interpreter::Powershell => {
+        Interpreter::Powershell | Interpreter::Powershell7 => {
             let path = match write_temp_script(&body, "ps1") {
                 Ok(path) => path,
                 Err(err) => return temp_write_failure(err, skipped),
             };
-            let mut command = Command::new("powershell.exe");
+            let exe = match interpreter {
+                Interpreter::Powershell7 => "pwsh.exe",
+                _ => "powershell.exe",
+            };
+            let mut command = Command::new(exe);
             command
                 .arg("-NoProfile")
                 .arg("-ExecutionPolicy")

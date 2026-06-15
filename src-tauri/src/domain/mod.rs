@@ -107,8 +107,10 @@ impl PhaseMode {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum Interpreter {
-    /// Windows PowerShell.
+    /// Windows PowerShell (`powershell.exe`, 5.1).
     Powershell,
+    /// PowerShell 7+ (`pwsh.exe`).
+    Powershell7,
     /// Windows batch (cmd).
     Batch,
 }
@@ -118,6 +120,7 @@ impl Interpreter {
     pub fn as_db_str(self) -> &'static str {
         match self {
             Interpreter::Powershell => "powershell",
+            Interpreter::Powershell7 => "powershell7",
             Interpreter::Batch => "batch",
         }
     }
@@ -126,6 +129,7 @@ impl Interpreter {
     pub fn from_db_str(value: &str) -> Option<Self> {
         match value {
             "powershell" => Some(Interpreter::Powershell),
+            "powershell7" => Some(Interpreter::Powershell7),
             "batch" => Some(Interpreter::Batch),
             _ => None,
         }

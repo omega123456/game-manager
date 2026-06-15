@@ -59,6 +59,20 @@ describe('PhaseBlock', () => {
     expect(screen.getByTestId('monaco-mock')).toHaveAttribute('data-language', 'bat')
   })
 
+  it('selects the PowerShell 7 interpreter while keeping PowerShell highlighting', async () => {
+    const user = userEvent.setup()
+    renderWithProviders(
+      <Harness initial={{ mode: 'inline', inline: 'Write-Output 1', interpreter: 'powershell' }} />
+    )
+
+    await user.click(screen.getByRole('radio', { name: 'PowerShell 7' }))
+    expect(screen.getByRole('radio', { name: 'PowerShell 7' })).toHaveAttribute(
+      'aria-checked',
+      'true'
+    )
+    expect(screen.getByTestId('monaco-mock')).toHaveAttribute('data-language', 'powershell')
+  })
+
   it('warns before discarding inline code when switching Code → Path', async () => {
     const user = userEvent.setup()
     renderWithProviders(

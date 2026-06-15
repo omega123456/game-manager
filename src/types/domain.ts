@@ -15,7 +15,7 @@ export type ScriptKind = 'normal' | 'utility' | 'global'
 export type PhaseMode = 'none' | 'path' | 'inline'
 
 /** Interpreter for inline code. */
-export type Interpreter = 'powershell' | 'batch'
+export type Interpreter = 'powershell' | 'powershell7' | 'batch'
 
 /** Severity level for an application log row. */
 export type LogLevel = 'debug' | 'info' | 'warn' | 'error'

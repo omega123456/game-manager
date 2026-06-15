@@ -200,13 +200,13 @@ describe('Group Manager', () => {
   })
 
   it('keeps optimistic group scripts visible while a script update is in flight', async () => {
-    let resolveMutation: ((value: number[]) => void) | null = null
+    const resolveRef: { current: ((value: number[]) => void) | null } = { current: null }
     installGroupPageMocks()
     ipc.override(
       'set_group_scripts',
       (args) =>
         new Promise<number[]>((resolve) => {
-          resolveMutation = resolve
+          resolveRef.current = resolve
           void args
         })
     )
@@ -220,7 +220,7 @@ describe('Group Manager', () => {
     expect(await screen.findByText('Frame Guard')).toBeInTheDocument()
     expect(screen.getByLabelText('Remove Frame Guard')).toBeDisabled()
 
-    resolveMutation?.([2, 4])
+    resolveRef.current?.([2, 4])
     await waitFor(() => expect(ipc.calls('set_group_scripts')).toHaveLength(1))
   })
 
