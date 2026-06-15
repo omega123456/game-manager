@@ -1,0 +1,25 @@
+# Dependencies
+node_modules
+.pnpm-store
+
+# Build output
+dist
+dist-ssr
+
+# Rust
+src-tauri/target
+src-tauri/gen/schemas
+
+# Test / coverage artifacts
+coverage
+playwright-report
+test-results
+.playwright-dev-port
+e2e/**/*-snapshots/**-actual.png
+
+# Editor / OS
+.DS_Store
+*.local
+
+.agent
+.vscode

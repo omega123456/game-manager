@@ -1,0 +1,11 @@
+# Permissions for the logging command surface.
+#
+# One [[permission]] block per command. The identifier is referenced from
+# capabilities/default.json as "allow-<command-with-dashes>".
+
+"$schema" = "../gen/schemas/desktop-schema.json"
+
+[[permission]]
+identifier = "allow-log-frontend"
+description = "Allows the frontend to persist a structured log row via log_frontend."
+commands.allow = ["log_frontend"]

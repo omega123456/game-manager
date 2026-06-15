@@ -1,0 +1,21 @@
+# Permissions for the settings command surface.
+#
+# One [[permission]] block per command. The identifier is referenced from
+# capabilities/default.json as "allow-<command-with-dashes>".
+
+"$schema" = "../gen/schemas/desktop-schema.json"
+
+[[permission]]
+identifier = "allow-get-all-settings"
+description = "Allows the frontend to read all settings via get_all_settings."
+commands.allow = ["get_all_settings"]
+
+[[permission]]
+identifier = "allow-get-setting"
+description = "Allows the frontend to read a single setting via get_setting."
+commands.allow = ["get_setting"]
+
+[[permission]]
+identifier = "allow-set-setting"
+description = "Allows the frontend to upsert a single setting via set_setting."
+commands.allow = ["set_setting"]

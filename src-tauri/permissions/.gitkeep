@@ -1,0 +1,2 @@
+# Per-command permission TOMLs live here — one [[permission]] block per command
+# (step 5 of the "adding a command" checklist). Empty in Phase A1.
