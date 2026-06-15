@@ -13,6 +13,11 @@ description = "Allows the frontend to read a single game via get_game."
 commands.allow = ["get_game"]
 
 [[permission]]
+identifier = "allow-get-play-now-game"
+description = "Allows the frontend to resolve the current Play Now target via get_play_now_game."
+commands.allow = ["get_play_now_game"]
+
+[[permission]]
 identifier = "allow-create-game"
 description = "Allows the frontend to create a game via create_game."
 commands.allow = ["create_game"]

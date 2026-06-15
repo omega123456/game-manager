@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import { AppRoutes } from '@/routes/app-routes'
 import { renderWithProviders, resetUiStore } from '@/tests/helpers/render-app'
 import { ipc, overrideIpcCommands } from '@/tests/ipc-mock'
+import { useLaunchStore } from '@/stores/launch-store'
 import type { Game } from '@/types/domain'
 
 const BASE_GAME: Game = {
@@ -126,6 +127,26 @@ function installGameMocks(overrides?: Partial<Game>) {
 describe('GameDetailModal', () => {
   beforeEach(() => {
     resetUiStore()
+    useLaunchStore.getState().reset()
+  })
+
+  it('launches the game from the Overview tab', async () => {
+    installGameMocks()
+    const user = userEvent.setup()
+
+    renderWithProviders(<AppRoutes />, { route: '/library' })
+
+    await screen.findByText('Alan Wake 2')
+    await user.click(screen.getByRole('button', { name: 'Open Alan Wake 2' }))
+
+    const dialog = await screen.findByRole('dialog')
+    await user.click(within(dialog).getByTestId('game-detail-launch'))
+
+    await waitFor(() => {
+      expect(ipc.calls('launch_game')).toEqual([{ gameId: 1 }])
+    })
+    expect(useLaunchStore.getState().phase).toBe('before')
+    expect(useLaunchStore.getState().gameId).toBe(1)
   })
 
   it('opens from a library card, shows resolved scripts, and closes cleanly', async () => {
@@ -140,9 +161,7 @@ describe('GameDetailModal', () => {
     const dialog = await screen.findByRole('dialog')
     expect(within(dialog).getByRole('tab', { name: 'Overview' })).toBeInTheDocument()
     expect(within(dialog).getByRole('tab', { name: 'Groups' })).toBeInTheDocument()
-    expect(
-      within(dialog).getByRole('button', { name: 'Launch available in Phase E' })
-    ).toBeDisabled()
+    expect(within(dialog).getByRole('button', { name: 'Launch Game' })).toBeEnabled()
 
     await user.click(within(dialog).getByRole('tab', { name: 'Scripts' }))
     expect(await screen.findByTestId('game-detail-scripts-tab')).toBeInTheDocument()
@@ -153,6 +172,21 @@ describe('GameDetailModal', () => {
     await waitFor(() => {
       expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
     })
+  })
+
+  it('disables the overview launch button while another launch is already active', async () => {
+    installGameMocks()
+    const user = userEvent.setup()
+    useLaunchStore.getState().startPreparing(99, 'Balatro')
+
+    renderWithProviders(<AppRoutes />, { route: '/library' })
+
+    await screen.findByText('Alan Wake 2')
+    await user.click(screen.getByRole('button', { name: 'Open Alan Wake 2' }))
+
+    const dialog = await screen.findByRole('dialog')
+    expect(within(dialog).getByTestId('game-detail-launch')).toBeDisabled()
+    expect(within(dialog).getByRole('button', { name: 'Launch in progress…' })).toBeDisabled()
   })
 
   it('updates direct scripts from the scripts tab', async () => {
@@ -225,14 +259,14 @@ describe('GameDetailModal', () => {
   })
 
   it('preserves optimistic group membership across sequential edits', async () => {
-    let releaseFirstMutation: (() => void) | null = null
+    const deferred: { release: (() => void) | undefined } = { release: undefined }
     installGameMocks()
     ipc.override(
       'set_game_groups',
       (args) =>
         new Promise<number[]>((resolve) => {
           if ((args?.groupIds as number[]).includes(2)) {
-            releaseFirstMutation = () => resolve((args?.groupIds as number[]) ?? [])
+            deferred.release = () => resolve((args?.groupIds as number[]) ?? [])
             return
           }
           resolve((args?.groupIds as number[]) ?? [])
@@ -253,7 +287,7 @@ describe('GameDetailModal', () => {
     expect(await within(groupsTab).findByText('Deck Verified')).toBeInTheDocument()
     expect(within(groupsTab).getByLabelText('Remove HDR Games')).toBeDisabled()
 
-    releaseFirstMutation?.()
+    deferred.release?.()
     await waitFor(() => {
       expect(ipc.calls('set_game_groups')).toHaveLength(1)
     })

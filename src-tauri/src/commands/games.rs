@@ -1,5 +1,5 @@
-//! Games commands (`list_games`, `get_game`, `create_game`, `update_game`,
-//! `delete_game`, `set_game_groups`, `set_game_scripts`).
+//! Games commands (`list_games`, `get_game`, `get_play_now_game`, `create_game`,
+//! `update_game`, `delete_game`, `set_game_groups`, `set_game_scripts`).
 //!
 //! Business logic lives in the `*_impl(&AppState, ...)` functions so it is
 //! testable without the Tauri runtime. The repository owns aggregate
@@ -96,6 +96,11 @@ pub fn get_game_impl(state: &AppState, id: i64) -> AppResult<Game> {
     state.with_db(|conn| games::get(conn, id))
 }
 
+/// Resolve the current "Play Now" target, if any.
+pub fn get_play_now_game_impl(state: &AppState) -> AppResult<Option<Game>> {
+    state.with_db(games::get_play_now)
+}
+
 /// Create a game, returning the hydrated row with aggregates.
 pub fn create_game_impl(state: &AppState, input: GameUpsertInput) -> AppResult<Game> {
     let new_game = normalize_input(input)?;
@@ -171,6 +176,13 @@ pub fn list_games(state: tauri::State<'_, AppState>) -> AppResult<Vec<Game>> {
 #[tauri::command]
 pub fn get_game(state: tauri::State<'_, AppState>, id: i64) -> AppResult<Game> {
     get_game_impl(&state, id)
+}
+
+/// Thin `#[tauri::command]` wrapper delegating to [`get_play_now_game_impl`].
+#[cfg(not(coverage))]
+#[tauri::command]
+pub fn get_play_now_game(state: tauri::State<'_, AppState>) -> AppResult<Option<Game>> {
+    get_play_now_game_impl(&state)
 }
 
 /// Thin `#[tauri::command]` wrapper delegating to [`create_game_impl`].

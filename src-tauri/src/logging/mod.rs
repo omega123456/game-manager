@@ -35,13 +35,74 @@ pub fn init_tracing() {
     });
 }
 
-/// Mirror a log line to the `tracing` subscriber at the matching level.
-fn mirror_to_tracing(level: LogLevel, category: &str, message: &str) {
+/// Mirror a persisted log row to the `tracing` subscriber at the matching level.
+///
+/// In debug builds (`pnpm tauri dev`, `cargo build`), optional structured fields
+/// (`details`, `game_id`, `script_id`) are included so terminal output matches
+/// what is stored in the `logs` table. Release builds keep a lean message line.
+#[cfg(debug_assertions)]
+fn mirror_to_tracing(
+    level: LogLevel,
+    category: &str,
+    message: &str,
+    game_id: Option<i64>,
+    script_id: Option<i64>,
+    details: Option<&str>,
+) {
     match level {
-        LogLevel::Debug => tracing::debug!(category, "{message}"),
-        LogLevel::Info => tracing::info!(category, "{message}"),
-        LogLevel::Warn => tracing::warn!(category, "{message}"),
-        LogLevel::Error => tracing::error!(category, "{message}"),
+        LogLevel::Debug => {
+            tracing::debug!(
+                category = %category,
+                ?game_id,
+                ?script_id,
+                details = ?details,
+                "{message}"
+            );
+        }
+        LogLevel::Info => {
+            tracing::info!(
+                category = %category,
+                ?game_id,
+                ?script_id,
+                details = ?details,
+                "{message}"
+            );
+        }
+        LogLevel::Warn => {
+            tracing::warn!(
+                category = %category,
+                ?game_id,
+                ?script_id,
+                details = ?details,
+                "{message}"
+            );
+        }
+        LogLevel::Error => {
+            tracing::error!(
+                category = %category,
+                ?game_id,
+                ?script_id,
+                details = ?details,
+                "{message}"
+            );
+        }
+    }
+}
+
+#[cfg(not(debug_assertions))]
+fn mirror_to_tracing(
+    level: LogLevel,
+    category: &str,
+    message: &str,
+    _game_id: Option<i64>,
+    _script_id: Option<i64>,
+    _details: Option<&str>,
+) {
+    match level {
+        LogLevel::Debug => tracing::debug!(category = %category, "{message}"),
+        LogLevel::Info => tracing::info!(category = %category, "{message}"),
+        LogLevel::Warn => tracing::warn!(category = %category, "{message}"),
+        LogLevel::Error => tracing::error!(category = %category, "{message}"),
     }
 }
 
@@ -58,7 +119,7 @@ pub fn write_log(
     script_id: Option<i64>,
     details: Option<&str>,
 ) -> AppResult<i64> {
-    mirror_to_tracing(level, category, message);
+    mirror_to_tracing(level, category, message, game_id, script_id, details);
     let entry = NewLog {
         ts: Utc::now().to_rfc3339(),
         level,

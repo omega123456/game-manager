@@ -5,6 +5,7 @@
 //! the mutex-guarded SQLite connection (the single source of truth). The active
 //! launch registry is added in Phase E1.
 
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
@@ -12,6 +13,7 @@ use rusqlite::Connection;
 
 use crate::db::connection;
 use crate::error::{AppError, AppResult};
+use crate::launch::cancel::CancelToken;
 
 /// Application state container injected into command implementations.
 pub struct AppState {
@@ -21,6 +23,9 @@ pub struct AppState {
     db: Mutex<Connection>,
     /// Writable application-data root for caches and other local assets.
     app_data_dir: PathBuf,
+    /// Registry of in-flight launches keyed by game id, holding each launch's
+    /// cancellation token so `cancel_launch` can target a running launch.
+    launches: Mutex<HashMap<i64, CancelToken>>,
 }
 
 impl AppState {
@@ -35,6 +40,7 @@ impl AppState {
             app_name: "Game Manager".to_string(),
             db: Mutex::new(db),
             app_data_dir,
+            launches: Mutex::new(HashMap::new()),
         }
     }
 
@@ -66,5 +72,62 @@ impl AppState {
             .lock()
             .map_err(|_| AppError::database("database connection mutex poisoned"))?;
         f(&guard)
+    }
+
+    /// Register a fresh cancellation token for `game_id`, replacing any prior
+    /// one, and return it. Returns an error when any launch is already active so
+    /// overlapping launches cannot race the lifecycle UI and cancel tracking.
+    pub fn register_launch(&self, game_id: i64) -> AppResult<CancelToken> {
+        let token = CancelToken::new();
+        let mut launches = self
+            .launches
+            .lock()
+            .map_err(|_| AppError::other("launch registry mutex poisoned"))?;
+        if launches.contains_key(&game_id) {
+            return Err(AppError::other(format!("game {game_id} is already launching")));
+        }
+        if let Some(active_game_id) = launches.keys().next().copied() {
+            return Err(AppError::other(format!(
+                "game {active_game_id} is already launching"
+            )));
+        }
+        launches.insert(game_id, token.clone());
+        Ok(token)
+    }
+
+    /// Remove the launch registration for `game_id` (called when it finishes).
+    pub fn unregister_launch(&self, game_id: i64) {
+        if let Ok(mut launches) = self.launches.lock() {
+            launches.remove(&game_id);
+        }
+    }
+
+    /// Cancel an in-flight launch for `game_id`. Returns whether one was active.
+    pub fn cancel_launch(&self, game_id: i64) -> bool {
+        match self.launches.lock() {
+            Ok(launches) => match launches.get(&game_id) {
+                Some(token) => {
+                    token.cancel();
+                    true
+                }
+                None => false,
+            },
+            Err(_) => false,
+        }
+    }
+}
+
+#[cfg(feature = "test-utils")]
+impl AppState {
+    /// Poison the launch-registry mutex so error paths can be exercised in tests.
+    pub fn poison_launches_mutex_for_test(&self) {
+        let poisoned = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let _guard = self
+                .launches
+                .lock()
+                .expect("launch registry mutex should be available");
+            panic!("poison launch registry mutex for test");
+        }));
+        assert!(poisoned.is_err(), "mutex poison helper must panic");
     }
 }

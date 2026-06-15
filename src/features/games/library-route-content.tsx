@@ -3,6 +3,7 @@ import { useMemo, useState } from 'react'
 import { useGamesQuery } from '@/lib/queries/use-games'
 import { useGroupsQuery } from '@/lib/queries/use-groups'
 import { useUiStore } from '@/stores/ui-store'
+import { useLaunchStore } from '@/stores/launch-store'
 import { AddGameWizard } from '@/features/games/add-game-wizard'
 import { CurrentlyPlayingHero } from '@/features/games/currently-playing-hero'
 import { GameCard } from '@/features/games/game-card'
@@ -41,6 +42,8 @@ export function LibraryRouteContent(): React.JSX.Element {
 
   const gamesQuery = useGamesQuery()
   const groupsQuery = useGroupsQuery()
+  const activeLaunchGameId = useLaunchStore((s) => (s.phase === 'idle' ? null : s.gameId))
+  const activeLaunchElapsed = useLaunchStore((s) => s.elapsedSeconds)
   const normalizedSearch = searchQuery.trim().toLocaleLowerCase()
 
   const visibleGames = useMemo(() => {
@@ -110,6 +113,8 @@ export function LibraryRouteContent(): React.JSX.Element {
                   game={game}
                   groups={groupsQuery.data ?? []}
                   onOpen={openGame}
+                  isPlaying={activeLaunchGameId === game.id}
+                  elapsedSeconds={activeLaunchGameId === game.id ? activeLaunchElapsed : 0}
                 />
               ))}
             </div>

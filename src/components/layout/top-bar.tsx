@@ -3,6 +3,7 @@ import { ThemeControl } from '@/components/theme/theme-control'
 import { Button } from '@/components/ui/button'
 import { Icon } from '@/components/ui/icon'
 import { Input } from '@/components/ui/input'
+import { usePlayNowTarget } from '@/features/launch/play-now'
 
 /**
  * Top bar: global search (filters the library), a primary Play Now action
@@ -11,6 +12,7 @@ import { Input } from '@/components/ui/input'
 export function TopBar(): React.JSX.Element {
   const searchQuery = useUiStore((s) => s.searchQuery)
   const setSearchQuery = useUiStore((s) => s.setSearchQuery)
+  const { target, disabled, launch } = usePlayNowTarget()
 
   return (
     <header
@@ -36,9 +38,9 @@ export function TopBar(): React.JSX.Element {
         <Button
           type="button"
           data-testid="play-now-button"
-          onClick={() => {
-            // Placeholder — real resume-last-played behavior lands in Phase E3.
-          }}
+          disabled={disabled}
+          aria-label={target ? `Play Now: ${target.gameName}` : 'Play Now'}
+          onClick={launch}
         >
           <Icon name="play_arrow" className="text-[20px]" />
           Play Now

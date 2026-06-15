@@ -1,8 +1,8 @@
 //! Games command (`*_impl`) integration tests against an in-memory DB.
 
 use game_manager_lib::commands::games::{
-    create_game_impl, delete_game_impl, get_game_impl, list_games_impl, set_game_groups_impl,
-    set_game_scripts_impl, update_game_impl, GameUpsertInput,
+    create_game_impl, delete_game_impl, get_game_impl, get_play_now_game_impl, list_games_impl,
+    set_game_groups_impl, set_game_scripts_impl, update_game_impl, GameUpsertInput,
 };
 use game_manager_lib::db::repo::{games, groups, scripts, sessions};
 use game_manager_lib::domain::{Interpreter, MonitorMode, PhaseConfig, PhaseMode, ScriptKind};
@@ -202,4 +202,83 @@ fn create_and_update_validate_required_fields() {
     let err = update_game_impl(&state, 9999, game_input("Missing"))
         .expect_err("missing game should error on update");
     assert_eq!(err.to_string(), "game 9999 not found");
+}
+
+#[test]
+fn get_play_now_game_prefers_cached_setting_and_falls_back_to_recent_session() {
+    let state = state();
+    let alan = create_game_impl(&state, game_input("Alan Wake 2")).unwrap();
+    let balatro = create_game_impl(&state, game_input("Balatro")).unwrap();
+
+    state
+        .with_db(|conn| {
+            sessions::insert(
+                conn,
+                alan.id,
+                "2026-06-10T20:00:00+00:00",
+                Some("2026-06-10T21:00:00+00:00"),
+            )?;
+            sessions::insert(
+                conn,
+                balatro.id,
+                "2026-06-11T20:00:00+00:00",
+                Some("2026-06-11T21:00:00+00:00"),
+            )?;
+            Ok(())
+        })
+        .unwrap();
+
+    let fallback = get_play_now_game_impl(&state).unwrap().expect("fallback game");
+    assert_eq!(fallback.id, balatro.id);
+
+    state
+        .with_db(|conn| game_manager_lib::db::repo::settings::set(conn, "last_played_game_id", &alan.id.to_string()))
+        .unwrap();
+    let cached = get_play_now_game_impl(&state).unwrap().expect("cached game");
+    assert_eq!(cached.id, alan.id);
+
+    state
+        .with_db(|conn| game_manager_lib::db::repo::settings::set(conn, "last_played_game_id", "999999"))
+        .unwrap();
+    let stale = get_play_now_game_impl(&state).unwrap().expect("stale fallback");
+    assert_eq!(stale.id, balatro.id);
+
+    delete_game_impl(&state, balatro.id).unwrap();
+    let deleted_fallback = get_play_now_game_impl(&state).unwrap().expect("deleted fallback");
+    assert_eq!(deleted_fallback.id, alan.id);
+}
+
+#[test]
+fn get_play_now_game_skips_orphaned_play_session_rows() {
+    let state = state();
+    let live = create_game_impl(&state, game_input("Live Game")).unwrap();
+    let deleted = create_game_impl(&state, game_input("Deleted Game")).unwrap();
+
+    state
+        .with_db(|conn| {
+            sessions::insert(
+                conn,
+                live.id,
+                "2026-06-10T20:00:00+00:00",
+                Some("2026-06-10T21:00:00+00:00"),
+            )?;
+            sessions::insert(
+                conn,
+                deleted.id,
+                "2026-06-11T20:00:00+00:00",
+                Some("2026-06-11T21:00:00+00:00"),
+            )?;
+            conn.execute("DELETE FROM games WHERE id = ?1", [deleted.id])?;
+            Ok(())
+        })
+        .unwrap();
+
+    let play_now = get_play_now_game_impl(&state).unwrap().expect("live fallback");
+    assert_eq!(play_now.id, live.id);
+}
+
+#[test]
+fn get_play_now_game_returns_none_without_history() {
+    let state = state();
+    assert!(get_play_now_game_impl(&state).unwrap().is_none());
 }

@@ -3,6 +3,7 @@ import { NavLink } from 'react-router-dom'
 import { NAV_ITEMS } from '@/components/layout/nav-items'
 import { Button } from '@/components/ui/button'
 import { Icon } from '@/components/ui/icon'
+import { usePlayNowTarget } from '@/features/launch/play-now'
 import { cn } from '@/lib/utils'
 
 /**
@@ -11,6 +12,8 @@ import { cn } from '@/lib/utils'
  * placeholder until Phase E3).
  */
 export function Sidebar(): React.JSX.Element {
+  const { target, disabled, launch } = usePlayNowTarget()
+
   return (
     <aside
       data-testid="sidebar"
@@ -50,9 +53,9 @@ export function Sidebar(): React.JSX.Element {
           type="button"
           className="w-full"
           data-testid="launch-game-button"
-          onClick={() => {
-            // Placeholder — real resume-last-played behavior lands in Phase E3.
-          }}
+          disabled={disabled}
+          aria-label={target ? `Launch Game: ${target.gameName}` : 'Launch Game'}
+          onClick={launch}
         >
           <Icon name="play_arrow" className="text-[20px]" />
           Launch Game

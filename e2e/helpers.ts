@@ -3,6 +3,12 @@ import type { Page } from '@playwright/test'
 export const THEMES = ['light', 'dark'] as const
 export type Theme = (typeof THEMES)[number]
 
+declare global {
+  interface Window {
+    __gmLaunch__?: (payload: LaunchLifecyclePayload) => void
+  }
+}
+
 /** Navigate to the app and wait for the root shell to mount. */
 export async function gotoApp(page: Page): Promise<void> {
   await page.goto('/', { waitUntil: 'load' })
@@ -29,4 +35,26 @@ export async function scrollRouteOutletToTop(page: Page): Promise<void> {
 /** Set the app theme by toggling `data-theme` on the document element. */
 export async function setTheme(page: Page, theme: Theme): Promise<void> {
   await page.evaluate((t) => document.documentElement.setAttribute('data-theme', t), theme)
+}
+
+/** A launch lifecycle payload shape for deterministic E2E driving. */
+export interface LaunchLifecyclePayload {
+  gameId: number
+  phase: 'before' | 'waitingForProcess' | 'playing' | 'onExit' | 'ended'
+  detail?: string
+  failedCount: number
+  elapsedSeconds?: number
+}
+
+/**
+ * Push a launch lifecycle payload straight into the launch-store via the
+ * `__gmLaunch__` test hook installed under `VITE_PLAYWRIGHT`. Deterministic — no
+ * Tauri event runtime or wall-clock timing involved.
+ */
+export async function driveLaunch(page: Page, payload: LaunchLifecyclePayload): Promise<void> {
+  await page.waitForFunction(() => typeof window.__gmLaunch__ === 'function')
+  await page.evaluate((p) => {
+    window.__gmLaunch__?.(p)
+  }, payload)
+  await page.getByTestId('launch-banner').waitFor({ state: 'visible' })
 }

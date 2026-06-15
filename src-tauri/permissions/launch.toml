@@ -1,0 +1,13 @@
+# Permissions for the launch command surface.
+
+"$schema" = "../gen/schemas/desktop-schema.json"
+
+[[permission]]
+identifier = "allow-launch-game"
+description = "Allows the frontend to launch a game's resolved script pipeline via launch_game."
+commands.allow = ["launch_game"]
+
+[[permission]]
+identifier = "allow-cancel-launch"
+description = "Allows the frontend to cancel an in-flight launch via cancel_launch."
+commands.allow = ["cancel_launch"]

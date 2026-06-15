@@ -10,13 +10,14 @@ import {
   useDeleteGameMutation,
   useGameQuery,
   useGamesQuery,
+  usePlayNowGameQuery,
   useResolvedScriptsQuery,
   useSetGameGroupsMutation,
   useSetGameScriptsMutation,
   useUpdateGameMutation,
 } from '@/lib/queries/use-games'
 import { useGroupsQuery } from '@/lib/queries/use-groups'
-import { GAMES_QUERY_KEY, GROUPS_QUERY_KEY } from '@/lib/queries/query-keys'
+import { GAMES_QUERY_KEY, GROUPS_QUERY_KEY, PLAY_NOW_QUERY_KEY } from '@/lib/queries/query-keys'
 import { ipc } from '../../ipc-mock'
 
 const GAME_ROW = {
@@ -81,6 +82,15 @@ describe('useResolvedScriptsQuery', () => {
     const { result } = renderHook(() => useResolvedScriptsQuery(3), { wrapper: wrapper() })
     await waitFor(() => expect(result.current.isSuccess).toBe(true))
     expect(result.current.data).toEqual([{ scriptId: 3, name: 'HDR', phase: 'before' }])
+  })
+})
+
+describe('usePlayNowGameQuery', () => {
+  it('loads the current play-now target', async () => {
+    ipc.override('get_play_now_game', () => GAME_ROW)
+    const { result } = renderHook(() => usePlayNowGameQuery(), { wrapper: wrapper() })
+    await waitFor(() => expect(result.current.isSuccess).toBe(true))
+    expect(result.current.data).toEqual(GAME_ROW)
   })
 })
 
@@ -182,6 +192,24 @@ describe('game mutations', () => {
     expect(client.getQueryData(GAMES_QUERY_KEY)).toEqual([{ ...GAME_ROW, scriptIds: [8] }])
     expect(client.getQueryData(gameDetailQueryKey(1))).toEqual({ ...GAME_ROW, scriptIds: [8] })
     expect(client.getQueryState(resolvedScriptsQueryKey(1))?.isInvalidated).toBe(true)
+  })
+
+  it('invalidates the play-now cache on game delete', async () => {
+    const { client, Wrapper } = createWrapper()
+    client.setQueryData(PLAY_NOW_QUERY_KEY, GAME_ROW)
+    let playNowCalls = 0
+    ipc.override('get_play_now_game', () => {
+      playNowCalls += 1
+      return GAME_ROW
+    })
+
+    const playNowQuery = renderHook(() => usePlayNowGameQuery(), { wrapper: Wrapper })
+    await waitFor(() => expect(playNowCalls).toBe(1))
+    const mutation = renderHook(() => useDeleteGameMutation(), { wrapper: Wrapper })
+    await mutation.result.current.mutateAsync(1)
+
+    await waitFor(() => expect(playNowCalls).toBeGreaterThan(1))
+    playNowQuery.unmount()
   })
 
   it('rolls back optimistic group ids when set_game_groups fails', async () => {

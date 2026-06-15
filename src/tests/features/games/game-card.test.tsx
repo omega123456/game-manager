@@ -56,6 +56,23 @@ describe('GameCard', () => {
     expect(groupArea).toBeEmptyDOMElement()
   })
 
+  it('shows the playing pip, ring, and live counter when active', () => {
+    render(<GameCard game={BASE_GAME} groups={GROUPS} isPlaying elapsedSeconds={95} />)
+
+    const card = screen.getByTestId('game-card-playing')
+    expect(card).toHaveClass('border-primary')
+    expect(card).toHaveClass('ring-2')
+    const pip = screen.getByTestId('game-card-playing-pip')
+    expect(pip).toHaveTextContent('Playing')
+    expect(pip).toHaveTextContent('01:35')
+  })
+
+  it('does not render the playing pip when idle', () => {
+    render(<GameCard game={BASE_GAME} groups={GROUPS} />)
+    expect(screen.queryByTestId('game-card-playing-pip')).not.toBeInTheDocument()
+    expect(screen.getByTestId('game-card')).toHaveClass('border-border')
+  })
+
   it('truncates long group names within a grid cell and exposes the full name', () => {
     const longName = 'asad asdsa dsad ds asd sad sad sad sad sad sad sad sad sad sad sad sad sad'
     render(

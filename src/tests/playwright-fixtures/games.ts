@@ -76,6 +76,13 @@ export const gamesFixtures: Record<string, PlaywrightFixtureHandler> = {
     }
     return GAME_ROWS
   },
+  get_play_now_game: () => {
+    const state = getLibraryFixtureState()
+    if (state === 'empty') {
+      return null
+    }
+    return GAME_ROWS[0]
+  },
   get_game: (args) => GAME_ROWS.find((game) => game.id === args?.id) ?? null,
   create_game: (args) => ({
     id: 99,

@@ -19,6 +19,7 @@
  * `@tauri-apps/api/*`, or direct mocks of `src/lib/*-commands.ts` wrappers.
  */
 
+import { act } from '@testing-library/react'
 import { afterEach, beforeEach } from 'vitest'
 import { clearMocks, mockIPC } from '@tauri-apps/api/mocks'
 import { emit } from '@tauri-apps/api/event'
@@ -49,9 +50,11 @@ export const ipc = {
     return _calls.get(commandName) ?? []
   },
 
-  /** Emit a Tauri event to all registered listeners. */
+  /** Emit a Tauri event to all registered listeners (wrapped in `act` for React). */
   emit<T = unknown>(eventName: string, payload?: T): Promise<void> {
-    return emit(eventName, payload)
+    return act(async () => {
+      await emit(eventName, payload)
+    })
   },
 
   /** Clear all overrides and call records. Called automatically by afterEach. */

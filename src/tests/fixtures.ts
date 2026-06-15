@@ -33,6 +33,7 @@ export const IPC_FIXTURES: Record<string, IpcHandler> = {
   //     harness quiet until tests override specific flows. ---
   list_games: () => [],
   get_game: () => null,
+  get_play_now_game: () => null,
   create_game: (args) => args?.input,
   update_game: (args) => ({ id: args?.id, ...(args?.input as object) }),
   delete_game: () => undefined,
@@ -63,6 +64,12 @@ export const IPC_FIXTURES: Record<string, IpcHandler> = {
   delete_script: () => undefined,
   set_script_dependencies: (args) => args?.dependsOn ?? [],
   set_script_kind: (args) => ({ id: args?.id, kind: args?.kind }),
+
+  // --- Launch. Phase E1 introduces the orchestrator + wrappers; defaults keep
+  //     the harness quiet. Progress arrives via `launch://*` events (use
+  //     `ipc.emit`); these commands themselves are fire-and-forget. ---
+  launch_game: () => undefined,
+  cancel_launch: () => false,
 
   // --- Art + metadata. Phase B3 adds the backend used by the future Add Game
   //     wizard. Defaults stay deterministic and cheap. ---

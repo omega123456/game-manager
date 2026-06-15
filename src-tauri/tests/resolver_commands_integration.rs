@@ -179,6 +179,57 @@ fn resolved_scripts_skip_utility_scripts_assigned_to_groups() {
 }
 
 #[test]
+fn resolved_scripts_error_for_missing_game() {
+    let state = state();
+    let err = get_resolved_scripts_impl(&state, 9999).expect_err("missing game");
+    assert!(err.to_string().contains("not found"));
+}
+
+#[test]
+fn resolved_scripts_error_when_assigned_script_id_missing() {
+    let state = state();
+    let game = create_game_impl(&state, game_input("Orphan Script")).unwrap();
+    state
+        .with_db(|conn| {
+            conn.execute_batch("PRAGMA foreign_keys = OFF")?;
+            conn.execute(
+                "INSERT INTO game_scripts (game_id, script_id) VALUES (?1, ?2)",
+                rusqlite::params![game.id, 9999],
+            )?;
+            conn.execute_batch("PRAGMA foreign_keys = ON")?;
+            Ok(())
+        })
+        .unwrap();
+
+    let err = get_resolved_scripts_impl(&state, game.id).expect_err("missing script assignment");
+    assert!(err.to_string().contains("not found during resolve"));
+}
+
+#[test]
+fn resolved_scripts_error_when_required_utility_is_missing() {
+    let state = state();
+    let game = create_game_impl(&state, game_input("Missing Utility")).unwrap();
+
+    let runner_id = state
+        .with_db(|conn| {
+            let runner_id = scripts::create(conn, &normal_script("Runner", 5, true, false, false))?;
+            conn.execute_batch("PRAGMA foreign_keys = OFF")?;
+            conn.execute(
+                "INSERT INTO script_dependencies (script_id, depends_on_script_id) VALUES (?1, ?2)",
+                rusqlite::params![runner_id, 9999],
+            )?;
+            conn.execute_batch("PRAGMA foreign_keys = ON")?;
+            Ok(runner_id)
+        })
+        .unwrap();
+
+    set_game_scripts_impl(&state, game.id, vec![runner_id]).unwrap();
+
+    let err = get_resolved_scripts_impl(&state, game.id).expect_err("missing utility dependency");
+    assert!(err.to_string().contains("not found during resolve"));
+}
+
+#[test]
 fn resolved_scripts_error_when_dependency_is_not_utility() {
     let state = state();
     let game = create_game_impl(&state, game_input("Bad Deps")).unwrap();

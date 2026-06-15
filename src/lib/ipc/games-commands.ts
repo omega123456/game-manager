@@ -21,6 +21,11 @@ export function getGame(id: number): Promise<Game> {
   return invoke<Game>('get_game', { id })
 }
 
+/** Resolve the current Play Now target, or `null` when no history exists. */
+export function getPlayNowGame(): Promise<Game | null> {
+  return invoke<Game | null>('get_play_now_game')
+}
+
 /** Create a game and return the hydrated row. */
 export function createGame(input: SaveGameInput): Promise<Game> {
   return invoke<Game>('create_game', { input })

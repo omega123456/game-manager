@@ -1,21 +1,39 @@
 import type { Game, Group } from '@/types/domain'
 import { Icon } from '@/components/ui/icon'
+import { cn } from '@/lib/utils'
 import { GameCardGroups } from '@/features/games/game-card-groups'
 import { getLibraryMeta } from '@/features/games/library-format'
+import { formatElapsed } from '@/features/launch/launch-format'
 import { toCoverImageUrl } from '@/lib/asset-url'
 
 export interface GameCardProps {
   game: Game
   groups: Group[]
   onOpen?: (gameId: number) => void
+  /** True when this game is the active launch session. */
+  isPlaying?: boolean
+  /** Live elapsed seconds for the active session (only meaningful when playing). */
+  elapsedSeconds?: number
 }
 
-export function GameCard({ game, groups, onOpen }: GameCardProps): React.JSX.Element {
+export function GameCard({
+  game,
+  groups,
+  onOpen,
+  isPlaying = false,
+  elapsedSeconds = 0,
+}: GameCardProps): React.JSX.Element {
   const meta = getLibraryMeta(game.totalPlaytimeSeconds, game.lastPlayedAt)
   const coverUrl = toCoverImageUrl(game.imagePath)
 
   return (
-    <article className="group overflow-hidden rounded-[1.4rem] border border-border bg-card shadow-sm transition-transform duration-200 hover:-translate-y-1 hover:shadow-lg">
+    <article
+      className={cn(
+        'group overflow-hidden rounded-[1.4rem] border bg-card shadow-sm transition-transform duration-200 hover:-translate-y-1 hover:shadow-lg',
+        isPlaying ? 'border-primary ring-2 ring-primary/40' : 'border-border'
+      )}
+      data-testid={isPlaying ? 'game-card-playing' : 'game-card'}
+    >
       <button
         type="button"
         className="block w-full cursor-pointer text-left"
@@ -23,6 +41,18 @@ export function GameCard({ game, groups, onOpen }: GameCardProps): React.JSX.Ele
         aria-label={`Open ${game.name}`}
       >
         <div className="relative aspect-3/4 overflow-hidden bg-surface-high">
+          {isPlaying ? (
+            <span
+              className="absolute right-3 top-3 z-10 inline-flex items-center gap-1.5 rounded-full border border-secondary/40 bg-secondary/15 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-secondary-foreground backdrop-blur"
+              data-testid="game-card-playing-pip"
+            >
+              <span
+                className="h-2 w-2 rounded-full bg-secondary motion-safe:animate-pulse"
+                aria-hidden
+              />
+              Playing · <span className="font-mono tabular-nums">{formatElapsed(elapsedSeconds)}</span>
+            </span>
+          ) : null}
           {coverUrl ? (
             <img
               src={coverUrl}

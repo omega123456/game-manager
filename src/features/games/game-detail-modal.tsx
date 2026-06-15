@@ -30,6 +30,8 @@ import { logFrontend } from '@/lib/app-log-commands'
 import { useDeleteGameMutation, useGameQuery } from '@/lib/queries/use-games'
 import { cn } from '@/lib/utils'
 import { useUiStore } from '@/stores/ui-store'
+import { useLaunchStore } from '@/stores/launch-store'
+import { launchGameById } from '@/features/launch/launch-controller'
 
 type GameDetailTab = 'overview' | 'edit' | 'groups' | 'scripts'
 
@@ -64,6 +66,7 @@ function GameDetailModalInner({ selectedGameId }: GameDetailModalInnerProps): Re
   const [deleteError, setDeleteError] = useState<string | null>(null)
   const gameQuery = useGameQuery(selectedGameId)
   const deleteGameMutation = useDeleteGameMutation()
+  const isLaunchActive = useLaunchStore((state) => state.phase !== 'idle')
 
   const game = gameQuery.data
   const meta = game ? getLibraryMeta(game.totalPlaytimeSeconds, game.lastPlayedAt) : null
@@ -194,13 +197,18 @@ function GameDetailModalInner({ selectedGameId }: GameDetailModalInnerProps): Re
                             {game.name}
                           </h2>
                           <p className="max-w-2xl text-sm text-muted-foreground">
-                            Launch wiring is staged next. This overview gives you the art, stats,
-                            and configuration summary first.
+                            Launch runs this game's resolved script pipeline. Track live status in
+                            the banner and the currently-playing hero.
                           </p>
                         </div>
-                        <Button type="button" disabled>
+                        <Button
+                          type="button"
+                          disabled={isLaunchActive}
+                          onClick={() => launchGameById(game.id, game.name)}
+                          data-testid="game-detail-launch"
+                        >
                           <Icon name="play_circle" className="text-[18px]" />
-                          Launch available in Phase E
+                          {isLaunchActive ? 'Launch in progress…' : 'Launch Game'}
                         </Button>
                       </div>
                     </div>

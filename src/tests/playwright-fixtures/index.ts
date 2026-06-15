@@ -14,6 +14,7 @@ import { scriptsFixtures } from './scripts'
 import { artFixtures } from './art'
 import { dialogFixtures } from './dialog'
 import { groupsFixtures } from './groups'
+import { launchFixtures } from './launch'
 
 export type PlaywrightFixtureHandler = (args?: Record<string, unknown>) => unknown
 
@@ -28,6 +29,7 @@ export const FIXTURE_REGISTRY: Record<string, PlaywrightFixtureHandler> = {
   ...gamesFixtures,
   ...groupsFixtures,
   ...scriptsFixtures,
+  ...launchFixtures,
   // Settings domain (reads/writes) — registered from settings.ts.
   ...settingsFixtures,
 }

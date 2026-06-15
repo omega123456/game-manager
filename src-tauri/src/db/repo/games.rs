@@ -4,7 +4,7 @@
 //! playtime aggregates derived from `play_sessions`. No Tauri command handlers
 //! live here — those land in Phase B1.
 
-use rusqlite::{params, Connection, Row};
+use rusqlite::{params, Connection, OptionalExtension, Row};
 
 use crate::domain::{Game, MonitorMode};
 use crate::error::{AppError, AppResult};
@@ -129,6 +129,43 @@ pub fn get(conn: &Connection, id: i64) -> AppResult<Game> {
     match rows.next() {
         Some(row) => Ok(row?),
         None => Err(AppError::database(format!("game {id} not found"))),
+    }
+}
+
+/// Resolve the game to use for "Play Now".
+///
+/// Prefers the cached `settings.last_played_game_id` when it points to a live
+/// game row. If the setting is missing or stale (for example the game was
+/// deleted), falls back to the game with the most recent `play_sessions.started_at`.
+pub fn get_play_now(conn: &Connection) -> AppResult<Option<Game>> {
+    let mut stmt = conn.prepare("SELECT value FROM settings WHERE key = 'last_played_game_id'")?;
+    let cached_id = stmt
+        .query_row([], |row| row.get::<_, Option<String>>(0))
+        .optional()?
+        .flatten()
+        .and_then(|value| value.trim().parse::<i64>().ok());
+
+    if let Some(game_id) = cached_id {
+        if let Ok(game) = get(conn, game_id) {
+            return Ok(Some(game));
+        }
+    }
+
+    let fallback_id = conn
+        .query_row(
+            "SELECT s.game_id
+             FROM play_sessions s
+             INNER JOIN games g ON g.id = s.game_id
+             ORDER BY s.started_at DESC, s.id DESC
+             LIMIT 1",
+            [],
+            |row| row.get::<_, i64>(0),
+        )
+        .optional()?;
+
+    match fallback_id {
+        Some(game_id) => get(conn, game_id).map(Some),
+        None => Ok(None),
     }
 }
 

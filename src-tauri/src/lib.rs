@@ -11,6 +11,7 @@ pub mod domain;
 pub mod error;
 pub mod logging;
 pub mod launch;
+pub mod monitor;
 pub mod state;
 
 use std::path::{Path, PathBuf};
@@ -116,6 +117,7 @@ pub fn run() {
             commands::logging::log_frontend,
             commands::games::list_games,
             commands::games::get_game,
+            commands::games::get_play_now_game,
             commands::games::create_game,
             commands::games::update_game,
             commands::games::delete_game,
@@ -141,6 +143,8 @@ pub fn run() {
             commands::settings::get_all_settings,
             commands::settings::get_setting,
             commands::settings::set_setting,
+            commands::launch::launch_game,
+            commands::launch::cancel_launch,
         ])
         .run(tauri::generate_context!())
         .expect("error while running the Game Manager application");

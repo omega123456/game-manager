@@ -53,6 +53,7 @@ pnpm typecheck          # tsc --noEmit
 - **No fixed delays > 5 s** in any test. Use condition-based waiting (Playwright auto-wait, `waitFor`, `findBy*`, polling). Each individual test must complete in under 2 seconds.
 - **Package manager: `pnpm` only.**
 - **Lint must be genuinely clean.** See the **Lint rule** above — zero warnings/errors repo-wide, no suppressions, including for pre-existing issues encountered during the session.
+- **Vitest must run without React `act(...)` warnings.** Treat any `act(...)` stderr from Vitest as unfinished work — fix the test (e.g. `await userEvent`, `waitFor` / `findBy*`, wrap timer advances and IPC event emits in `act`, use the shared `ipc.emit` harness) rather than ignoring the warning. Pre-existing `act` warnings are in scope.
 - **Vitest IPC mocking is mandatory and centralized.** All Vitest tests that touch Tauri IPC must use the shared harness in `src/tests/ipc-mock.ts` plus `ipc.override(...)` / `ipc.emit(...)`. Do **not** create ad hoc IPC mocks, per-test `mockIPC(...)` calls, direct `vi.mock()` stubs for `@tauri-apps/api/*` IPC modules, or direct mocks of `src/lib/*-commands.ts` command wrappers. If a command is missing from the default fixtures, add it to `src/tests/fixtures.ts` or override it in the test. **The intentional missing-mock failure (`[vitest] Unmocked Tauri IPC command: <cmd>`) is part of the contract and must not be bypassed.**
 - **No raw `console` in frontend feature code.** Route all logging through `src/lib/app-log-commands.ts` (`logFrontend` and the toast helpers added later). `app-log-commands.ts` is the only module allowed to call `console` (as a last-resort sink). The `no-console` ESLint rule enforces this.
 
@@ -151,7 +152,7 @@ Keep every test in a dedicated file under the appropriate test root (`src/tests/
 - Test files mirror source: `src/components/Foo.tsx` → `src/tests/components/Foo.test.tsx`.
 - Setup file `src/tests/setup.ts` provides jsdom polyfills (`ResizeObserver`, `matchMedia`, `scrollIntoView`) and wires Vitest IPC through the shared `src/tests/ipc-mock.ts` harness. A missing IPC fixture throws `[vitest] Unmocked Tauri IPC command: <cmd>`.
 - Always test real behavior through the public API with the shared harness. Use `ipc.override(...)` for per-test behavior and `ipc.emit(...)` for events. If a test needs a new IPC response, extend `src/tests/fixtures.ts` or override only that command in the test.
-- After `render`, use `waitFor` / `findBy*` for async-mounted state. Use `const user = userEvent.setup()` and await interactions to avoid React `act(...)` warnings; treat new `act(...)` warnings as unfinished work.
+- After `render`, use `waitFor` / `findBy*` for async-mounted state. Use `const user = userEvent.setup()` and await interactions to avoid React `act(...)` warnings. **`pnpm test:coverage` must complete with zero `act(...)` warnings** — fix or wrap async updates (including `ipc.emit` and fake-timer advances) rather than leaving warnings in stderr.
 
 ### Rust
 

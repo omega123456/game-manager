@@ -9,6 +9,7 @@
     "allow-log-frontend",
     "allow-list-games",
     "allow-get-game",
+    "allow-get-play-now-game",
     "allow-create-game",
     "allow-update-game",
     "allow-delete-game",
@@ -33,6 +34,8 @@
     "allow-cache-art-candidate",
     "allow-get-all-settings",
     "allow-get-setting",
-    "allow-set-setting"
+    "allow-set-setting",
+    "allow-launch-game",
+    "allow-cancel-launch"
   ]
 }

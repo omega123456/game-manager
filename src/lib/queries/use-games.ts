@@ -4,6 +4,7 @@ import {
   createGame,
   deleteGame,
   getGame,
+  getPlayNowGame,
   getResolvedScripts,
   listGames,
   setGameGroups,
@@ -11,7 +12,7 @@ import {
   updateGame,
   type SaveGameInput,
 } from '@/lib/ipc/games-commands'
-import { GAMES_QUERY_KEY, GROUPS_QUERY_KEY } from '@/lib/queries/query-keys'
+import { GAMES_QUERY_KEY, GROUPS_QUERY_KEY, PLAY_NOW_QUERY_KEY } from '@/lib/queries/query-keys'
 import type { Game } from '@/types/domain'
 
 export function gameDetailQueryKey(id: number) {
@@ -39,6 +40,14 @@ export function useGameQuery(id: number | null | undefined) {
   })
 }
 
+/** Load the current Play Now target, or `null` when no history exists. */
+export function usePlayNowGameQuery() {
+  return useQuery({
+    queryKey: PLAY_NOW_QUERY_KEY,
+    queryFn: getPlayNowGame,
+  })
+}
+
 /** Load the resolved execution entries for a game when an id is available. */
 export function useResolvedScriptsQuery(gameId: number | null | undefined) {
   return useQuery({
@@ -50,6 +59,7 @@ export function useResolvedScriptsQuery(gameId: number | null | undefined) {
 
 function invalidateGames(queryClient: ReturnType<typeof useQueryClient>, gameId?: number) {
   void queryClient.invalidateQueries({ queryKey: GAMES_QUERY_KEY })
+  void queryClient.invalidateQueries({ queryKey: PLAY_NOW_QUERY_KEY })
   if (typeof gameId === 'number') {
     void queryClient.invalidateQueries({ queryKey: gameDetailQueryKey(gameId) })
     void queryClient.invalidateQueries({ queryKey: resolvedScriptsQueryKey(gameId) })

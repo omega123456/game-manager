@@ -1,6 +1,13 @@
 import { test, expect } from '@playwright/test'
 
-import { gotoApp, gotoAppState, scrollRouteOutletToTop, setTheme, THEMES } from './helpers'
+import {
+  driveLaunch,
+  gotoApp,
+  gotoAppState,
+  scrollRouteOutletToTop,
+  setTheme,
+  THEMES,
+} from './helpers'
 
 /**
  * Visual-regression coverage. Every visible UI state must have a screenshot
@@ -59,6 +66,15 @@ for (const theme of THEMES) {
     await page.getByRole('heading', { name: 'Your library is empty' }).waitFor({ state: 'visible' })
     await scrollRouteOutletToTop(page)
     await expect(page).toHaveScreenshot(`library-empty-${theme}.png`)
+  })
+
+  test(`play now disabled — ${theme}`, async ({ page }) => {
+    await gotoAppState(page, '#/library?libraryFixture=empty')
+    await setTheme(page, theme)
+    await expect(page.getByTestId('play-now-button')).toBeDisabled()
+    await expect(page.getByTestId('launch-game-button')).toBeDisabled()
+    await scrollRouteOutletToTop(page)
+    await expect(page).toHaveScreenshot(`play-now-disabled-${theme}.png`)
   })
 
   test(`library loading — ${theme}`, async ({ page }) => {
@@ -160,6 +176,54 @@ for (const theme of THEMES) {
     await page.getByRole('button', { name: 'Edit SaveLib' }).click()
     await page.getByTestId('script-utility-layout').waitFor({ state: 'visible' })
     await expect(page).toHaveScreenshot(`script-manager-utility-${theme}.png`)
+  })
+
+  test(`launch banner preparing — ${theme}`, async ({ page }) => {
+    await gotoApp(page)
+    await setTheme(page, theme)
+    await driveLaunch(page, { gameId: 1, phase: 'before', failedCount: 0, detail: '2/3 scripts' })
+    await page.getByText('Preparing', { exact: false }).first().waitFor({ state: 'visible' })
+    await scrollRouteOutletToTop(page)
+    await expect(page).toHaveScreenshot(`launch-banner-preparing-${theme}.png`)
+  })
+
+  test(`launch banner launching — ${theme}`, async ({ page }) => {
+    await gotoApp(page)
+    await setTheme(page, theme)
+    await driveLaunch(page, {
+      gameId: 1,
+      phase: 'waitingForProcess',
+      failedCount: 0,
+      elapsedSeconds: 14,
+    })
+    await page.getByTestId('launch-banner-cancel').waitFor({ state: 'visible' })
+    await scrollRouteOutletToTop(page)
+    await expect(page).toHaveScreenshot(`launch-banner-launching-${theme}.png`)
+  })
+
+  test(`launch banner playing — ${theme}`, async ({ page }) => {
+    await gotoApp(page)
+    await setTheme(page, theme)
+    await driveLaunch(page, {
+      gameId: 1,
+      phase: 'playing',
+      failedCount: 1,
+      elapsedSeconds: 95,
+    })
+    await page.getByTestId('game-card-playing').first().waitFor({ state: 'visible' })
+    await page.getByTestId('launch-banner-failure').waitFor({ state: 'visible' })
+    await scrollRouteOutletToTop(page)
+    await expect(page).toHaveScreenshot(`launch-banner-playing-${theme}.png`)
+  })
+
+  test(`launch banner done — ${theme}`, async ({ page }) => {
+    await gotoApp(page)
+    await setTheme(page, theme)
+    await driveLaunch(page, { gameId: 1, phase: 'playing', failedCount: 0, elapsedSeconds: 8040 })
+    await driveLaunch(page, { gameId: 1, phase: 'ended', failedCount: 0, elapsedSeconds: 8040 })
+    await page.getByTestId('launch-banner-done').waitFor({ state: 'visible' })
+    await scrollRouteOutletToTop(page)
+    await expect(page).toHaveScreenshot(`launch-banner-done-${theme}.png`)
   })
 
   test(`group manager detail — ${theme}`, async ({ page }) => {
