@@ -9,6 +9,7 @@ import { Switch } from '@/components/ui/switch'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import {
   Dialog,
+  DialogClose,
   DialogContent,
   DialogDescription,
   DialogFooter,
@@ -30,6 +31,7 @@ import {
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
   SelectTrigger,
   SelectValue,
@@ -114,14 +116,18 @@ describe('ui primitives', () => {
             <DialogTitle>Title</DialogTitle>
             <DialogDescription>Desc</DialogDescription>
           </DialogHeader>
-          <DialogFooter>Footer</DialogFooter>
+          <DialogFooter>
+            <DialogClose>Close</DialogClose>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     )
     await user.click(screen.getByRole('button', { name: 'Open' }))
     expect(await screen.findByText('Title')).toBeInTheDocument()
     expect(screen.getByText('Desc')).toBeInTheDocument()
-    expect(screen.getByText('Footer')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Close' })).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Close' }))
+    await waitFor(() => expect(screen.queryByText('Title')).not.toBeInTheDocument())
   })
 
   it('AlertDialog opens and cancels', async () => {
@@ -156,8 +162,10 @@ describe('ui primitives', () => {
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
-          <SelectItem value="recent">Recent</SelectItem>
-          <SelectItem value="name">Name</SelectItem>
+          <SelectGroup>
+            <SelectItem value="recent">Recent</SelectItem>
+            <SelectItem value="name">Name</SelectItem>
+          </SelectGroup>
         </SelectContent>
       </Select>
     )

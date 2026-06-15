@@ -1,7 +1,8 @@
 import { act, render, renderHook, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { ThemeProvider, useTheme } from '@/components/theme/theme-provider'
+import { ThemeProvider } from '@/components/theme/theme-provider'
+import { useTheme } from '@/components/theme/theme-context'
 import { useUiStore } from '@/stores/ui-store'
 import { ipc } from '../../ipc-mock'
 

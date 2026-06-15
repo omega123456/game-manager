@@ -40,7 +40,7 @@ pnpm format             # Prettier on src/
 pnpm typecheck          # tsc --noEmit
 ```
 
-**Lint rule (always apply):** `pnpm lint` must be clean after every change. Fix all lint warnings and errors in touched code before finishing.
+**Lint rule (always apply):** `pnpm lint` must exit with **zero warnings and zero errors** before finishing — for the **entire** `src/` tree, not only files you touched. Pre-existing violations are in scope: fix them rather than leaving them. **Do not suppress lint findings** to get a clean run. Forbidden: `eslint-disable` / `eslint-disable-next-line` comments, weakening or disabling rules in `eslint.config.js`, renaming exports to dodge `react-refresh/only-export-components`, or any other ignore/exclude mechanism. Fix the underlying issue instead — e.g. split non-component exports (constants, hooks, CVA helpers) into separate modules; replace Radix `export const Foo = Primitive.Root` aliases with thin component wrappers; move shared helpers out of component files.
 
 **Agent rule (always apply):** Before finishing a session where any code was changed, run the targeted tests that cover the changed functionality and ensure they pass.
 
@@ -52,6 +52,7 @@ pnpm typecheck          # tsc --noEmit
 - **Excluding functions or files from test coverage is strictly prohibited.** Maintain 90% lines/functions/statements for both TypeScript (Vitest v8) and Rust (`cargo-llvm-cov` `--fail-under-*`). Never lower thresholds or hide untested code — write tests instead. Forbidden: `istanbul`/`c8`/`v8` ignore comments, Vitest `coverage.exclude` / `coverage.include` tweaks that skip production code, Rust `#[cfg(coverage)]` / `#[cfg(not(coverage))]` beyond the existing Tauri entrypoint carve-out (`lib::run` / `main`), and any other exclude/ignore mechanism. No exceptions.
 - **No fixed delays > 5 s** in any test. Use condition-based waiting (Playwright auto-wait, `waitFor`, `findBy*`, polling). Each individual test must complete in under 2 seconds.
 - **Package manager: `pnpm` only.**
+- **Lint must be genuinely clean.** See the **Lint rule** above — zero warnings/errors repo-wide, no suppressions, including for pre-existing issues encountered during the session.
 - **Vitest IPC mocking is mandatory and centralized.** All Vitest tests that touch Tauri IPC must use the shared harness in `src/tests/ipc-mock.ts` plus `ipc.override(...)` / `ipc.emit(...)`. Do **not** create ad hoc IPC mocks, per-test `mockIPC(...)` calls, direct `vi.mock()` stubs for `@tauri-apps/api/*` IPC modules, or direct mocks of `src/lib/*-commands.ts` command wrappers. If a command is missing from the default fixtures, add it to `src/tests/fixtures.ts` or override it in the test. **The intentional missing-mock failure (`[vitest] Unmocked Tauri IPC command: <cmd>`) is part of the contract and must not be bypassed.**
 - **No raw `console` in frontend feature code.** Route all logging through `src/lib/app-log-commands.ts` (`logFrontend` and the toast helpers added later). `app-log-commands.ts` is the only module allowed to call `console` (as a last-resort sink). The `no-console` ESLint rule enforces this.
 

@@ -1,4 +1,4 @@
-import { useTheme } from '@/components/theme/theme-provider'
+import { useTheme } from '@/components/theme/theme-context'
 import { ACCENTS, type AccentKey, type ThemePreference } from '@/stores/ui-store'
 import { Icon } from '@/components/ui/icon'
 import { cn } from '@/lib/utils'

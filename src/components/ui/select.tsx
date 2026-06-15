@@ -4,9 +4,23 @@ import * as SelectPrimitive from '@radix-ui/react-select'
 import { cn } from '@/lib/utils'
 import { Icon } from '@/components/ui/icon'
 
-export const Select = SelectPrimitive.Root
-export const SelectGroup = SelectPrimitive.Group
-export const SelectValue = SelectPrimitive.Value
+export function Select(
+  props: React.ComponentProps<typeof SelectPrimitive.Root>
+): React.JSX.Element {
+  return <SelectPrimitive.Root {...props} />
+}
+
+export function SelectGroup(
+  props: React.ComponentProps<typeof SelectPrimitive.Group>
+): React.JSX.Element {
+  return <SelectPrimitive.Group {...props} />
+}
+
+export function SelectValue(
+  props: React.ComponentProps<typeof SelectPrimitive.Value>
+): React.JSX.Element {
+  return <SelectPrimitive.Value {...props} />
+}
 
 export const SelectTrigger = React.forwardRef<
   React.ElementRef<typeof SelectPrimitive.Trigger>,

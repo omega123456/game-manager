@@ -3,10 +3,29 @@ import * as DialogPrimitive from '@radix-ui/react-dialog'
 
 import { cn } from '@/lib/utils'
 
-export const Dialog = DialogPrimitive.Root
-export const DialogTrigger = DialogPrimitive.Trigger
-export const DialogPortal = DialogPrimitive.Portal
-export const DialogClose = DialogPrimitive.Close
+export function Dialog(
+  props: React.ComponentProps<typeof DialogPrimitive.Root>
+): React.JSX.Element {
+  return <DialogPrimitive.Root {...props} />
+}
+
+export function DialogTrigger(
+  props: React.ComponentProps<typeof DialogPrimitive.Trigger>
+): React.JSX.Element {
+  return <DialogPrimitive.Trigger {...props} />
+}
+
+export function DialogPortal(
+  props: React.ComponentProps<typeof DialogPrimitive.Portal>
+): React.JSX.Element {
+  return <DialogPrimitive.Portal {...props} />
+}
+
+export function DialogClose(
+  props: React.ComponentProps<typeof DialogPrimitive.Close>
+): React.JSX.Element {
+  return <DialogPrimitive.Close {...props} />
+}
 
 export const DialogOverlay = React.forwardRef<
   React.ElementRef<typeof DialogPrimitive.Overlay>,

@@ -1,4 +1,3 @@
-/* eslint-disable react-refresh/only-export-components */
 import * as React from 'react'
 
 import {
@@ -18,18 +17,7 @@ import {
   writeStoredAccent,
   writeStoredTheme,
 } from '@/lib/theme-storage'
-
-export interface ThemeContextValue {
-  /** User preference (light/dark/system). */
-  theme: ThemePreference
-  /** Theme actually applied to the document after resolving `system`. */
-  resolvedTheme: ResolvedTheme
-  accent: AccentKey
-  setTheme: (theme: ThemePreference) => void
-  setAccent: (accent: AccentKey) => void
-}
-
-const ThemeContext = React.createContext<ThemeContextValue | null>(null)
+import { ThemeContext, type ThemeContextValue } from '@/components/theme/theme-context'
 
 const SYSTEM_QUERY = '(prefers-color-scheme: dark)'
 
@@ -156,13 +144,4 @@ export function ThemeProvider({ children }: ThemeProviderProps): React.JSX.Eleme
   )
 
   return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>
-}
-
-/** Access the theme controls. Throws if used outside `ThemeProvider`. */
-export function useTheme(): ThemeContextValue {
-  const ctx = React.useContext(ThemeContext)
-  if (!ctx) {
-    throw new Error('useTheme must be used within a ThemeProvider')
-  }
-  return ctx
 }
