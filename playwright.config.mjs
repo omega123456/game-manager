@@ -8,17 +8,18 @@ import { DEV_SERVER_HOST } from './scripts/pick-dev-port.mjs'
 const root = path.dirname(fileURLToPath(import.meta.url))
 const portFile = path.join(root, '.playwright-dev-port')
 
-// The port file is written by ensure-playwright-port.mjs before `test:e2e`.
-// Reading from a file (rather than probing at config-evaluation time) is critical
-// because Playwright evaluates the config module in EVERY worker process — each
-// probe would race and pick a different port than the webServer is bound to.
+// The port file is written by ensure-playwright-port.mjs before `test:e2e`;
+// screenshot runs pass PLAYWRIGHT_DEV_PORT directly. Reading from a file (rather
+// than probing at config-evaluation time) is critical because Playwright evaluates
+// the config module in EVERY worker process — each probe would race and pick a
+// different port than the webServer is bound to.
 const portText =
   process.env.PLAYWRIGHT_DEV_PORT ?? (existsSync(portFile) ? readFileSync(portFile, 'utf8') : null)
 
 if (portText === null) {
   throw new Error(
-    'Missing .playwright-dev-port. Run Playwright via `pnpm test:e2e`, set PLAYWRIGHT_DEV_PORT, ' +
-      'or first run: node scripts/ensure-playwright-port.mjs'
+    'Missing .playwright-dev-port. Run Playwright via pnpm test:e2e / pnpm test:screenshots, ' +
+      'set PLAYWRIGHT_DEV_PORT, or first run: node scripts/ensure-playwright-port.mjs'
   )
 }
 
@@ -31,7 +32,9 @@ const baseURL = `http://${DEV_SERVER_HOST}:${port}`
 
 const availableCpus = Math.max(1, os.availableParallelism?.() ?? os.cpus().length)
 const isCI = !!process.env.CI
-const workers = isCI ? 1 : Math.min(2, availableCpus)
+const isScreenshotRun = process.env.PLAYWRIGHT_SCREENSHOT_RUN === '1'
+// Screenshot-only runs (scripts/playwright-screenshots.mjs) may use more workers; capped at 10.
+const workers = isCI ? 1 : Math.min(isScreenshotRun ? 10 : 2, availableCpus)
 
 export default defineConfig({
   testDir: './e2e',

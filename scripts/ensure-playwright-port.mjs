@@ -6,7 +6,8 @@
  * inside the config, each worker would race and pick a different port than the
  * one the webServer is bound to.
  *
- * Invoked by `pnpm test:e2e` via `&&` chaining.
+ * Called automatically by `pnpm test:e2e` and `pnpm test:screenshots` via
+ * `&&` chaining in the respective package.json scripts.
  */
 import { writeFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'

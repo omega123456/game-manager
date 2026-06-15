@@ -31,7 +31,7 @@ cargo nextest run --manifest-path src-tauri/Cargo.toml --features test-utils --t
 cargo nextest run --manifest-path src-tauri/Cargo.toml --features test-utils --test smoke_integration
 
 # Regenerate Playwright screenshot baselines after intentional visual changes
-pnpm test:e2e -- --update-snapshots
+pnpm test:e2e --update-snapshots
 
 # Code quality
 pnpm lint               # ESLint on src/

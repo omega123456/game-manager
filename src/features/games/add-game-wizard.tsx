@@ -411,7 +411,7 @@ export function AddGameWizard(): React.JSX.Element {
         setWizard((current) => ({
           ...current,
           selectedImagePath: cachedPath,
-          selectedImagePreview: wizard.selectedCandidate?.imageUrl ?? current.selectedImagePreview,
+          selectedImagePreview: cachedPath,
           selectedImageLabel: wizard.selectedCandidate?.providerName ?? current.selectedImageLabel,
         }))
       } catch (error) {
