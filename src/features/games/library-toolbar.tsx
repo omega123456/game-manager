@@ -61,7 +61,7 @@ export function LibraryToolbar({
         <div className="w-full sm:w-56">
           <label
             htmlFor="library-group-filter"
-            className="mb-2 block text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground"
+            className="mb-2 block cursor-pointer text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground"
           >
             Group
           </label>
@@ -99,7 +99,7 @@ export function LibraryToolbar({
         <div className="w-full sm:w-56">
           <label
             htmlFor="library-sort"
-            className="mb-2 block text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground"
+            className="mb-2 block cursor-pointer text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground"
           >
             Sort by
           </label>

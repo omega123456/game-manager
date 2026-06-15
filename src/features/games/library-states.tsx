@@ -14,9 +14,9 @@ export function LibraryLoadingState(): React.JSX.Element {
             <div className="space-y-3 p-4">
               <div className="h-5 w-2/3 animate-pulse rounded bg-surface-high" />
               <div className="h-4 w-1/2 animate-pulse rounded bg-surface-high" />
-              <div className="grid grid-cols-2 gap-2">
-                <div className="h-20 animate-pulse rounded-xl bg-surface-low" />
-                <div className="h-20 animate-pulse rounded-xl bg-surface-low" />
+              <div className="grid h-[4.5rem] grid-cols-2 gap-x-2 gap-y-2">
+                <div className="h-6 animate-pulse rounded-full bg-surface-low" />
+                <div className="h-6 animate-pulse rounded-full bg-surface-low" />
               </div>
             </div>
           </div>

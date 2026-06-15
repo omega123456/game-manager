@@ -54,7 +54,7 @@ export function ScriptList({
                   aria-label={`Edit ${script.name}`}
                   aria-current={active ? 'true' : undefined}
                   className={cn(
-                    'flex w-full flex-col gap-1.5 rounded-lg border px-3 py-2.5 text-left transition-colors',
+                    'flex w-full cursor-pointer flex-col gap-1.5 rounded-lg border px-3 py-2.5 text-left transition-colors',
                     active
                       ? 'border-primary/30 bg-primary/10'
                       : 'border-transparent hover:bg-surface-high'

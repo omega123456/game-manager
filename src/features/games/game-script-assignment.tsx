@@ -114,7 +114,7 @@ export function GameScriptAssignment({
                   aria-label={`Remove ${script.name}`}
                   disabled={disabled}
                   onClick={() => onRemove(script.id)}
-                  className="rounded-full p-0.5 text-muted-foreground transition-colors hover:bg-surface-highest hover:text-foreground"
+                  className="cursor-pointer rounded-full p-0.5 text-muted-foreground transition-colors hover:bg-surface-highest hover:text-foreground disabled:cursor-not-allowed"
                 >
                   <Icon name="close" className="text-[14px]" />
                 </button>

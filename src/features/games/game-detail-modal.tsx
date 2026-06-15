@@ -23,6 +23,7 @@ import { Icon } from '@/components/ui/icon'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { getLibraryMeta } from '@/features/games/library-format'
 import { GameEditForm } from '@/features/games/game-edit-form'
+import { GameDetailGroupsTab } from '@/features/games/game-detail-groups-tab'
 import { GameDetailScriptsTab } from '@/features/games/game-detail-scripts-tab'
 import { toCoverImageUrl } from '@/lib/asset-url'
 import { logFrontend } from '@/lib/app-log-commands'
@@ -30,7 +31,7 @@ import { useDeleteGameMutation, useGameQuery } from '@/lib/queries/use-games'
 import { cn } from '@/lib/utils'
 import { useUiStore } from '@/stores/ui-store'
 
-type GameDetailTab = 'overview' | 'edit' | 'scripts'
+type GameDetailTab = 'overview' | 'edit' | 'groups' | 'scripts'
 
 function closeDetailModal(): void {
   useUiStore.getState().setActiveOverlay('none')
@@ -98,7 +99,8 @@ function GameDetailModalInner({ selectedGameId }: GameDetailModalInnerProps): Re
               </p>
               <DialogTitle className="text-2xl">{game?.name ?? 'Loading game…'}</DialogTitle>
               <DialogDescription>
-                Tune launch details, script inheritance, and the resolved execution preview in one place.
+                Tune launch details, group membership, script inheritance, and the resolved
+                execution preview in one place.
               </DialogDescription>
             </div>
             <div className="flex items-center gap-1">
@@ -133,6 +135,7 @@ function GameDetailModalInner({ selectedGameId }: GameDetailModalInnerProps): Re
           <TabsList aria-label="Game detail tabs">
             <TabsTrigger value="overview">Overview</TabsTrigger>
             <TabsTrigger value="edit">Edit</TabsTrigger>
+            <TabsTrigger value="groups">Groups</TabsTrigger>
             <TabsTrigger value="scripts">Scripts</TabsTrigger>
           </TabsList>
         </div>
@@ -293,6 +296,10 @@ function GameDetailModalInner({ selectedGameId }: GameDetailModalInnerProps): Re
                 onSaved={() => setActiveTab('overview')}
               />
             ) : null}
+          </TabsContent>
+
+          <TabsContent value="groups" className="mt-0">
+            {game ? <GameDetailGroupsTab game={game} /> : null}
           </TabsContent>
 
           <TabsContent value="scripts" className="mt-0">

@@ -340,7 +340,7 @@ interface FieldProps {
 
 function Field({ label, htmlFor, children }: FieldProps): React.JSX.Element {
   return (
-    <label className="space-y-2.5" htmlFor={htmlFor}>
+    <label className="cursor-pointer space-y-2.5" htmlFor={htmlFor}>
       <span className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
         {label}
       </span>

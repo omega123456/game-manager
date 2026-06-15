@@ -1,14 +1,16 @@
-import type { Game } from '@/types/domain'
+import type { Game, Group } from '@/types/domain'
 import { Icon } from '@/components/ui/icon'
+import { GameCardGroups } from '@/features/games/game-card-groups'
 import { getLibraryMeta } from '@/features/games/library-format'
 import { toCoverImageUrl } from '@/lib/asset-url'
 
 export interface GameCardProps {
   game: Game
+  groups: Group[]
   onOpen?: (gameId: number) => void
 }
 
-export function GameCard({ game, onOpen }: GameCardProps): React.JSX.Element {
+export function GameCard({ game, groups, onOpen }: GameCardProps): React.JSX.Element {
   const meta = getLibraryMeta(game.totalPlaytimeSeconds, game.lastPlayedAt)
   const coverUrl = toCoverImageUrl(game.imagePath)
 
@@ -16,7 +18,7 @@ export function GameCard({ game, onOpen }: GameCardProps): React.JSX.Element {
     <article className="group overflow-hidden rounded-[1.4rem] border border-border bg-card shadow-sm transition-transform duration-200 hover:-translate-y-1 hover:shadow-lg">
       <button
         type="button"
-        className="block w-full text-left"
+        className="block w-full cursor-pointer text-left"
         onClick={() => onOpen?.(game.id)}
         aria-label={`Open ${game.name}`}
       >
@@ -49,20 +51,7 @@ export function GameCard({ game, onOpen }: GameCardProps): React.JSX.Element {
             <h2 className="font-heading text-lg font-bold text-card-foreground">{game.name}</h2>
             <p className="mt-1 text-sm text-muted-foreground">{meta.playtime}</p>
           </div>
-          <dl className="grid grid-cols-2 gap-2 text-xs text-muted-foreground">
-            <div className="rounded-xl bg-surface-low p-3">
-              <dt className="uppercase tracking-[0.18em]">Monitor</dt>
-              <dd className="mt-2 text-sm font-medium capitalize text-foreground">
-                {game.monitorMode}
-              </dd>
-            </div>
-            <div className="rounded-xl bg-surface-low p-3">
-              <dt className="uppercase tracking-[0.18em]">Launch target</dt>
-              <dd className="mt-2 truncate text-sm font-medium text-foreground">
-                {game.launchTarget.split(/[\\/]/).pop() ?? game.launchTarget}
-              </dd>
-            </div>
-          </dl>
+          <GameCardGroups groupIds={game.groupIds} groups={groups} />
         </div>
       </button>
     </article>

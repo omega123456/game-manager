@@ -105,7 +105,12 @@ export function LibraryRouteContent(): React.JSX.Element {
           {!gamesQuery.isLoading && visibleGames.length > 0 ? (
             <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4" data-testid="library-grid">
               {visibleGames.map((game) => (
-                <GameCard key={game.id} game={game} onOpen={openGame} />
+                <GameCard
+                  key={game.id}
+                  game={game}
+                  groups={groupsQuery.data ?? []}
+                  onOpen={openGame}
+                />
               ))}
             </div>
           ) : null}

@@ -70,6 +70,10 @@ describe('LibraryRoute', () => {
     expect(screen.getByText('2.0 hrs')).toBeInTheDocument()
     expect(screen.getByText('14 Jun 2026')).toBeInTheDocument()
     expect(screen.getByText('Never launched')).toBeInTheDocument()
+    expect(screen.getByText('HDR Games')).toBeInTheDocument()
+    expect(screen.getByText('Deck Verified')).toBeInTheDocument()
+    expect(screen.queryByText('Monitor')).not.toBeInTheDocument()
+    expect(screen.queryByText('Launch target')).not.toBeInTheDocument()
   })
 
   it('filters from the TopBar search and sorts by the selected option', async () => {

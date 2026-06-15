@@ -211,7 +211,7 @@ export function ScriptEditorPanel({
       </header>
 
       <div className="grid gap-4 sm:grid-cols-2">
-        <label className="space-y-1.5" htmlFor="script-name">
+        <label className="cursor-pointer space-y-1.5" htmlFor="script-name">
           <span className="text-sm font-medium text-foreground">Name</span>
           <Input
             id="script-name"
@@ -219,7 +219,7 @@ export function ScriptEditorPanel({
             onChange={(event) => setDraft((c) => ({ ...c, name: event.target.value }))}
           />
         </label>
-        <label className="space-y-1.5" htmlFor="script-description">
+        <label className="cursor-pointer space-y-1.5" htmlFor="script-description">
           <span className="text-sm font-medium text-foreground">Description</span>
           <Input
             id="script-description"
@@ -249,7 +249,7 @@ export function ScriptEditorPanel({
                 aria-label={`${option.label} kind`}
                 onClick={() => setDraft((c) => ({ ...c, kind: option.value as ScriptKind }))}
                 className={cn(
-                  'rounded-lg border p-3 text-left transition-colors',
+                  'cursor-pointer rounded-lg border p-3 text-left transition-colors',
                   active
                     ? 'border-primary/40 bg-primary/10'
                     : 'border-border bg-surface-low hover:border-primary/20'

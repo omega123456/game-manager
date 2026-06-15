@@ -139,6 +139,7 @@ describe('GameDetailModal', () => {
 
     const dialog = await screen.findByRole('dialog')
     expect(within(dialog).getByRole('tab', { name: 'Overview' })).toBeInTheDocument()
+    expect(within(dialog).getByRole('tab', { name: 'Groups' })).toBeInTheDocument()
     expect(
       within(dialog).getByRole('button', { name: 'Launch available in Phase E' })
     ).toBeDisabled()
@@ -154,7 +155,7 @@ describe('GameDetailModal', () => {
     })
   })
 
-  it('updates direct scripts and group membership from the scripts tab', async () => {
+  it('updates direct scripts from the scripts tab', async () => {
     installGameMocks()
     const user = userEvent.setup()
 
@@ -170,6 +171,18 @@ describe('GameDetailModal', () => {
       expect(ipc.calls('set_game_scripts')).toHaveLength(1)
     })
     expect(ipc.calls('set_game_scripts')[0]).toEqual({ gameId: 1, scriptIds: [2, 4] })
+  })
+
+  it('updates group membership from the groups tab', async () => {
+    installGameMocks()
+    const user = userEvent.setup()
+
+    renderWithProviders(<AppRoutes />, { route: '/library' })
+
+    await screen.findByText('Alan Wake 2')
+    await user.click(screen.getByRole('button', { name: 'Open Alan Wake 2' }))
+    await user.click(await screen.findByRole('tab', { name: 'Groups' }))
+    expect(await screen.findByTestId('game-detail-groups-tab')).toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: 'Add group' }))
     await user.click(await screen.findByRole('option', { name: 'Deck Verified' }))
@@ -231,13 +244,14 @@ describe('GameDetailModal', () => {
 
     await screen.findByText('Alan Wake 2')
     await user.click(screen.getByRole('button', { name: 'Open Alan Wake 2' }))
-    await user.click(await screen.findByRole('tab', { name: 'Scripts' }))
+    await user.click(await screen.findByRole('tab', { name: 'Groups' }))
+    const groupsTab = await screen.findByTestId('game-detail-groups-tab')
 
     await user.click(screen.getByRole('button', { name: 'Add group' }))
     await user.click(await screen.findByRole('option', { name: 'Deck Verified' }))
 
-    expect(await screen.findByText('Deck Verified')).toBeInTheDocument()
-    expect(screen.getByLabelText('Remove HDR Games')).toBeDisabled()
+    expect(await within(groupsTab).findByText('Deck Verified')).toBeInTheDocument()
+    expect(within(groupsTab).getByLabelText('Remove HDR Games')).toBeDisabled()
 
     releaseFirstMutation?.()
     await waitFor(() => {
@@ -263,7 +277,8 @@ describe('GameDetailModal', () => {
 
     await screen.findByText('Alan Wake 2')
     await user.click(screen.getByRole('button', { name: 'Open Alan Wake 2' }))
-    await user.click(await screen.findByRole('tab', { name: 'Scripts' }))
+    await user.click(await screen.findByRole('tab', { name: 'Groups' }))
+    const groupsTab = await screen.findByTestId('game-detail-groups-tab')
 
     await user.click(screen.getByRole('button', { name: 'Add group' }))
     await user.click(await screen.findByRole('option', { name: 'Deck Verified' }))
@@ -272,9 +287,9 @@ describe('GameDetailModal', () => {
       expect(ipc.calls('set_game_groups')).toHaveLength(1)
     })
     await waitFor(() => {
-      expect(screen.queryByText('Deck Verified')).not.toBeInTheDocument()
+      expect(within(groupsTab).queryByText('Deck Verified')).not.toBeInTheDocument()
     })
-    expect(screen.getByText('HDR Games')).toBeInTheDocument()
+    expect(within(groupsTab).getByText('HDR Games')).toBeInTheDocument()
   })
 
   it('edits and saves a game, deriving the monitor process name from the selected executable', async () => {

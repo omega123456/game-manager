@@ -129,7 +129,7 @@ export function PhaseBlock({
             aria-checked={activeTab === 'path'}
             onClick={selectPath}
             className={cn(
-              'rounded-md px-3 py-1 text-xs font-medium transition-colors',
+              'cursor-pointer rounded-md px-3 py-1 text-xs font-medium transition-colors',
               activeTab === 'path'
                 ? 'bg-primary/10 text-primary'
                 : 'text-muted-foreground hover:text-foreground'
@@ -143,7 +143,7 @@ export function PhaseBlock({
             aria-checked={activeTab === 'inline'}
             onClick={selectInline}
             className={cn(
-              'rounded-md px-3 py-1 text-xs font-medium transition-colors',
+              'cursor-pointer rounded-md px-3 py-1 text-xs font-medium transition-colors',
               activeTab === 'inline'
                 ? 'bg-primary/10 text-primary'
                 : 'text-muted-foreground hover:text-foreground'
@@ -203,7 +203,7 @@ export function PhaseBlock({
                       })
                     }
                     className={cn(
-                      'rounded-md px-3 py-1 text-xs font-medium transition-colors',
+                      'cursor-pointer rounded-md px-3 py-1 text-xs font-medium transition-colors',
                       active
                         ? 'bg-primary/10 text-primary'
                         : 'text-muted-foreground hover:text-foreground'

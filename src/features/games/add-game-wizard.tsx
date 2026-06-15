@@ -571,7 +571,7 @@ export function AddGameWizard(): React.JSX.Element {
                   <div className="flex-1 space-y-2">
                     <label
                       htmlFor="cover-search"
-                      className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground"
+                      className="cursor-pointer text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground"
                     >
                       Search title
                     </label>
@@ -676,7 +676,7 @@ export function AddGameWizard(): React.JSX.Element {
                           aria-selected={selected}
                           tabIndex={selected || index === 0 ? 0 : -1}
                           className={cn(
-                            'group overflow-hidden rounded-2xl border bg-card text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
+                            'group cursor-pointer overflow-hidden rounded-2xl border bg-card text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
                             selected
                               ? 'border-primary shadow-[0_0_0_1px_hsl(var(--primary))]'
                               : 'border-border'
@@ -752,7 +752,7 @@ export function AddGameWizard(): React.JSX.Element {
                   <div className="space-y-2">
                     <label
                       htmlFor="game-name"
-                      className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground"
+                      className="cursor-pointer text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground"
                     >
                       Game name
                     </label>
@@ -769,7 +769,7 @@ export function AddGameWizard(): React.JSX.Element {
                   <div className="space-y-2">
                     <label
                       htmlFor="launch-target"
-                      className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground"
+                      className="cursor-pointer text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground"
                     >
                       Launch target
                     </label>
@@ -785,7 +785,7 @@ export function AddGameWizard(): React.JSX.Element {
                   <div className="space-y-2">
                     <label
                       htmlFor="launch-arguments"
-                      className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground"
+                      className="cursor-pointer text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground"
                     >
                       Launch arguments
                     </label>

@@ -29,6 +29,26 @@ for (const theme of THEMES) {
     await gotoApp(page)
     await setTheme(page, theme)
     await page.getByRole('heading', { name: 'Your collection' }).waitFor({ state: 'visible' })
+    await page.getByTestId('library-grid').waitFor({ state: 'visible' })
+    await page.getByRole('button', { name: 'Open Alan Wake 2' }).waitFor({ state: 'visible' })
+    await page.evaluate(async () => {
+      const images = Array.from(
+        document.querySelectorAll<HTMLImageElement>('[data-testid="library-grid"] img')
+      )
+      await Promise.all(
+        images.map(
+          (image) =>
+            new Promise<void>((resolve) => {
+              if (image.complete) {
+                resolve()
+                return
+              }
+              image.addEventListener('load', () => resolve(), { once: true })
+              image.addEventListener('error', () => resolve(), { once: true })
+            })
+        )
+      )
+    })
     await scrollRouteOutletToTop(page)
     await expect(page).toHaveScreenshot(`library-grid-${theme}.png`)
   })
@@ -104,6 +124,15 @@ for (const theme of THEMES) {
     await page.getByRole('tab', { name: 'Edit' }).click()
     await page.getByTestId('game-detail-edit').waitFor({ state: 'visible' })
     await expect(page).toHaveScreenshot(`game-detail-edit-${theme}.png`)
+  })
+
+  test(`game detail groups — ${theme}`, async ({ page }) => {
+    await gotoApp(page)
+    await setTheme(page, theme)
+    await page.getByRole('button', { name: 'Open Alan Wake 2' }).click()
+    await page.getByRole('tab', { name: 'Groups' }).click()
+    await page.getByTestId('game-detail-groups-tab').waitFor({ state: 'visible' })
+    await expect(page).toHaveScreenshot(`game-detail-groups-${theme}.png`)
   })
 
   test(`game detail scripts — ${theme}`, async ({ page }) => {

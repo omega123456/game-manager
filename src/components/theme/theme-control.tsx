@@ -39,7 +39,7 @@ export function ThemeControl(): React.JSX.Element {
                   aria-label={option.label}
                   onClick={() => setTheme(option.value)}
                   className={cn(
-                    'flex h-7 w-7 items-center justify-center rounded-md transition-colors',
+                    'flex h-7 w-7 cursor-pointer items-center justify-center rounded-md transition-colors',
                     active
                       ? 'bg-primary/10 text-primary'
                       : 'text-muted-foreground hover:text-foreground'
@@ -73,7 +73,7 @@ export function ThemeControl(): React.JSX.Element {
                   aria-label={`${label} accent`}
                   onClick={() => setAccent(key)}
                   className={cn(
-                    'h-5 w-5 rounded-full border transition-transform hover:scale-110',
+                    'h-5 w-5 cursor-pointer rounded-full border transition-transform hover:scale-110',
                     active
                       ? 'border-foreground ring-2 ring-ring ring-offset-1 ring-offset-background'
                       : 'border-border'

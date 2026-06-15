@@ -71,7 +71,7 @@ export function DependencyPicker({
                 type="button"
                 aria-label={`Remove ${utility.name}`}
                 onClick={() => onRemove(utility.id)}
-                className="rounded-full p-0.5 text-muted-foreground transition-colors hover:bg-surface-highest hover:text-foreground"
+                className="cursor-pointer rounded-full p-0.5 text-muted-foreground transition-colors hover:bg-surface-highest hover:text-foreground"
               >
                 <Icon name="close" className="text-[14px]" />
               </button>

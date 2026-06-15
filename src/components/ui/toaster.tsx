@@ -91,7 +91,7 @@ function ToastItem({ tone, title, description, onDismiss }: ToastItemProps): Rea
         type="button"
         aria-label="Dismiss notification"
         onClick={onDismiss}
-        className="text-muted-foreground transition-colors hover:text-foreground"
+        className="cursor-pointer text-muted-foreground transition-colors hover:text-foreground"
       >
         <Icon name="close" className="text-[18px]" />
       </button>
