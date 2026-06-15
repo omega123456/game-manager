@@ -68,12 +68,22 @@ pub fn parse_grid_candidates(payload: &str) -> AppResult<Vec<ArtCandidate>> {
         .collect())
 }
 
-/// Search SteamGridDB for portrait grid art matching the provided name.
-pub fn search_grids(client: &Client, api_key: &str, name: &str) -> AppResult<Vec<ArtCandidate>> {
+#[cfg(feature = "test-utils")]
+fn test_endpoint_or_default(env_key: &str, default: &str) -> String {
+    std::env::var(env_key).unwrap_or_else(|_| default.to_string())
+}
+
+fn search_grids_with_endpoints(
+    client: &Client,
+    api_key: &str,
+    name: &str,
+    search_base_url: &str,
+    grid_base_url: &str,
+) -> AppResult<Vec<ArtCandidate>> {
     let headers = grid_headers(api_key)?;
     let encoded_name = urlencoding::encode(name.trim());
     let search_payload = client
-        .get(format!("{SEARCH_BASE_URL}/{encoded_name}"))
+        .get(format!("{search_base_url}/{encoded_name}"))
         .headers(headers.clone())
         .send()
         .map_err(|err| AppError::other(format!("SteamGridDB search request failed: {err}")))?
@@ -90,7 +100,7 @@ pub fn search_grids(client: &Client, api_key: &str, name: &str) -> AppResult<Vec
     };
 
     let grid_payload = client
-        .get(format!("{GRID_BASE_URL}/{game_id}"))
+        .get(format!("{grid_base_url}/{game_id}"))
         .headers(headers)
         .query(&[("dimensions", "600x900"), ("types", "static")])
         .send()
@@ -101,4 +111,22 @@ pub fn search_grids(client: &Client, api_key: &str, name: &str) -> AppResult<Vec
         .map_err(|err| AppError::other(format!("SteamGridDB grids response read failed: {err}")))?;
 
     parse_grid_candidates(&grid_payload)
+}
+
+/// Search SteamGridDB for portrait grid art matching the provided name.
+pub fn search_grids(client: &Client, api_key: &str, name: &str) -> AppResult<Vec<ArtCandidate>> {
+    #[cfg(feature = "test-utils")]
+    {
+        return search_grids_with_endpoints(
+            client,
+            api_key,
+            name,
+            &test_endpoint_or_default("GM_TEST_STEAMGRIDDB_SEARCH_BASE", SEARCH_BASE_URL),
+            &test_endpoint_or_default("GM_TEST_STEAMGRIDDB_GRID_BASE", GRID_BASE_URL),
+        );
+    }
+    #[cfg(not(feature = "test-utils"))]
+    {
+        search_grids_with_endpoints(client, api_key, name, SEARCH_BASE_URL, GRID_BASE_URL)
+    }
 }

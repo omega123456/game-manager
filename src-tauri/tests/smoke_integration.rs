@@ -15,6 +15,13 @@ fn app_state_exposes_app_name() {
 }
 
 #[test]
+fn app_state_new_uses_temp_app_data_dir() {
+    let state = AppState::new(game_manager_lib::db::connection::open_in_memory().unwrap());
+    assert_eq!(state.app_name(), "Game Manager");
+    assert!(state.app_data_dir().ends_with("game-manager"));
+}
+
+#[test]
 fn app_error_serializes_to_display_string() {
     let err = AppError::other("boom");
     assert_eq!(err.to_string(), "boom");
@@ -34,6 +41,18 @@ fn app_result_alias_carries_app_error() {
 
     let failed: AppResult<u8> = Err(AppError::other("nope"));
     assert!(failed.is_err());
+}
+
+#[test]
+fn app_state_with_db_runs_repository_callback() {
+    let state = AppState::in_memory().expect("in-memory state");
+    let count = state
+        .with_db(|conn| {
+            let count: i64 = conn.query_row("SELECT COUNT(*) FROM settings", [], |row| row.get(0))?;
+            Ok(count)
+        })
+        .expect("with_db callback");
+    assert_eq!(count, 0);
 }
 
 #[test]

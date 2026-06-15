@@ -5,11 +5,35 @@ use std::net::TcpListener;
 use std::path::PathBuf;
 use std::thread;
 
+struct EnvGuard {
+    key: &'static str,
+    previous: Option<String>,
+}
+
+impl EnvGuard {
+    fn set(key: &'static str, value: impl AsRef<str>) -> Self {
+        let previous = std::env::var(key).ok();
+        std::env::set_var(key, value.as_ref());
+        Self { key, previous }
+    }
+}
+
+impl Drop for EnvGuard {
+    fn drop(&mut self) {
+        if let Some(value) = &self.previous {
+            std::env::set_var(self.key, value);
+        } else {
+            std::env::remove_var(self.key);
+        }
+    }
+}
+
 use game_manager_lib::art::{cache, steam, steamgriddb};
 use game_manager_lib::commands::art::{
     cache_art_candidate_impl, fetch_metadata_impl, fetch_metadata_with_provider, search_art_impl,
     search_art_with_providers,
 };
+use game_manager_lib::domain::{ArtSource, MetadataResult};
 use game_manager_lib::commands::settings::set_setting_impl;
 use game_manager_lib::db::repo::logs;
 use game_manager_lib::state::AppState;
@@ -46,8 +70,17 @@ fn spawn_image_server(
     body: &'static [u8],
     content_type: &'static str,
 ) -> (String, thread::JoinHandle<()>) {
+    spawn_image_server_with_path("/cover.png", body, content_type)
+}
+
+fn spawn_image_server_with_path(
+    path: &str,
+    body: &'static [u8],
+    content_type: &'static str,
+) -> (String, thread::JoinHandle<()>) {
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let addr = listener.local_addr().unwrap();
+    let path = path.to_string();
     let handle = thread::spawn(move || {
         let (mut stream, _) = listener.accept().unwrap();
         let mut request_buf = [0_u8; 1024];
@@ -58,8 +91,45 @@ fn spawn_image_server(
         );
         stream.write_all(response.as_bytes()).unwrap();
         stream.write_all(body).unwrap();
+        let _ = path;
     });
-    (format!("http://{addr}/cover.png"), handle)
+    (format!("http://{addr}{path}"), handle)
+}
+
+fn spawn_fixture_server(
+    routes: &[(&str, &str)],
+    max_requests: usize,
+) -> (String, thread::JoinHandle<()>) {
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let addr = listener.local_addr().unwrap();
+    let routes: Vec<(String, String)> = routes
+        .iter()
+        .map(|(path, body)| ((*path).to_string(), (*body).to_string()))
+        .collect();
+    let handle = thread::spawn(move || {
+        for _ in 0..max_requests {
+            let (mut stream, _) = listener.accept().unwrap();
+            let mut request_buf = [0_u8; 4096];
+            let read = stream.read(&mut request_buf).unwrap_or(0);
+            let request = String::from_utf8_lossy(&request_buf[..read]);
+            let request_path = request
+                .lines()
+                .next()
+                .and_then(|line| line.split_whitespace().nth(1))
+                .unwrap_or("");
+            let body = routes
+                .iter()
+                .find(|(path, _)| request_path.starts_with(path))
+                .map(|(_, body)| body.clone())
+                .unwrap_or_else(|| "{}".to_string());
+            let response = format!(
+                "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                body.len()
+            );
+            stream.write_all(response.as_bytes()).unwrap();
+        }
+    });
+    (format!("http://{addr}"), handle)
 }
 
 #[test]
@@ -236,4 +306,375 @@ fn cache_art_candidate_rejects_unsafe_url_and_logs() {
 
     let messages = log_messages(&state);
     assert!(messages.contains(&"Art candidate cache rejected unsafe url".to_string()));
+}
+
+#[test]
+fn steamgriddb_search_grids_round_trips_through_mock_server() {
+    let (base, handle) = spawn_fixture_server(
+        &[
+            ("/search", fixture("steamgriddb-search")),
+            ("/grids/730", fixture("steamgriddb-grids")),
+        ],
+        2,
+    );
+    let _search = EnvGuard::set("GM_TEST_STEAMGRIDDB_SEARCH_BASE", format!("{base}/search"));
+    let _grid = EnvGuard::set("GM_TEST_STEAMGRIDDB_GRID_BASE", format!("{base}/grids"));
+    let client = reqwest::blocking::Client::new();
+    let candidates = steamgriddb::search_grids(&client, "sgdb-key", "Counter-Strike").unwrap();
+    handle.join().unwrap();
+
+    assert_eq!(candidates.len(), 2);
+    assert_eq!(candidates[0].provider_name, "SteamGridDB");
+}
+
+#[test]
+fn steamgriddb_search_grids_returns_empty_when_no_matches() {
+    let (base, handle) = spawn_fixture_server(&[("/search", r#"{"data":[]}"#)], 1);
+    let _search = EnvGuard::set("GM_TEST_STEAMGRIDDB_SEARCH_BASE", format!("{base}/search"));
+    let _grid = EnvGuard::set("GM_TEST_STEAMGRIDDB_GRID_BASE", format!("{base}/grids"));
+    let client = reqwest::blocking::Client::new();
+    let candidates = steamgriddb::search_grids(&client, "sgdb-key", "Missing Game").unwrap();
+    handle.join().unwrap();
+    assert!(candidates.is_empty());
+}
+
+#[test]
+fn steamgriddb_parse_errors_and_filters_invalid_grids() {
+    assert!(steamgriddb::parse_search_game_ids("{bad json").is_err());
+    assert!(steamgriddb::parse_grid_candidates("{bad json").is_err());
+
+    let client = reqwest::blocking::Client::new();
+    assert!(steamgriddb::search_grids(
+        &client,
+        "bad\nkey",
+        "x",
+    )
+    .is_err());
+
+    let filtered = steamgriddb::parse_grid_candidates(
+        r#"{"data":[{"id":1,"url":"https://cdn.example.test/x.png","width":0,"height":900}]}"#,
+    )
+    .unwrap();
+    assert!(filtered.is_empty());
+}
+
+#[test]
+fn steam_search_and_metadata_round_trip_through_mock_server() {
+    let (base, handle) = spawn_fixture_server(&[("/app-list", fixture("steam-app-list"))], 2);
+    let _steam = EnvGuard::set("GM_TEST_STEAM_APP_LIST_URL", format!("{base}/app-list"));
+    let client = reqwest::blocking::Client::new();
+
+    let candidates = steam::search_cover_candidates(&client, "steam-key", "hades").unwrap();
+    assert_eq!(candidates.len(), 2);
+    assert_eq!(candidates[0].source, ArtSource::Steam);
+
+    let metadata = steam::fetch_metadata(&client, "steam-key", "hades").unwrap();
+    handle.join().unwrap();
+    assert_eq!(
+        metadata,
+        Some(MetadataResult {
+            canonical_name: "Hades".to_string(),
+            source: ArtSource::Steam,
+        })
+    );
+}
+
+#[test]
+fn steam_fetch_metadata_returns_none_for_unknown_title() {
+    let (base, handle) = spawn_fixture_server(&[("/app-list", fixture("steam-app-list"))], 1);
+    let _steam = EnvGuard::set("GM_TEST_STEAM_APP_LIST_URL", format!("{base}/app-list"));
+    let client = reqwest::blocking::Client::new();
+    let metadata = steam::fetch_metadata(&client, "steam-key", "Totally Unknown Title").unwrap();
+    handle.join().unwrap();
+    assert!(metadata.is_none());
+}
+
+#[test]
+fn steam_parse_app_matches_respects_limit_and_partial_matches() {
+    let matches = steam::parse_app_matches(fixture("steam-app-list"), "ring", 1).unwrap();
+    assert_eq!(matches.len(), 1);
+    assert_eq!(matches[0].name, "ELDEN RING");
+
+    assert!(steam::parse_app_matches("{bad", "hades", 4).is_err());
+}
+
+#[test]
+fn search_art_impl_merges_provider_results_when_keys_are_set() {
+    let (state, _dir) = temp_state();
+    set_setting_impl(&state, "steamgriddb_api_key", "sgdb-key").unwrap();
+    set_setting_impl(&state, "steam_api_key", "steam-key").unwrap();
+
+    let sgdb_candidate = game_manager_lib::domain::ArtCandidate {
+        id: "sgdb-1".into(),
+        image_url: "https://cdn2.steamgriddb.com/grid/1.png".into(),
+        source: ArtSource::SteamGridDb,
+        width: 600,
+        height: 900,
+        provider_name: "SteamGridDB".into(),
+    };
+    let steam_candidate = game_manager_lib::domain::ArtCandidate {
+        id: "steam-1".into(),
+        image_url: "https://cdn.akamai.steamstatic.com/steam/apps/1/library_600x900.jpg".into(),
+        source: ArtSource::Steam,
+        width: 600,
+        height: 900,
+        provider_name: "Steam".into(),
+    };
+
+    let art = search_art_with_providers(
+        &state,
+        "  Hades  ",
+        &|_, _, _| Ok(vec![sgdb_candidate.clone()]),
+        &|_, _, _| Ok(vec![steam_candidate.clone()]),
+    )
+    .unwrap();
+    assert_eq!(art.len(), 2);
+    assert_eq!(art[0].id, sgdb_candidate.id);
+    assert_eq!(art[1].id, steam_candidate.id);
+}
+
+#[test]
+fn search_art_impl_returns_empty_for_blank_name() {
+    let (state, _dir) = temp_state();
+    assert!(search_art_impl(&state, "   ").unwrap().is_empty());
+}
+
+#[test]
+fn fetch_metadata_impl_uses_steam_match_and_blank_input_fallback() {
+    let (state, _dir) = temp_state();
+    set_setting_impl(&state, "steam_api_key", "steam-key").unwrap();
+
+    let metadata = fetch_metadata_with_provider(&state, "Hades", &|_, _, _| {
+        Ok(Some(MetadataResult {
+            canonical_name: "Hades".to_string(),
+            source: ArtSource::Steam,
+        }))
+    })
+    .unwrap();
+    assert_eq!(metadata.canonical_name, "Hades");
+    assert_eq!(metadata.source, ArtSource::Steam);
+
+    let blank = fetch_metadata_impl(&state, "   ").unwrap();
+    assert_eq!(blank.canonical_name, "");
+    assert_eq!(blank.source, ArtSource::Input);
+
+    let fallback = fetch_metadata_with_provider(&state, "Unknown", &|_, _, _| Ok(None)).unwrap();
+    assert_eq!(fallback.canonical_name, "Unknown");
+    assert_eq!(fallback.source, ArtSource::Input);
+}
+
+#[test]
+fn cache_art_candidate_impl_caches_allowed_local_image() {
+    let (state, dir) = temp_state();
+    let image_bytes = b"\x89PNG\r\n\x1a\nfakepng";
+    let (url, handle) = spawn_image_server(image_bytes, "image/png");
+
+    let cached = cache_art_candidate_impl(&state, &url).unwrap().unwrap();
+    handle.join().unwrap();
+
+    assert!(cached.contains("art-cache"));
+    assert_eq!(std::fs::read(&cached).unwrap(), image_bytes);
+    assert!(dir.path().join("art-cache").exists());
+}
+
+#[test]
+fn cache_art_candidate_impl_rejects_empty_url() {
+    let (state, _dir) = temp_state();
+    assert!(cache_art_candidate_impl(&state, "   ").unwrap().is_none());
+}
+
+#[test]
+fn cache_write_bytes_and_non_success_download_fail() {
+    let (_state, dir) = temp_state();
+    let url = "https://cdn.akamai.steamstatic.com/steam/apps/1/library_600x900.jpg";
+    let path = cache::write_bytes(dir.path(), url, b"\x89PNG\r\n\x1a\n", Some("image/png")).unwrap();
+    assert!(path.contains("art-cache"));
+
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let addr = listener.local_addr().unwrap();
+    let handle = thread::spawn(move || {
+        let (mut stream, _) = listener.accept().unwrap();
+        let mut request_buf = [0_u8; 1024];
+        let _ = stream.read(&mut request_buf);
+        stream
+            .write_all(b"HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
+            .unwrap();
+    });
+    let client = reqwest::blocking::Client::new();
+    let bad_url = format!("http://{addr}/missing.png");
+    let result = cache::cache_remote_image(&client, dir.path(), &bad_url);
+    handle.join().unwrap();
+    assert!(result.is_err());
+}
+
+#[test]
+fn search_art_impl_uses_default_provider_chain_with_mock_servers() {
+    let (sgdb_base, sgdb_handle) = spawn_fixture_server(
+        &[
+            ("/search", fixture("steamgriddb-search")),
+            ("/grids/730", fixture("steamgriddb-grids")),
+        ],
+        2,
+    );
+    let (steam_base, steam_handle) = spawn_fixture_server(&[("/app-list", fixture("steam-app-list"))], 2);
+    let _sgdb_search =
+        EnvGuard::set("GM_TEST_STEAMGRIDDB_SEARCH_BASE", format!("{sgdb_base}/search"));
+    let _sgdb_grid = EnvGuard::set("GM_TEST_STEAMGRIDDB_GRID_BASE", format!("{sgdb_base}/grids"));
+    let _steam = EnvGuard::set("GM_TEST_STEAM_APP_LIST_URL", format!("{steam_base}/app-list"));
+
+    let (state, _dir) = temp_state();
+    set_setting_impl(&state, "steamgriddb_api_key", "sgdb-key").unwrap();
+    set_setting_impl(&state, "steam_api_key", "steam-key").unwrap();
+
+    let art = search_art_impl(&state, "hades").unwrap();
+    let metadata = fetch_metadata_impl(&state, "hades").unwrap();
+
+    sgdb_handle.join().unwrap();
+    steam_handle.join().unwrap();
+
+    assert_eq!(art.len(), 4);
+    assert_eq!(metadata.canonical_name, "Hades");
+    assert_eq!(metadata.source, ArtSource::Steam);
+}
+
+#[test]
+fn cache_rejects_oversized_payload_and_accepts_jpeg_content_type() {
+    let (_state, dir) = temp_state();
+    let jpeg = b"\xFF\xD8\xFFjpeg-bytes";
+    let (url, handle) = spawn_image_server_with_path("/cover.jpg", jpeg, "image/jpeg");
+    let client = reqwest::blocking::Client::new();
+    let cached = cache::cache_remote_image(&client, dir.path(), &url).unwrap();
+    handle.join().unwrap();
+    assert!(cached.ends_with(".jpg"));
+
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let addr = listener.local_addr().unwrap();
+    let huge = vec![0x89_u8; 16 * 1024 * 1024 + 1];
+    let handle = thread::spawn(move || {
+        let (mut stream, _) = listener.accept().unwrap();
+        let mut request_buf = [0_u8; 1024];
+        let _ = stream.read(&mut request_buf);
+        let response = format!(
+            "HTTP/1.1 200 OK\r\nContent-Type: image/png\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+            huge.len()
+        );
+        stream.write_all(response.as_bytes()).unwrap();
+        stream.write_all(&huge).unwrap();
+    });
+    let huge_url = format!("http://{addr}/huge.png");
+    let result = cache::cache_remote_image(&client, dir.path(), &huge_url);
+    handle.join().unwrap();
+    assert!(result.is_err());
+}
+
+#[test]
+fn build_cache_path_uses_content_type_when_url_has_no_extension() {
+    let root = PathBuf::from("C:/cache-root");
+    let webp = cache::build_cache_path(
+        &root,
+        "https://cdn.akamai.steamstatic.com/steam/apps/1/library",
+        Some("image/webp"),
+    );
+    assert_eq!(webp.extension().and_then(|ext| ext.to_str()), Some("webp"));
+    let jpg = cache::build_cache_path(
+        &root,
+        "https://cdn.akamai.steamstatic.com/steam/apps/1/library",
+        Some("image/jpeg"),
+    );
+    assert_eq!(jpg.extension().and_then(|ext| ext.to_str()), Some("jpg"));
+    let fallback = cache::build_cache_path(
+        &root,
+        "https://cdn.akamai.steamstatic.com/steam/apps/1/library",
+        Some("image/gif"),
+    );
+    assert_eq!(fallback.extension().and_then(|ext| ext.to_str()), Some("img"));
+}
+
+#[test]
+fn cache_remote_image_rejects_json_content_type_even_with_bytes() {
+    let (_state, dir) = temp_state();
+    let (url, handle) = spawn_image_server(b"{\"not\":\"image\"}", "application/json");
+    let client = reqwest::blocking::Client::new();
+    let result = cache::cache_remote_image(&client, dir.path(), &url);
+    handle.join().unwrap();
+    assert!(result.is_err());
+}
+
+#[test]
+fn steam_parse_app_matches_prefers_exact_and_prefix_scores() {
+    let exact = steam::parse_app_matches(fixture("steam-app-list"), "Hades", 4).unwrap();
+    assert_eq!(exact[0].name, "Hades");
+
+    let prefix = steam::parse_app_matches(fixture("steam-app-list"), "Hollow", 4).unwrap();
+    assert_eq!(prefix[0].name, "Hollow Knight");
+}
+
+#[test]
+fn search_art_impl_skips_whitespace_only_api_keys() {
+    let (state, _dir) = temp_state();
+    set_setting_impl(&state, "steamgriddb_api_key", "   ").unwrap();
+    set_setting_impl(&state, "steam_api_key", "\t").unwrap();
+
+    let art = search_art_impl(&state, "Hades").unwrap();
+    assert!(art.is_empty());
+
+    let messages = log_messages(&state);
+    assert!(messages.contains(&"SteamGridDB art search skipped".to_string()));
+    assert!(messages.contains(&"Steam metadata fallback art search skipped".to_string()));
+}
+
+#[test]
+fn steamgriddb_and_steam_providers_surface_http_failures() {
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let addr = listener.local_addr().unwrap();
+    let handle = thread::spawn(move || {
+        for _ in 0..3 {
+            let (mut stream, _) = listener.accept().unwrap();
+            let mut buf = [0_u8; 1024];
+            let _ = stream.read(&mut buf);
+            stream
+                .write_all(
+                    b"HTTP/1.1 500 Internal Server Error\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
+                )
+                .unwrap();
+        }
+    });
+    let base = format!("http://{addr}");
+    let _search = EnvGuard::set("GM_TEST_STEAMGRIDDB_SEARCH_BASE", format!("{base}/search"));
+    let _grid = EnvGuard::set("GM_TEST_STEAMGRIDDB_GRID_BASE", format!("{base}/grids"));
+    let _steam = EnvGuard::set("GM_TEST_STEAM_APP_LIST_URL", format!("{base}/app-list"));
+    let client = reqwest::blocking::Client::new();
+
+    assert!(steamgriddb::search_grids(&client, "key", "x").is_err());
+    assert!(steam::search_cover_candidates(&client, "key", "x").is_err());
+    assert!(steam::fetch_metadata(&client, "key", "x").is_err());
+    handle.join().unwrap();
+}
+
+#[test]
+fn cache_art_candidate_impl_surfaces_download_failure() {
+    let (state, _dir) = temp_state();
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let addr = listener.local_addr().unwrap();
+    let handle = thread::spawn(move || {
+        let (mut stream, _) = listener.accept().unwrap();
+        let mut buf = [0_u8; 1024];
+        let _ = stream.read(&mut buf);
+        stream
+            .write_all(b"HTTP/1.1 500\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
+            .unwrap();
+    });
+    let url = format!("http://{addr}/cover.png");
+    let result = cache_art_candidate_impl(&state, &url);
+    handle.join().unwrap();
+    assert!(result.is_err());
+
+    let messages = log_messages(&state);
+    assert!(messages.contains(&"Art candidate cache write failed".to_string()));
+}
+
+#[test]
+fn validate_remote_art_url_allows_steam_subdomains() {
+    cache::validate_remote_art_url("https://cdn.akamai.steamstatic.com/steam/apps/730/library_600x900.jpg")
+        .unwrap();
 }

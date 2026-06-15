@@ -19,8 +19,17 @@ const ALLOWED_ART_HOST_SUFFIXES: &[&str] = &["steamstatic.com", "steamgriddb.com
 /// Maximum number of bytes we will persist for a single cached cover image.
 const MAX_ART_BYTES: usize = 16 * 1024 * 1024;
 
+#[cfg(feature = "test-utils")]
+fn is_test_localhost_host(host: &str) -> bool {
+    matches!(host, "127.0.0.1" | "localhost")
+}
+
 fn host_is_allowed(host: &str) -> bool {
     let host = host.trim().trim_end_matches('.').to_ascii_lowercase();
+    #[cfg(feature = "test-utils")]
+    if is_test_localhost_host(&host) {
+        return true;
+    }
     ALLOWED_ART_HOST_SUFFIXES.iter().any(|suffix| {
         host == *suffix || host.ends_with(&format!(".{suffix}"))
     })
@@ -35,16 +44,21 @@ pub fn validate_remote_art_url(url: &str) -> AppResult<()> {
     let parsed = Url::parse(url.trim())
         .map_err(|err| AppError::other(format!("invalid art url: {err}")))?;
 
+    let host = parsed
+        .host_str()
+        .ok_or_else(|| AppError::other("art url is missing a host"))?;
+
+    #[cfg(feature = "test-utils")]
+    if is_test_localhost_host(host) && parsed.scheme() == "http" {
+        return Ok(());
+    }
+
     if parsed.scheme() != "https" {
         return Err(AppError::other(format!(
             "rejected art url scheme: {}",
             parsed.scheme()
         )));
     }
-
-    let host = parsed
-        .host_str()
-        .ok_or_else(|| AppError::other("art url is missing a host"))?;
 
     if !host_is_allowed(host) {
         return Err(AppError::other(format!("art url host not allowed: {host}")));

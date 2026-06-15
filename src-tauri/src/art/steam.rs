@@ -106,21 +106,41 @@ pub fn cover_candidates(matches: &[SteamAppMatch]) -> Vec<ArtCandidate> {
         .collect()
 }
 
-/// Search Steam app metadata and synthesize 3:4 portrait fallback candidates.
-pub fn search_cover_candidates(
-    client: &Client,
-    api_key: &str,
-    name: &str,
-) -> AppResult<Vec<ArtCandidate>> {
-    let payload = client
-        .get(APP_LIST_URL)
+fn app_list_url() -> String {
+    #[cfg(feature = "test-utils")]
+    {
+        return test_endpoint_or_default("GM_TEST_STEAM_APP_LIST_URL", APP_LIST_URL);
+    }
+    #[cfg(not(feature = "test-utils"))]
+    {
+        APP_LIST_URL.to_string()
+    }
+}
+
+#[cfg(feature = "test-utils")]
+fn test_endpoint_or_default(env_key: &str, default: &str) -> String {
+    std::env::var(env_key).unwrap_or_else(|_| default.to_string())
+}
+
+fn fetch_app_list_payload(client: &Client, api_key: &str, app_list_url: &str) -> AppResult<String> {
+    client
+        .get(app_list_url)
         .query(&[("key", api_key.trim())])
         .send()
         .map_err(|err| AppError::other(format!("Steam app list request failed: {err}")))?
         .error_for_status()
         .map_err(|err| AppError::other(format!("Steam app list failed: {err}")))?
         .text()
-        .map_err(|err| AppError::other(format!("Steam app list response read failed: {err}")))?;
+        .map_err(|err| AppError::other(format!("Steam app list response read failed: {err}")))
+}
+
+/// Search Steam app metadata and synthesize 3:4 portrait fallback candidates.
+pub fn search_cover_candidates(
+    client: &Client,
+    api_key: &str,
+    name: &str,
+) -> AppResult<Vec<ArtCandidate>> {
+    let payload = fetch_app_list_payload(client, api_key, &app_list_url())?;
     let matches = parse_app_matches(&payload, name, 4)?;
     Ok(cover_candidates(&matches))
 }
@@ -131,15 +151,7 @@ pub fn fetch_metadata(
     api_key: &str,
     name: &str,
 ) -> AppResult<Option<MetadataResult>> {
-    let payload = client
-        .get(APP_LIST_URL)
-        .query(&[("key", api_key.trim())])
-        .send()
-        .map_err(|err| AppError::other(format!("Steam metadata request failed: {err}")))?
-        .error_for_status()
-        .map_err(|err| AppError::other(format!("Steam metadata lookup failed: {err}")))?
-        .text()
-        .map_err(|err| AppError::other(format!("Steam metadata response read failed: {err}")))?;
+    let payload = fetch_app_list_payload(client, api_key, &app_list_url())?;
     let matches = parse_app_matches(&payload, name, 1)?;
     Ok(matches.into_iter().next().map(|app| MetadataResult {
         canonical_name: app.name,
