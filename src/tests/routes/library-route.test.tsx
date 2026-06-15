@@ -54,14 +54,14 @@ describe('LibraryRoute', () => {
       { id: 2, name: 'Deck Verified', description: null, scriptIds: [], gameIds: [2] },
     ])
     ipc.override('get_game', (args) => GAMES.find((game) => game.id === args?.id) ?? null)
+    ipc.override('get_play_now_game', () => GAMES[1])
   })
 
   it('renders mocked games with hero, toolbar, and card metadata', async () => {
     renderWithProviders(<AppRoutes />, { route: '/library' })
 
-    expect(
-      await screen.findByRole('heading', { name: 'Your launch deck lives here.' })
-    ).toBeInTheDocument()
+    const hero = await screen.findByTestId('currently-playing-hero')
+    expect(within(hero).getByText('Continue Playing')).toBeInTheDocument()
     expect(await screen.findByRole('heading', { name: 'Your collection' })).toBeInTheDocument()
 
     const cards = await screen.findAllByRole('button', { name: /Open / })

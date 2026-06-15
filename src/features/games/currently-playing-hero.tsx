@@ -1,91 +1,161 @@
+import { useState } from 'react'
+
+import type { Game } from '@/types/domain'
 import { Icon } from '@/components/ui/icon'
 import { Button } from '@/components/ui/button'
-import { useGamesQuery } from '@/lib/queries/use-games'
-import { useUiStore } from '@/stores/ui-store'
+import { useGamesQuery, usePlayNowGameQuery } from '@/lib/queries/use-games'
 import { useLaunchStore } from '@/stores/launch-store'
-import { formatElapsed, phaseLabel } from '@/features/launch/launch-format'
+import { toCoverImageUrl } from '@/lib/asset-url'
+import { cancelActiveLaunch, launchGameById } from '@/features/launch/launch-controller'
+import { formatElapsed, formatLoggedPlaytime } from '@/features/launch/launch-format'
 
 /**
- * The "currently playing" hero. When a launch is active it surfaces the live
- * phase, the elapsed session timer, and a Manage shortcut into the game detail;
- * otherwise it shows the idle launch-deck state.
+ * The image-backed "currently playing" hero. While a launch is active it surfaces
+ * the live session timer with a Stop control; otherwise it offers the most
+ * recently played game as a "Continue Playing" target with a Play control. When
+ * there is nothing to continue (first start, or the last game was removed) the
+ * hero renders nothing.
  */
-export function CurrentlyPlayingHero(): React.JSX.Element {
+export function CurrentlyPlayingHero(): React.JSX.Element | null {
   const phase = useLaunchStore((s) => s.phase)
-  const gameId = useLaunchStore((s) => s.gameId)
-  const gameName = useLaunchStore((s) => s.gameName)
+  const activeGameId = useLaunchStore((s) => s.gameId)
+  const activeGameName = useLaunchStore((s) => s.gameName)
   const elapsedSeconds = useLaunchStore((s) => s.elapsedSeconds)
+  const cancelling = useLaunchStore((s) => s.cancelling)
 
   const gamesQuery = useGamesQuery()
-  const setActiveOverlay = useUiStore((s) => s.setActiveOverlay)
-  const setSelectedGameId = useUiStore((s) => s.setSelectedGameId)
+  const playNowQuery = usePlayNowGameQuery()
 
   const isActive = phase !== 'idle'
-  const activeGame = gamesQuery.data?.find((g) => g.id === gameId)
-  const displayName = gameName ?? activeGame?.name ?? 'Your game'
+  const activeGame = gamesQuery.data?.find((g) => g.id === activeGameId)
+  const game: Game | null = isActive
+    ? (activeGame ?? null)
+    : (playNowQuery.data ?? null)
 
-  const openManage = () => {
-    if (gameId === null) return
-    setSelectedGameId(gameId)
-    setActiveOverlay('detail')
+  // Nothing to show: no active session and no game to continue.
+  if (!isActive && game === null) {
+    return null
+  }
+
+  const displayName = isActive
+    ? (activeGameName ?? activeGame?.name ?? 'Your game')
+    : (game?.name ?? 'Your game')
+
+  return (
+    <HeroCard
+      game={game}
+      displayName={displayName}
+      isActive={isActive}
+      elapsedSeconds={elapsedSeconds}
+      cancelling={cancelling}
+      launchDisabled={gamesQuery.isLoading || playNowQuery.isLoading}
+    />
+  )
+}
+
+interface HeroCardProps {
+  game: Game | null
+  displayName: string
+  isActive: boolean
+  elapsedSeconds: number
+  cancelling: boolean
+  launchDisabled: boolean
+}
+
+function HeroCard({
+  game,
+  displayName,
+  isActive,
+  elapsedSeconds,
+  cancelling,
+  launchDisabled,
+}: HeroCardProps): React.JSX.Element {
+  const coverUrl = toCoverImageUrl(game?.imagePath)
+  const [failedCoverUrl, setFailedCoverUrl] = useState<string | null>(null)
+  const coverFailed = coverUrl !== null && failedCoverUrl === coverUrl
+  const showCover = coverUrl !== null && !coverFailed
+
+  const handlePlay = () => {
+    if (game) {
+      launchGameById(game.id, game.name)
+    }
   }
 
   return (
     <section
-      className="relative overflow-hidden rounded-[1.75rem] border border-border bg-surface-container p-6"
+      className="relative flex min-h-[20rem] flex-col justify-end overflow-hidden rounded-[1.75rem] border border-border bg-surface-container"
       data-testid="currently-playing-hero"
       data-active={isActive}
     >
-      <div className="absolute inset-x-0 top-0 h-24 bg-linear-to-r from-primary/20 via-secondary/10 to-transparent" />
-      <div className="relative flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
-        <div className="max-w-2xl space-y-4">
-          <span className="inline-flex items-center gap-2 rounded-full border border-primary/30 bg-primary/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.24em] text-primary">
+      {showCover ? (
+        <img
+          src={coverUrl}
+          alt={`${displayName} cover art`}
+          className="absolute inset-0 h-full w-full object-cover"
+          onError={() => {
+            if (coverUrl) {
+              setFailedCoverUrl(coverUrl)
+            }
+          }}
+        />
+      ) : (
+        <div
+          className="absolute inset-0 bg-linear-to-br from-primary/20 via-transparent to-secondary/15"
+          data-testid="hero-cover-fallback"
+        />
+      )}
+      <div className="absolute inset-0 bg-linear-to-t from-background/95 via-background/55 to-transparent" />
+
+      <div className="relative z-10 flex flex-col gap-6 p-6 sm:flex-row sm:items-end sm:justify-between">
+        <div className="max-w-2xl space-y-3">
+          <span className="inline-flex items-center gap-2 rounded-full border border-primary/30 bg-primary/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.2em] text-primary backdrop-blur">
             <Icon name="play_circle" className="text-[16px]" />
-            {isActive ? 'Currently Playing' : 'Launch deck'}
+            {isActive ? 'Currently Playing' : 'Continue Playing'}
           </span>
-          <div className="space-y-2">
-            <h1 className="font-heading text-3xl font-extrabold tracking-tight text-foreground sm:text-4xl">
-              {isActive ? displayName : 'Your launch deck lives here.'}
-            </h1>
-            <p className="max-w-xl text-sm text-muted-foreground sm:text-base">
-              {isActive
-                ? `${phaseLabel(phase)} — live session status and the elapsed timer update here as your scripts run.`
-                : 'Press Launch on any game to run its resolved script pipeline. Live launch status and the elapsed timer appear here.'}
-            </p>
-          </div>
+          <h1 className="font-heading text-3xl font-extrabold tracking-tight text-foreground drop-shadow-sm sm:text-4xl">
+            {displayName}
+          </h1>
+          <p className="flex items-center gap-2 text-sm text-muted-foreground sm:text-base">
+            <Icon name="schedule" className="text-[18px]" />
+            {isActive ? (
+              <span
+                className="font-mono font-semibold tabular-nums text-foreground"
+                data-testid="hero-session-timer"
+              >
+                {formatElapsed(elapsedSeconds)}
+              </span>
+            ) : (
+              <span data-testid="hero-session-timer">
+                {formatLoggedPlaytime(game?.totalPlaytimeSeconds ?? 0)} on record
+              </span>
+            )}
+          </p>
         </div>
 
-        <div className="grid gap-3 rounded-2xl border border-border bg-surface-low p-4 sm:min-w-80 sm:grid-cols-2">
-          <div>
-            <p className="text-xs font-medium uppercase tracking-[0.2em] text-muted-foreground">
-              Active game
-            </p>
-            <p className="mt-2 font-heading text-xl font-bold text-foreground">
-              {isActive ? displayName : 'No session active'}
-            </p>
-          </div>
-          <div>
-            <p className="text-xs font-medium uppercase tracking-[0.2em] text-muted-foreground">
-              Session timer
-            </p>
-            <p
-              className="mt-2 font-mono text-xl font-semibold tabular-nums text-foreground"
-              data-testid="hero-session-timer"
-            >
-              {isActive ? formatElapsed(elapsedSeconds) : '00:00'}
-            </p>
-          </div>
+        {isActive ? (
           <Button
             type="button"
-            variant="secondary"
-            disabled={!isActive}
-            onClick={openManage}
-            className="sm:col-span-2 sm:w-fit"
+            variant="destructive"
+            size="lg"
+            onClick={cancelActiveLaunch}
+            disabled={cancelling}
+            data-testid="hero-stop"
           >
-            <Icon name={isActive ? 'tune' : 'radio_button_unchecked'} className="text-[18px]" />
-            {isActive ? 'Manage session' : 'No active session'}
+            <Icon name="stop_circle" className="text-[20px]" />
+            {cancelling ? 'Stopping…' : 'Stop'}
           </Button>
-        </div>
+        ) : (
+          <Button
+            type="button"
+            size="lg"
+            onClick={handlePlay}
+            disabled={launchDisabled || game === null}
+            data-testid="hero-play"
+          >
+            <Icon name="play_arrow" className="text-[20px]" />
+            Play
+          </Button>
+        )}
       </div>
     </section>
   )
