@@ -13,6 +13,7 @@ use rusqlite::Connection;
 
 use crate::db::connection;
 use crate::error::{AppError, AppResult};
+use crate::keep_awake::{self, KeepAwake, NoopSleepBlocker, SleepBlocker};
 use crate::launch::cancel::CancelToken;
 
 /// Application state container injected into command implementations.
@@ -26,6 +27,8 @@ pub struct AppState {
     /// Registry of in-flight launches keyed by game id, holding each launch's
     /// cancellation token so `cancel_launch` can target a running launch.
     launches: Mutex<HashMap<i64, CancelToken>>,
+    /// Suppresses system sleep while any launch is registered.
+    keep_awake: KeepAwake,
 }
 
 impl AppState {
@@ -36,20 +39,32 @@ impl AppState {
 
     /// Construct an `AppState` with an explicit writable app-data directory.
     pub fn new_with_app_data_dir(db: Connection, app_data_dir: PathBuf) -> Self {
+        Self::with_blocker(db, app_data_dir, keep_awake::default_blocker())
+    }
+
+    /// Construct an `AppState` over an explicit sleep blocker (the seam used by
+    /// the constructors above and by `test-utils` to inject a recording fake).
+    fn with_blocker(db: Connection, app_data_dir: PathBuf, blocker: Box<dyn SleepBlocker>) -> Self {
         AppState {
             app_name: "Game Manager".to_string(),
             db: Mutex::new(db),
             app_data_dir,
             launches: Mutex::new(HashMap::new()),
+            keep_awake: KeepAwake::new(blocker),
         }
     }
 
     /// Construct an `AppState` backed by a fresh in-memory database.
     ///
     /// Used by tests and as a safe fallback. The connection is configured and
-    /// migrated by [`connection::open_in_memory`].
+    /// migrated by [`connection::open_in_memory`]. Uses a no-op sleep blocker so
+    /// tests never spawn the keep-awake worker or touch real OS sleep state.
     pub fn in_memory() -> AppResult<Self> {
-        Ok(AppState::new(connection::open_in_memory()?))
+        Ok(AppState::with_blocker(
+            connection::open_in_memory()?,
+            std::env::temp_dir().join("game-manager"),
+            Box::new(NoopSleepBlocker),
+        ))
     }
 
     /// The application name.
@@ -92,13 +107,22 @@ impl AppState {
             )));
         }
         launches.insert(game_id, token.clone());
+        drop(launches);
+        // Keep the machine awake for the duration of the launch.
+        self.keep_awake.acquire();
         Ok(token)
     }
 
     /// Remove the launch registration for `game_id` (called when it finishes).
     pub fn unregister_launch(&self, game_id: i64) {
-        if let Ok(mut launches) = self.launches.lock() {
-            launches.remove(&game_id);
+        let removed = match self.launches.lock() {
+            Ok(mut launches) => launches.remove(&game_id).is_some(),
+            Err(_) => false,
+        };
+        // Balance the `acquire` from `register_launch` only when we actually
+        // removed a registration, so sleep is restored once no launch remains.
+        if removed {
+            self.keep_awake.release();
         }
     }
 
@@ -119,6 +143,16 @@ impl AppState {
 
 #[cfg(feature = "test-utils")]
 impl AppState {
+    /// Construct an in-memory `AppState` over a caller-supplied sleep blocker so
+    /// tests can assert that launches engage/release the keep-awake controller.
+    pub fn in_memory_with_blocker(blocker: Box<dyn SleepBlocker>) -> AppResult<Self> {
+        Ok(AppState::with_blocker(
+            connection::open_in_memory()?,
+            std::env::temp_dir().join("game-manager"),
+            blocker,
+        ))
+    }
+
     /// Poison the launch-registry mutex so error paths can be exercised in tests.
     pub fn poison_launches_mutex_for_test(&self) {
         let poisoned = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {

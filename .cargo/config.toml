@@ -49,6 +49,8 @@ gm-test-integration = [
   "monitor_job_object_integration",
   "--test",
   "monitor_mode_selection_integration",
+  "--test",
+  "keep_awake_integration",
 ]
 
 gm-llvm-cov = [
@@ -99,6 +101,8 @@ gm-llvm-cov = [
   "monitor_job_object_integration",
   "--test",
   "monitor_mode_selection_integration",
+  "--test",
+  "keep_awake_integration",
   "--fail-under-lines",
   "90",
   "--fail-under-functions",

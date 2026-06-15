@@ -9,6 +9,7 @@ pub mod commands;
 pub mod db;
 pub mod domain;
 pub mod error;
+pub mod keep_awake;
 pub mod logging;
 pub mod launch;
 pub mod monitor;
