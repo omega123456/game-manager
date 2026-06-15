@@ -5,6 +5,7 @@
 //! the mutex-guarded SQLite connection (the single source of truth). The active
 //! launch registry is added in Phase E1.
 
+use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
 use rusqlite::Connection;
@@ -18,14 +19,22 @@ pub struct AppState {
     app_name: String,
     /// The single SQLite connection, mutex-guarded for cross-thread command access.
     db: Mutex<Connection>,
+    /// Writable application-data root for caches and other local assets.
+    app_data_dir: PathBuf,
 }
 
 impl AppState {
     /// Construct an `AppState` backed by the given connection.
     pub fn new(db: Connection) -> Self {
+        Self::new_with_app_data_dir(db, std::env::temp_dir().join("game-manager"))
+    }
+
+    /// Construct an `AppState` with an explicit writable app-data directory.
+    pub fn new_with_app_data_dir(db: Connection, app_data_dir: PathBuf) -> Self {
         AppState {
             app_name: "Game Manager".to_string(),
             db: Mutex::new(db),
+            app_data_dir,
         }
     }
 
@@ -40,6 +49,11 @@ impl AppState {
     /// The application name.
     pub fn app_name(&self) -> &str {
         &self.app_name
+    }
+
+    /// The writable application-data directory used for cached assets.
+    pub fn app_data_dir(&self) -> &Path {
+        &self.app_data_dir
     }
 
     /// Run `f` with a locked reference to the database connection.

@@ -1,11 +1,17 @@
 import '@testing-library/jest-dom'
 import { act, cleanup } from '@testing-library/react'
-import { afterEach } from 'vitest'
+import { afterEach, beforeEach } from 'vitest'
+import { mockConvertFileSrc } from '@tauri-apps/api/mocks'
 
 import { setupIpc } from './ipc-mock'
 
 // Register the centralized IPC mock hooks (beforeEach + afterEach) for all tests.
 setupIpc()
+
+// Make convertFileSrc deterministic so asset-url normalization is testable.
+beforeEach(() => {
+  mockConvertFileSrc('windows')
+})
 
 // ---------------------------------------------------------------------------
 // Polyfills for jsdom

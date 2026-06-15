@@ -5,7 +5,7 @@
 # llvm-cov run) so the suite is exercised by `pnpm test:rust` and the coverage gate.
 [alias]
 # Fast iteration: run all integration tests via nextest (no coverage instrumentation).
-gm-test-integration = "nextest run --test smoke_integration --test db_schema_integration --test db_repositories_integration --test db_connection_integration --test db_error_paths_integration --test logging_retention_integration --test settings_commands_integration"
+gm-test-integration = "nextest run --test smoke_integration --test db_schema_integration --test db_repositories_integration --test db_connection_integration --test db_error_paths_integration --test logging_retention_integration --test settings_commands_integration --test games_commands_integration --test art_commands_integration"
 
 # Coverage gate. Lines + functions are held at the project-mandated 90% (these
 # mirror the TypeScript Vitest gate of 90% lines/functions/statements). The

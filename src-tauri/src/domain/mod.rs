@@ -196,6 +196,18 @@ pub enum Provenance {
     Direct,
 }
 
+/// Provider/source for art candidates and metadata suggestions.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum ArtSource {
+    /// SteamGridDB portrait grid art.
+    SteamGridDb,
+    /// Steam metadata / header-art fallback.
+    Steam,
+    /// No remote provider succeeded; fall back to the raw input.
+    Input,
+}
+
 /// One configured phase of a normal/global script.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -350,6 +362,34 @@ pub struct ResolvedScript {
     pub order: i64,
     /// Names of required utilities sourced into this entry.
     pub required_utility_names: Vec<String>,
+}
+
+/// A selectable cover-art candidate for the Add Game flow.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ArtCandidate {
+    /// Provider-stable candidate id.
+    pub id: String,
+    /// Candidate image URL (remote until cached).
+    pub image_url: String,
+    /// Provider/source of the candidate.
+    pub source: ArtSource,
+    /// Pixel width of the candidate image.
+    pub width: i64,
+    /// Pixel height of the candidate image.
+    pub height: i64,
+    /// Provider display name for grouping/debugging.
+    pub provider_name: String,
+}
+
+/// Metadata autofill result for the Add Game flow.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MetadataResult {
+    /// Canonical/fallback name to seed into the wizard.
+    pub canonical_name: String,
+    /// Provider used to derive the name.
+    pub source: ArtSource,
 }
 
 /// An application log row.

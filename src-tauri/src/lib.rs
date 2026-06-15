@@ -4,6 +4,7 @@
 //! `*_impl(state: &AppState, ...)` + thin `#[tauri::command]` wrapper pattern so
 //! business logic is testable without the Tauri runtime.
 
+pub mod art;
 pub mod commands;
 pub mod db;
 pub mod domain;
@@ -43,6 +44,9 @@ pub fn run() {
         .setup(|app| {
             use tauri::Manager;
 
+            let app_data_dir = app.path().app_data_dir().map_err(|err| {
+                error::AppError::database(format!("app data dir unavailable: {err}"))
+            })?;
             let conn = match open_app_database(app.handle()) {
                 Ok(conn) => conn,
                 Err(err) => {
@@ -56,7 +60,7 @@ pub fn run() {
                 tracing::warn!(category = "logging", "startup retention failed: {err}");
             }
 
-            app.manage(AppState::new(conn));
+            app.manage(AppState::new_with_app_data_dir(conn, app_data_dir.clone()));
 
             // Daily retention loop on its own connection (the AppState connection
             // is mutex-guarded and owned by command handlers).
@@ -87,6 +91,16 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             commands::logging::log_frontend,
+            commands::games::list_games,
+            commands::games::get_game,
+            commands::games::create_game,
+            commands::games::update_game,
+            commands::games::delete_game,
+            commands::games::set_game_groups,
+            commands::games::set_game_scripts,
+            commands::art::search_art,
+            commands::art::fetch_metadata,
+            commands::art::cache_art_candidate,
             commands::settings::get_all_settings,
             commands::settings::get_setting,
             commands::settings::set_setting,

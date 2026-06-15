@@ -1,0 +1,22 @@
+{
+  "applist": {
+    "apps": [
+      {
+        "appid": 1245620,
+        "name": "ELDEN RING"
+      },
+      {
+        "appid": 367520,
+        "name": "Hollow Knight"
+      },
+      {
+        "appid": 1145360,
+        "name": "Hades II"
+      },
+      {
+        "appid": 1145350,
+        "name": "Hades"
+      }
+    ]
+  }
+}

@@ -1,0 +1,38 @@
+# Permissions for the games command surface.
+
+"$schema" = "../gen/schemas/desktop-schema.json"
+
+[[permission]]
+identifier = "allow-list-games"
+description = "Allows the frontend to list all games via list_games."
+commands.allow = ["list_games"]
+
+[[permission]]
+identifier = "allow-get-game"
+description = "Allows the frontend to read a single game via get_game."
+commands.allow = ["get_game"]
+
+[[permission]]
+identifier = "allow-create-game"
+description = "Allows the frontend to create a game via create_game."
+commands.allow = ["create_game"]
+
+[[permission]]
+identifier = "allow-update-game"
+description = "Allows the frontend to update a game via update_game."
+commands.allow = ["update_game"]
+
+[[permission]]
+identifier = "allow-delete-game"
+description = "Allows the frontend to delete a game via delete_game."
+commands.allow = ["delete_game"]
+
+[[permission]]
+identifier = "allow-set-game-groups"
+description = "Allows the frontend to replace a game's group ids via set_game_groups."
+commands.allow = ["set_game_groups"]
+
+[[permission]]
+identifier = "allow-set-game-scripts"
+description = "Allows the frontend to replace a game's directly assigned script ids via set_game_scripts."
+commands.allow = ["set_game_scripts"]

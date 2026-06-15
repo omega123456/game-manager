@@ -26,6 +26,9 @@ export type LaunchPhase = 'before' | 'waitingForProcess' | 'playing' | 'onExit' 
 /** Provenance of a resolved script entry. */
 export type Provenance = 'global' | 'group' | 'direct'
 
+/** Provider/source for art candidates and metadata suggestions. */
+export type ArtSource = 'steamGridDb' | 'steam' | 'input'
+
 /** One configured phase of a normal/global script (or a utility snippet). */
 export interface PhaseConfig {
   mode: PhaseMode
@@ -92,6 +95,22 @@ export interface ResolvedScript {
   /** 1-based order within the phase. */
   order: number
   requiredUtilityNames: string[]
+}
+
+/** A selectable cover-art candidate for the Add Game flow. */
+export interface ArtCandidate {
+  id: string
+  imageUrl: string
+  source: ArtSource
+  width: number
+  height: number
+  providerName: string
+}
+
+/** Metadata autofill result for the Add Game flow. */
+export interface MetadataResult {
+  canonicalName: string
+  source: ArtSource
 }
 
 /** Launch lifecycle event payload (emitted on `launch://*`). */

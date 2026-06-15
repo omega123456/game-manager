@@ -1,0 +1,13 @@
+{
+  "success": true,
+  "data": [
+    {
+      "id": 730,
+      "name": "Counter-Strike"
+    },
+    {
+      "id": 12345,
+      "name": "Counter-Strike Beta"
+    }
+  ]
+}

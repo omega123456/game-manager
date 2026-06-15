@@ -14,6 +14,7 @@ export function resetUiStore(): void {
     theme: 'system',
     accent: 'default',
     activeOverlay: 'none',
+    selectedGameId: null,
     searchQuery: '',
   })
 }

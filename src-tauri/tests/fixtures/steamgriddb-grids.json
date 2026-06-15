@@ -1,0 +1,17 @@
+{
+  "success": true,
+  "data": [
+    {
+      "id": 101,
+      "url": "https://cdn.example.test/steamgriddb/101.png",
+      "width": 600,
+      "height": 900
+    },
+    {
+      "id": 102,
+      "url": "https://cdn.example.test/steamgriddb/102.webp",
+      "width": 660,
+      "height": 990
+    }
+  ]
+}

@@ -1,0 +1,18 @@
+# Permissions for the art + metadata command surface.
+
+"$schema" = "../gen/schemas/desktop-schema.json"
+
+[[permission]]
+identifier = "allow-search-art"
+description = "Allows the frontend to search remote art candidates via search_art."
+commands.allow = ["search_art"]
+
+[[permission]]
+identifier = "allow-fetch-metadata"
+description = "Allows the frontend to fetch canonical metadata via fetch_metadata."
+commands.allow = ["fetch_metadata"]
+
+[[permission]]
+identifier = "allow-cache-art-candidate"
+description = "Allows the frontend to persist a selected remote art candidate via cache_art_candidate."
+commands.allow = ["cache_art_candidate"]

@@ -6,5 +6,7 @@
 //! `permissions/*.toml` + `capabilities/default.json`. Phase A2 ships only the
 //! logging command; domain commands land in later phases.
 
+pub mod art;
+pub mod games;
 pub mod logging;
 pub mod settings;

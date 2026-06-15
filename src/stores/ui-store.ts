@@ -28,11 +28,13 @@ export interface UiState {
   theme: ThemePreference
   accent: AccentKey
   activeOverlay: ActiveOverlay
+  selectedGameId: number | null
   /** Library/global search query, driven by the TopBar search input. */
   searchQuery: string
   setTheme: (theme: ThemePreference) => void
   setAccent: (accent: AccentKey) => void
   setActiveOverlay: (overlay: ActiveOverlay) => void
+  setSelectedGameId: (gameId: number | null) => void
   setSearchQuery: (query: string) => void
 }
 
@@ -40,9 +42,11 @@ export const useUiStore = create<UiState>((set) => ({
   theme: 'system',
   accent: 'default',
   activeOverlay: 'none',
+  selectedGameId: null,
   searchQuery: '',
   setTheme: (theme) => set({ theme }),
   setAccent: (accent) => set({ accent }),
   setActiveOverlay: (activeOverlay) => set({ activeOverlay }),
+  setSelectedGameId: (selectedGameId) => set({ selectedGameId }),
   setSearchQuery: (searchQuery) => set({ searchQuery }),
 }))

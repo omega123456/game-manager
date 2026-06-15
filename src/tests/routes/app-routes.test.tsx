@@ -10,7 +10,7 @@ describe('AppRoutes', () => {
 
   it('renders the Library route by default', async () => {
     renderWithProviders(<AppRoutes />, { route: '/' })
-    expect(await screen.findByRole('heading', { name: 'Game Library' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'Your collection' })).toBeInTheDocument()
   })
 
   it('navigates between all four destinations and highlights the active item', async () => {
@@ -32,7 +32,7 @@ describe('AppRoutes', () => {
   it('redirects unknown paths to the library', async () => {
     renderWithProviders(<AppRoutes />, { route: '/does-not-exist' })
     await waitFor(() =>
-      expect(screen.getByRole('heading', { name: 'Game Library' })).toBeInTheDocument()
+      expect(screen.getByRole('heading', { name: 'Your collection' })).toBeInTheDocument()
     )
   })
 })

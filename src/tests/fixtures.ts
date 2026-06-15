@@ -17,6 +17,7 @@ export const IPC_FIXTURES: Record<string, IpcHandler> = {
   //     level; included for completeness) ---
   'plugin:event|listen': (args) => args?.handler ?? null,
   'plugin:event|unlisten': () => null,
+  'plugin:dialog|open': () => null,
 
   // --- Logging (backend command lands in Phase A2) ---
   log_frontend: () => undefined,
@@ -27,4 +28,23 @@ export const IPC_FIXTURES: Record<string, IpcHandler> = {
   set_setting: () => undefined,
   get_all_settings: () => [],
   get_setting: () => null,
+
+  // --- Games. Phase B1 introduces the backend + wrappers; defaults keep the
+  //     harness quiet until tests override specific flows. ---
+  list_games: () => [],
+  get_game: () => null,
+  create_game: (args) => args?.input,
+  update_game: (args) => ({ id: args?.id, ...(args?.input as object) }),
+  delete_game: () => undefined,
+  set_game_groups: (args) => args?.groupIds ?? [],
+  set_game_scripts: (args) => args?.scriptIds ?? [],
+
+  // --- Art + metadata. Phase B3 adds the backend used by the future Add Game
+  //     wizard. Defaults stay deterministic and cheap. ---
+  search_art: () => [],
+  fetch_metadata: (args) => ({
+    canonicalName: String(args?.name ?? ''),
+    source: 'input',
+  }),
+  cache_art_candidate: () => null,
 }
