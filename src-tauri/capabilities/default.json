@@ -6,6 +6,7 @@
   "permissions": [
     "core:default",
     "dialog:default",
+    "window-state:default",
     "allow-log-frontend",
     "allow-list-games",
     "allow-get-game",
@@ -22,6 +23,7 @@
     "allow-update-group",
     "allow-delete-group",
     "allow-set-group-scripts",
+    "allow-set-group-games",
     "allow-list-scripts",
     "allow-get-script",
     "allow-create-script",

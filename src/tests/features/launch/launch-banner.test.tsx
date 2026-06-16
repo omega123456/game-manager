@@ -146,6 +146,7 @@ describe('LaunchBanner (event-driven)', () => {
     const cancel = await screen.findByTestId('launch-banner-cancel')
 
     await user.click(cancel)
+    await user.click(await screen.findByTestId('cancel-launch-confirm-action'))
 
     await waitFor(() => expect(ipc.calls('cancel_launch')).toEqual([{ gameId: 1 }]))
     expect(screen.getByTestId('launch-banner-cancel')).toHaveTextContent('Cancelling…')
@@ -160,6 +161,7 @@ describe('LaunchBanner (event-driven)', () => {
     const cancel = await screen.findByTestId('launch-banner-cancel')
 
     await user.click(cancel)
+    await user.click(await screen.findByTestId('cancel-launch-confirm-action'))
 
     await waitFor(() => expect(ipc.calls('cancel_launch')).toEqual([{ gameId: 1 }]))
     expect(screen.getByTestId('launch-banner-cancel')).toHaveTextContent('Cancelling…')

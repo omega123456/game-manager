@@ -9,6 +9,7 @@ import {
   useDeleteGroupMutation,
   useGroupQuery,
   useGroupsQuery,
+  useSetGroupGamesMutation,
   useSetGroupScriptsMutation,
   useUpdateGroupMutation,
 } from '@/lib/queries/use-groups'
@@ -211,6 +212,49 @@ describe('group mutations', () => {
 
     await expect(
       mutation.result.current.mutateAsync({ groupId: 1, scriptIds: [8] })
+    ).rejects.toThrow('save failed')
+
+    expect(client.getQueryData(GROUPS_QUERY_KEY)).toEqual([GROUP_ROW])
+    expect(client.getQueryData(groupDetailQueryKey(1))).toEqual(GROUP_ROW)
+  })
+
+  it('updates cached group games immediately and refreshes dependent game data', async () => {
+    let gamesVersion = 0
+    ipc.override('set_group_games', () => [2, 5])
+    ipc.override('list_games', () => {
+      gamesVersion += 1
+      return []
+    })
+
+    const { client, Wrapper } = createWrapper()
+    client.setQueryData(GROUPS_QUERY_KEY, [GROUP_ROW])
+    client.setQueryData(groupDetailQueryKey(1), GROUP_ROW)
+    client.setQueryData(GAMES_QUERY_KEY, [])
+
+    const gamesQuery = renderHook(() => useGamesQuery(), { wrapper: Wrapper })
+    const mutation = renderHook(() => useSetGroupGamesMutation(), { wrapper: Wrapper })
+
+    await mutation.result.current.mutateAsync({ groupId: 1, gameIds: [2, 5] })
+
+    expect(client.getQueryData(GROUPS_QUERY_KEY)).toEqual([{ ...GROUP_ROW, gameIds: [2, 5] }])
+    expect(client.getQueryData(groupDetailQueryKey(1))).toEqual({ ...GROUP_ROW, gameIds: [2, 5] })
+    await waitFor(() => expect(gamesVersion).toBeGreaterThan(0))
+    gamesQuery.unmount()
+  })
+
+  it('rolls back optimistic game ids when set_group_games fails', async () => {
+    ipc.override('set_group_games', () => {
+      throw new Error('save failed')
+    })
+
+    const { client, Wrapper } = createWrapper()
+    client.setQueryData(GROUPS_QUERY_KEY, [GROUP_ROW])
+    client.setQueryData(groupDetailQueryKey(1), GROUP_ROW)
+
+    const mutation = renderHook(() => useSetGroupGamesMutation(), { wrapper: Wrapper })
+
+    await expect(
+      mutation.result.current.mutateAsync({ groupId: 1, gameIds: [2, 5] })
     ).rejects.toThrow('save failed')
 
     expect(client.getQueryData(GROUPS_QUERY_KEY)).toEqual([GROUP_ROW])

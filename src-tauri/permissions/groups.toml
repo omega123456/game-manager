@@ -31,3 +31,8 @@ commands.allow = ["delete_group"]
 identifier = "allow-set-group-scripts"
 description = "Allows the frontend to replace a group's script assignments via set_group_scripts."
 commands.allow = ["set_group_scripts"]
+
+[[permission]]
+identifier = "allow-set-group-games"
+description = "Allows the frontend to replace a group's member games via set_group_games."
+commands.allow = ["set_group_games"]

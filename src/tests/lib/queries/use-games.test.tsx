@@ -212,6 +212,23 @@ describe('game mutations', () => {
     playNowQuery.unmount()
   })
 
+  it('refreshes the groups cache on game delete so cascaded membership drops', async () => {
+    const { Wrapper } = createWrapper()
+    let groupCalls = 0
+    ipc.override('list_groups', () => {
+      groupCalls += 1
+      return []
+    })
+
+    const groupsQuery = renderHook(() => useGroupsQuery(), { wrapper: Wrapper })
+    await waitFor(() => expect(groupCalls).toBe(1))
+    const mutation = renderHook(() => useDeleteGameMutation(), { wrapper: Wrapper })
+    await mutation.result.current.mutateAsync(1)
+
+    await waitFor(() => expect(groupCalls).toBeGreaterThan(1))
+    groupsQuery.unmount()
+  })
+
   it('rolls back optimistic group ids when set_game_groups fails', async () => {
     ipc.override('set_game_groups', () => {
       throw new Error('network down')

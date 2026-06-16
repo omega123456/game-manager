@@ -40,6 +40,17 @@ export function GroupManagerContent(): React.JSX.Element {
     () => new Map(groups.map((group) => [group.id, group.scriptIds.length])),
     [groups]
   )
+  const scriptNamesById = useMemo(() => {
+    const nameById = new Map((scriptsQuery.data ?? []).map((script) => [script.id, script.name]))
+    return new Map(
+      groups.map((group) => [
+        group.id,
+        group.scriptIds
+          .map((id) => nameById.get(id))
+          .filter((name): name is string => Boolean(name)),
+      ])
+    )
+  }, [groups, scriptsQuery.data])
 
   const editorKey =
     selection.mode === 'edit' ? `edit-${selection.id}` : selection.mode === 'new' ? 'new' : 'none'
@@ -52,6 +63,7 @@ export function GroupManagerContent(): React.JSX.Element {
         selectedId={selectedId}
         gameCountByGroupId={groupCountById}
         scriptCountByGroupId={scriptCountById}
+        scriptNamesByGroupId={scriptNamesById}
         onSelect={(id) => setSelection({ mode: 'edit', id })}
         onNew={() => {
           setPendingSelectedGroup(null)

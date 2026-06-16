@@ -57,13 +57,15 @@ export function ResolvedScriptPreview({ scripts }: ResolvedScriptPreviewProps): 
                   {phaseScripts.map((script) => (
                     <article key={`${phase}-${script.scriptId}`} className="rounded-xl border border-border bg-card p-3">
                       <div className="flex items-start justify-between gap-3">
-                        <div>
-                          <p className="text-sm font-semibold text-foreground">{script.name}</p>
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-semibold text-foreground">{script.name}</p>
                           <p className="mt-1 text-xs uppercase tracking-[0.14em] text-muted-foreground">
                             Priority {script.priority}
                           </p>
                         </div>
-                        <Badge variant="outline">#{script.order}</Badge>
+                        <Badge variant="outline" className="shrink-0">
+                          #{script.order}
+                        </Badge>
                       </div>
                       <div className="mt-3 flex flex-wrap gap-2">
                         <Badge variant="muted">{provenanceLabel(script)}</Badge>

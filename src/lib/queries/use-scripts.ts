@@ -10,6 +10,7 @@ import {
   updateScript,
   type SaveScriptInput,
 } from '@/lib/ipc/scripts-commands'
+import { GAMES_QUERY_KEY, GROUPS_QUERY_KEY } from '@/lib/queries/query-keys'
 import type { Script, ScriptKind } from '@/types/domain'
 
 export const SCRIPTS_QUERY_KEY = ['scripts'] as const
@@ -71,6 +72,10 @@ export function useDeleteScriptMutation() {
     mutationFn: (id: number) => deleteScript(id),
     onSuccess: (_value, id) => {
       invalidateScripts(queryClient, id)
+      // The DB cascade removes the script's game_scripts/group_scripts rows;
+      // refresh games and groups so their assignment lists drop it.
+      void queryClient.invalidateQueries({ queryKey: GAMES_QUERY_KEY })
+      void queryClient.invalidateQueries({ queryKey: GROUPS_QUERY_KEY })
     },
   })
 }

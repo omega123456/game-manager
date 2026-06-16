@@ -5,8 +5,8 @@
 
 use game_manager_lib::commands::games::{create_game_impl, set_game_groups_impl, GameUpsertInput};
 use game_manager_lib::commands::groups::{
-    create_group_impl, delete_group_impl, get_group_impl, list_groups_impl, set_group_scripts_impl,
-    update_group_impl, GroupUpsertInput,
+    create_group_impl, delete_group_impl, get_group_impl, list_groups_impl, set_group_games_impl,
+    set_group_scripts_impl, update_group_impl, GroupUpsertInput,
 };
 use game_manager_lib::commands::scripts::{create_script_impl, PhaseInput, ScriptUpsertInput};
 use game_manager_lib::domain::{Interpreter, MonitorMode, PhaseMode, ScriptKind};
@@ -164,6 +164,51 @@ fn set_group_scripts_errors_for_missing_group_or_script() {
 
     let script = create_script_impl(&state, normal_script_input("Auto HDR")).unwrap();
     let missing_group = set_group_scripts_impl(&state, 999, vec![script.id]).expect_err("group");
+    assert!(missing_group.to_string().contains("not found"));
+}
+
+#[test]
+fn set_group_games_persists_sorted_ids_and_dedupes() {
+    let state = state();
+    let group = create_group_impl(&state, group_input("HDR Games")).unwrap();
+    let game_a = create_game_impl(&state, game_input("Alan Wake 2")).unwrap();
+    let game_b = create_game_impl(&state, game_input("Balatro")).unwrap();
+
+    let saved =
+        set_group_games_impl(&state, group.id, vec![game_b.id, game_a.id, game_b.id]).unwrap();
+    assert_eq!(saved, vec![game_a.id, game_b.id]);
+
+    let hydrated = get_group_impl(&state, group.id).unwrap();
+    assert_eq!(hydrated.game_ids, vec![game_a.id, game_b.id]);
+
+    let game_a_after = game_manager_lib::commands::games::get_game_impl(&state, game_a.id).unwrap();
+    assert_eq!(game_a_after.group_ids, vec![group.id]);
+}
+
+#[test]
+fn set_group_games_replaces_existing_members() {
+    let state = state();
+    let group = create_group_impl(&state, group_input("HDR Games")).unwrap();
+    let game_a = create_game_impl(&state, game_input("Alan Wake 2")).unwrap();
+    let game_b = create_game_impl(&state, game_input("Balatro")).unwrap();
+
+    set_group_games_impl(&state, group.id, vec![game_a.id, game_b.id]).unwrap();
+    let saved = set_group_games_impl(&state, group.id, vec![game_b.id]).unwrap();
+    assert_eq!(saved, vec![game_b.id]);
+
+    let game_a_after = game_manager_lib::commands::games::get_game_impl(&state, game_a.id).unwrap();
+    assert!(game_a_after.group_ids.is_empty());
+}
+
+#[test]
+fn set_group_games_errors_for_missing_group_or_game() {
+    let state = state();
+    let group = create_group_impl(&state, group_input("HDR Games")).unwrap();
+    let missing_game = set_group_games_impl(&state, group.id, vec![999]).expect_err("game");
+    assert!(missing_game.to_string().contains("not found"));
+
+    let game = create_game_impl(&state, game_input("Alan Wake 2")).unwrap();
+    let missing_group = set_group_games_impl(&state, 999, vec![game.id]).expect_err("group");
     assert!(missing_group.to_string().contains("not found"));
 }
 

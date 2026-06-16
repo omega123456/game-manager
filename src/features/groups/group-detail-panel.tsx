@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 import {
   AlertDialog,
@@ -18,6 +18,7 @@ import { toastError, toastSuccess } from '@/lib/app-log-commands'
 import {
   useCreateGroupMutation,
   useDeleteGroupMutation,
+  useSetGroupGamesMutation,
   useSetGroupScriptsMutation,
   useUpdateGroupMutation,
 } from '@/lib/queries/use-groups'
@@ -57,30 +58,28 @@ export function GroupDetailPanel({
   const updateGroupMutation = useUpdateGroupMutation()
   const deleteGroupMutation = useDeleteGroupMutation()
   const setGroupScriptsMutation = useSetGroupScriptsMutation()
+  const setGroupGamesMutation = useSetGroupGamesMutation()
 
   const [draft, setDraft] = useState<DraftState>(() => buildDraft(group))
   const [nameError, setNameError] = useState<string | null>(null)
   const [deleteOpen, setDeleteOpen] = useState(false)
   const [optimisticScriptIds, setOptimisticScriptIds] = useState<number[] | null>(null)
   const [confirmedScriptIds, setConfirmedScriptIds] = useState<string | null>(null)
-
-  const memberGames = useMemo(() => {
-    if (!group) {
-      return []
-    }
-    return games
-      .filter((game) => group.gameIds.includes(game.id))
-      .sort((a, b) => a.name.localeCompare(b.name))
-  }, [games, group])
+  const [optimisticGameIds, setOptimisticGameIds] = useState<number[] | null>(null)
+  const [confirmedGameIds, setConfirmedGameIds] = useState<string | null>(null)
 
   const isPending =
     createGroupMutation.isPending ||
     updateGroupMutation.isPending ||
     deleteGroupMutation.isPending ||
-    setGroupScriptsMutation.isPending
+    setGroupScriptsMutation.isPending ||
+    setGroupGamesMutation.isPending
   const assignedScriptIds = optimisticScriptIds ?? group?.scriptIds ?? []
+  const memberGameIds = optimisticGameIds ?? group?.gameIds ?? []
   const groupScriptIdsSignature = buildIdsSignature(group?.scriptIds ?? [])
   const previousGroupScriptIdsSignature = useRef(groupScriptIdsSignature)
+  const groupGameIdsSignature = buildIdsSignature(group?.gameIds ?? [])
+  const previousGroupGameIdsSignature = useRef(groupGameIdsSignature)
 
   useEffect(() => {
     const groupScriptIdsChanged =
@@ -94,6 +93,18 @@ export function GroupDetailPanel({
     }
     previousGroupScriptIdsSignature.current = groupScriptIdsSignature
   }, [confirmedScriptIds, groupScriptIdsSignature, optimisticScriptIds])
+
+  useEffect(() => {
+    const groupGameIdsChanged = previousGroupGameIdsSignature.current !== groupGameIdsSignature
+    if (
+      optimisticGameIds &&
+      (groupGameIdsSignature === confirmedGameIds || groupGameIdsChanged)
+    ) {
+      setOptimisticGameIds(null)
+      setConfirmedGameIds(null)
+    }
+    previousGroupGameIdsSignature.current = groupGameIdsSignature
+  }, [confirmedGameIds, groupGameIdsSignature, optimisticGameIds])
 
   function updateField<K extends keyof DraftState>(key: K, value: DraftState[K]) {
     setDraft((current) => ({ ...current, [key]: value }))
@@ -193,9 +204,42 @@ export function GroupDetailPanel({
     }
   }
 
+  async function handleGameIds(nextGameIds: number[]): Promise<void> {
+    if (!group) {
+      return
+    }
+
+    if (setGroupGamesMutation.isPending) {
+      return
+    }
+
+    const previousGameIds = memberGameIds
+    setOptimisticGameIds(nextGameIds)
+    try {
+      const savedGameIds = await setGroupGamesMutation.mutateAsync({
+        groupId: group.id,
+        gameIds: nextGameIds,
+      })
+      setOptimisticGameIds(savedGameIds)
+      setConfirmedGameIds(buildIdsSignature(savedGameIds))
+    } catch (err) {
+      setOptimisticGameIds(previousGameIds)
+      setConfirmedGameIds(null)
+      const details = err instanceof Error ? err.message : String(err)
+      toastError('Could not update group games', {
+        description: group.name,
+        category: 'groups.games',
+        details,
+      })
+    }
+  }
+
   return (
-    <div className="h-full overflow-y-auto" data-testid="group-detail-panel">
-      <div className="mx-auto flex max-w-4xl flex-col gap-5 p-6">
+    <div
+      className="mx-auto h-full w-[min(1100px,70%)] overflow-y-auto p-8"
+      data-testid="group-detail-panel"
+    >
+      <div className="flex flex-col gap-5">
         <header className="flex items-start justify-between gap-4">
           <div>
             <h1 className="font-heading text-2xl font-semibold text-foreground">
@@ -206,16 +250,22 @@ export function GroupDetailPanel({
             </p>
           </div>
           {group ? (
-            <Button type="button" variant="outline" onClick={() => setDeleteOpen(true)}>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              aria-label="Delete group"
+              onClick={() => setDeleteOpen(true)}
+              className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+            >
               <Icon name="delete" className="text-[18px]" />
-              Delete group
             </Button>
           ) : null}
         </header>
 
         <section className="space-y-4 rounded-2xl border border-border bg-surface-low p-5">
-          <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
-            <label className="space-y-2">
+          <div className="space-y-4">
+            <label className="block space-y-2">
               <span className="text-sm font-medium text-foreground">Name</span>
               <Input
                 value={draft.name}
@@ -224,13 +274,12 @@ export function GroupDetailPanel({
                 aria-invalid={nameError ? 'true' : undefined}
               />
             </label>
-            <label className="space-y-2">
+            <label className="block space-y-2">
               <span className="text-sm font-medium text-foreground">Description</span>
               <Textarea
                 value={draft.description}
                 onChange={(event) => updateField('description', event.target.value)}
                 placeholder="Shared display and capture tweaks"
-                className="min-h-10"
               />
             </label>
           </div>
@@ -256,7 +305,15 @@ export function GroupDetailPanel({
                 )
               }
             />
-            <GroupMembers games={memberGames} />
+            <GroupMembers
+              games={games}
+              memberGameIds={memberGameIds}
+              disabled={setGroupGamesMutation.isPending}
+              onAssign={(gameId) => void handleGameIds([...memberGameIds, gameId])}
+              onRemove={(gameId) =>
+                void handleGameIds(memberGameIds.filter((currentId) => currentId !== gameId))
+              }
+            />
           </>
         ) : (
           <div

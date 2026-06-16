@@ -12,6 +12,8 @@ import {
   useSetScriptKindMutation,
   useUpdateScriptMutation,
 } from '@/lib/queries/use-scripts'
+import { useGamesQuery } from '@/lib/queries/use-games'
+import { useGroupsQuery } from '@/lib/queries/use-groups'
 import type { Script } from '@/types/domain'
 
 import { ipc } from '../../ipc-mock'
@@ -90,6 +92,40 @@ describe('script mutations', () => {
     await result.current.mutateAsync(3)
     await waitFor(() => expect(result.current.isSuccess).toBe(true))
     expect(ipc.calls('delete_script')).toEqual([{ id: 3 }])
+  })
+
+  it('refreshes games and groups on script delete so cascaded assignments drop', async () => {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    const Wrapper = ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={client}>{children}</QueryClientProvider>
+    )
+    let gameCalls = 0
+    let groupCalls = 0
+    ipc.override('list_games', () => {
+      gameCalls += 1
+      return []
+    })
+    ipc.override('list_groups', () => {
+      groupCalls += 1
+      return []
+    })
+
+    const consumers = renderHook(
+      () => {
+        useGamesQuery()
+        useGroupsQuery()
+      },
+      { wrapper: Wrapper }
+    )
+    await waitFor(() => expect(gameCalls).toBe(1))
+    await waitFor(() => expect(groupCalls).toBe(1))
+
+    const mutation = renderHook(() => useDeleteScriptMutation(), { wrapper: Wrapper })
+    await mutation.result.current.mutateAsync(3)
+
+    await waitFor(() => expect(gameCalls).toBeGreaterThan(1))
+    await waitFor(() => expect(groupCalls).toBeGreaterThan(1))
+    consumers.unmount()
   })
 
   it('sets dependencies', async () => {

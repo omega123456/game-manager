@@ -86,6 +86,7 @@ describe('CurrentlyPlayingHero', () => {
 
     const user = userEvent.setup()
     await user.click(screen.getByTestId('hero-stop'))
+    await user.click(await screen.findByTestId('cancel-launch-confirm-action'))
 
     await waitFor(() => {
       expect(ipc.calls('cancel_launch')).toContainEqual({ gameId: 1 })

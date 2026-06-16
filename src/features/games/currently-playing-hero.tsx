@@ -6,7 +6,8 @@ import { Button } from '@/components/ui/button'
 import { useGamesQuery, usePlayNowGameQuery } from '@/lib/queries/use-games'
 import { useLaunchStore } from '@/stores/launch-store'
 import { toCoverImageUrl } from '@/lib/asset-url'
-import { cancelActiveLaunch, launchGameById } from '@/features/launch/launch-controller'
+import { CancelLaunchConfirmDialog } from '@/features/launch/cancel-launch-confirm-dialog'
+import { launchGameById } from '@/features/launch/launch-controller'
 import { formatElapsed, formatLoggedPlaytime } from '@/features/launch/launch-format'
 
 /**
@@ -70,6 +71,7 @@ function HeroCard({
   cancelling,
   launchDisabled,
 }: HeroCardProps): React.JSX.Element {
+  const [confirmOpen, setConfirmOpen] = useState(false)
   const coverUrl = toCoverImageUrl(game?.imagePath)
   const [failedCoverUrl, setFailedCoverUrl] = useState<string | null>(null)
   const coverFailed = coverUrl !== null && failedCoverUrl === coverUrl
@@ -133,17 +135,26 @@ function HeroCard({
         </div>
 
         {isActive ? (
-          <Button
-            type="button"
-            variant="destructive"
-            size="lg"
-            onClick={cancelActiveLaunch}
-            disabled={cancelling}
-            data-testid="hero-stop"
-          >
-            <Icon name="stop_circle" className="text-[20px]" />
-            {cancelling ? 'Stopping…' : 'Stop'}
-          </Button>
+          <>
+            <Button
+              type="button"
+              variant="destructive"
+              size="lg"
+              onClick={() => setConfirmOpen(true)}
+              disabled={cancelling}
+              data-testid="hero-stop"
+            >
+              <Icon name="stop_circle" className="text-[20px]" />
+              {cancelling ? 'Stopping…' : 'Stop'}
+            </Button>
+            <CancelLaunchConfirmDialog
+              open={confirmOpen}
+              onOpenChange={setConfirmOpen}
+              gameName={displayName}
+              intent="stop-game"
+              cancelling={cancelling}
+            />
+          </>
         ) : (
           <Button
             type="button"

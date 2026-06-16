@@ -30,6 +30,16 @@ const games: Game[] = [
     createdAt: '2026-01-02T00:00:00Z',
     totalPlaytimeSeconds: 200,
   },
+  {
+    id: 3,
+    name: 'Celeste',
+    launchTarget: 'C:/Games/Celeste.exe',
+    monitorMode: 'tree',
+    groupIds: [],
+    scriptIds: [],
+    createdAt: '2026-01-03T00:00:00Z',
+    totalPlaytimeSeconds: 300,
+  },
 ]
 
 const groups: Group[] = [
@@ -112,6 +122,7 @@ function installGroupPageMocks() {
     }),
     delete_group: () => undefined,
     set_group_scripts: (args) => args?.scriptIds ?? [],
+    set_group_games: (args) => args?.gameIds ?? [],
   })
 }
 
@@ -154,7 +165,7 @@ describe('Group Manager', () => {
     expect(screen.getByDisplayValue('Accessibility')).toBeInTheDocument()
   })
 
-  it('edits a group and shows member games as read-only', async () => {
+  it('edits a group and lists its member games', async () => {
     installGroupPageMocks()
     const user = userEvent.setup()
     renderWithProviders(<AppRoutes />, { route: '/groups' })
@@ -164,7 +175,7 @@ describe('Group Manager', () => {
     expect(within(panel).getByDisplayValue('HDR Games')).toBeInTheDocument()
     expect(screen.getByTestId('group-members-list')).toBeInTheDocument()
     expect(screen.getByText('Alan Wake 2')).toBeInTheDocument()
-    expect(screen.getAllByText('Read only')).toHaveLength(2)
+    expect(screen.getByText('Balatro')).toBeInTheDocument()
 
     await user.clear(screen.getByLabelText('Description'))
     await user.type(screen.getByLabelText('Description'), 'Updated description')
@@ -199,6 +210,24 @@ describe('Group Manager', () => {
     expect(ipc.calls('set_group_scripts')[1]).toEqual({ groupId: 10, scriptIds: [4] })
   })
 
+  it('assigns and unassigns member games from the group', async () => {
+    installGroupPageMocks()
+    const user = userEvent.setup()
+    renderWithProviders(<AppRoutes />, { route: '/groups' })
+
+    await user.click(await screen.findByRole('button', { name: 'Edit HDR Games' }))
+    await user.click(await screen.findByRole('button', { name: 'Add game' }))
+
+    expect(await screen.findByRole('option', { name: 'Celeste' })).toBeInTheDocument()
+    await user.click(screen.getByRole('option', { name: 'Celeste' }))
+    await waitFor(() => expect(ipc.calls('set_group_games')).toHaveLength(1))
+    expect(ipc.calls('set_group_games')[0]).toEqual({ groupId: 10, gameIds: [1, 2, 3] })
+
+    await user.click(screen.getByLabelText('Remove Alan Wake 2'))
+    await waitFor(() => expect(ipc.calls('set_group_games')).toHaveLength(2))
+    expect(ipc.calls('set_group_games')[1]).toEqual({ groupId: 10, gameIds: [2, 3] })
+  })
+
   it('keeps optimistic group scripts visible while a script update is in flight', async () => {
     const resolveRef: { current: ((value: number[]) => void) | null } = { current: null }
     installGroupPageMocks()
@@ -217,8 +246,9 @@ describe('Group Manager', () => {
     await user.click(await screen.findByRole('button', { name: 'Add script' }))
     await user.click(await screen.findByRole('option', { name: 'Frame Guard' }))
 
-    expect(await screen.findByText('Frame Guard')).toBeInTheDocument()
-    expect(screen.getByLabelText('Remove Frame Guard')).toBeDisabled()
+    const detail = within(screen.getByTestId('group-detail-panel'))
+    expect(await detail.findByText('Frame Guard')).toBeInTheDocument()
+    expect(detail.getByLabelText('Remove Frame Guard')).toBeDisabled()
 
     resolveRef.current?.([2, 4])
     await waitFor(() => expect(ipc.calls('set_group_scripts')).toHaveLength(1))
@@ -242,10 +272,11 @@ describe('Group Manager', () => {
     await user.click(await screen.findByRole('option', { name: 'Frame Guard' }))
 
     await waitFor(() => expect(ipc.calls('set_group_scripts')).toHaveLength(1))
+    const detail = within(screen.getByTestId('group-detail-panel'))
     await waitFor(() => {
-      expect(screen.queryByText('Frame Guard')).not.toBeInTheDocument()
+      expect(detail.queryByText('Frame Guard')).not.toBeInTheDocument()
     })
-    expect(screen.getByText('Auto-Save Manager')).toBeInTheDocument()
+    expect(detail.getByText('Auto-Save Manager')).toBeInTheDocument()
   })
 
   it('deletes a group through the confirmation dialog', async () => {

@@ -5,6 +5,7 @@ import {
   deleteGroup,
   getGroup,
   listGroups,
+  setGroupGames,
   setGroupScripts,
   updateGroup,
 } from '@/lib/ipc/groups-commands'
@@ -60,5 +61,11 @@ describe('groups-commands', () => {
     ipc.override('set_group_scripts', () => [11, 12])
     await expect(setGroupScripts(3, [12, 11])).resolves.toEqual([11, 12])
     expect(ipc.calls('set_group_scripts')).toEqual([{ groupId: 3, scriptIds: [12, 11] }])
+  })
+
+  it('replaces group games', async () => {
+    ipc.override('set_group_games', () => [1, 4])
+    await expect(setGroupGames(7, [4, 1])).resolves.toEqual([1, 4])
+    expect(ipc.calls('set_group_games')).toEqual([{ groupId: 7, gameIds: [4, 1] }])
   })
 })

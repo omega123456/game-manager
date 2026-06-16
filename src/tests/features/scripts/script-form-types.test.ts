@@ -6,6 +6,7 @@ import {
   emptyPhase,
   newScriptDraft,
   phaseHasContent,
+  priorityTier,
   wouldCreateCycle,
 } from '@/features/scripts/script-form-types'
 
@@ -33,6 +34,17 @@ describe('phaseHasContent', () => {
   it('treats non-blank path/inline as content', () => {
     expect(phaseHasContent({ mode: 'path', path: 'a.ps1' })).toBe(true)
     expect(phaseHasContent({ mode: 'inline', inline: 'echo' })).toBe(true)
+  })
+})
+
+describe('priorityTier', () => {
+  it('maps low, medium, and high bands', () => {
+    expect(priorityTier(1)).toBe('low')
+    expect(priorityTier(3)).toBe('low')
+    expect(priorityTier(4)).toBe('medium')
+    expect(priorityTier(7)).toBe('medium')
+    expect(priorityTier(8)).toBe('high')
+    expect(priorityTier(10)).toBe('high')
   })
 })
 

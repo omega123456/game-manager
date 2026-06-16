@@ -1,5 +1,5 @@
 import * as React from 'react'
-import Editor, { loader } from '@monaco-editor/react'
+import Editor, { loader, type OnMount } from '@monaco-editor/react'
 
 import { cn } from '@/lib/utils'
 import type { Interpreter } from '@/types/domain'
@@ -20,6 +20,11 @@ function configureMonaco(): void {
 /** Map a script interpreter to the Monaco language id. */
 function interpreterLanguage(interpreter: Interpreter): string {
   return interpreter === 'batch' ? 'bat' : 'powershell'
+}
+
+/** Rebind F1 to a no-op so Monaco's Command Palette never opens. */
+const disableCommandPalette: OnMount = (editor, monaco) => {
+  editor.addCommand(monaco.KeyCode.F1, () => {})
 }
 
 export interface CodeEditorProps {
@@ -68,6 +73,7 @@ export function CodeEditor({
         theme={isDark ? 'vs-dark' : 'vs'}
         value={value}
         onChange={(next) => onChange(next ?? '')}
+        onMount={disableCommandPalette}
         options={{
           minimap: { enabled: false },
           fontSize: 13,

@@ -58,6 +58,56 @@ fn open_app_database(dir: &Path) -> error::AppResult<rusqlite::Connection> {
     db::connection::open(&dir.join("game-manager.db"))
 }
 
+/// Block browser-shell behaviors (page refresh, right-click menu, find-on-page,
+/// view-source, and — in release — DevTools) so the WebView behaves like a native
+/// app window rather than a browser.
+///
+/// DevTools shortcuts (F12 / Ctrl+Shift+I) stay live in debug builds so
+/// `pnpm tauri dev` keeps DevTools, and are blocked in release.
+#[cfg(not(coverage))]
+fn prevent_default_plugin() -> tauri::plugin::TauriPlugin<tauri::Wry> {
+    use tauri_plugin_prevent_default::Flags;
+
+    let flags = if cfg!(debug_assertions) {
+        Flags::all().difference(Flags::DEV_TOOLS)
+    } else {
+        Flags::all()
+    };
+
+    #[cfg(target_os = "windows")]
+    {
+        use tauri_plugin_prevent_default::PlatformOptions;
+
+        tauri_plugin_prevent_default::Builder::new()
+            .with_flags(flags)
+            .platform(
+                PlatformOptions::new()
+                    .general_autofill(false)
+                    .password_autosave(false)
+                    // WebView2 disables F12/Ctrl+Shift+I when false; keep true in debug so DevTools work with `tauri dev`.
+                    .browser_accelerator_keys(cfg!(debug_assertions))
+                    // Always enable at the WebView2 level to prevent a black screen
+                    // in production builds. WRY sets `AreDevToolsEnabled(false)` when
+                    // the Tauri `devtools` feature is off, and some WebView2 runtime
+                    // versions fail to render the page in that state. Re-enabling it
+                    // here is safe because all shortcuts that open DevTools are already
+                    // blocked: `Flags::DEV_TOOLS` prevents Ctrl+Shift+I via the
+                    // injected JS, `browser_accelerator_keys(false)` disables F12 and
+                    // other browser shortcuts, and `Flags::CONTEXT_MENU` removes the
+                    // right-click menu.
+                    .dev_tools(true),
+            )
+            .build()
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        tauri_plugin_prevent_default::Builder::new()
+            .with_flags(flags)
+            .build()
+    }
+}
+
 /// Build and run the Tauri application.
 ///
 /// Excluded from coverage instrumentation (`--cfg coverage`) because driving the
@@ -67,6 +117,8 @@ pub fn run() {
     logging::init_tracing();
 
     tauri::Builder::default()
+        .plugin(prevent_default_plugin())
+        .plugin(tauri_plugin_window_state::Builder::default().build())
         .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
             use tauri::Manager;
@@ -132,6 +184,7 @@ pub fn run() {
             commands::groups::update_group,
             commands::groups::delete_group,
             commands::groups::set_group_scripts,
+            commands::groups::set_group_games,
             commands::scripts::list_scripts,
             commands::scripts::get_script,
             commands::scripts::create_script,

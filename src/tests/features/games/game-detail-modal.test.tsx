@@ -328,7 +328,8 @@ describe('GameDetailModal', () => {
 
   describe('auto-save (debounced)', () => {
     beforeEach(() => {
-      vi.useFakeTimers({ shouldAdvanceTime: true })
+      // Only fake the debounce timers — Radix Select focus restoration uses other timers.
+      vi.useFakeTimers({ shouldAdvanceTime: true, toFake: ['setTimeout', 'clearTimeout'] })
     })
     afterEach(() => {
       vi.useRealTimers()
@@ -515,8 +516,9 @@ describe('GameDetailModal', () => {
     })
 
     it('flushes a pending debounced save when the modal is closed before the timer fires', async () => {
+      vi.useRealTimers()
       installGameMocks()
-      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime.bind(vi) })
+      const user = userEvent.setup()
 
       renderWithProviders(<AppRoutes />, { route: '/library' })
 
@@ -525,13 +527,14 @@ describe('GameDetailModal', () => {
       await user.click(await screen.findByRole('tab', { name: 'Edit' }))
 
       await user.click(screen.getByRole('switch', { name: 'Enable launcher monitoring' }))
+      await screen.findByLabelText('Monitor executable')
       // Close before the 800 ms debounce fires
       await user.click(screen.getByRole('button', { name: 'Close game detail' }))
 
       await waitFor(() => {
         expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+        expect(ipc.calls('update_game')).toHaveLength(1)
       })
-      expect(ipc.calls('update_game')).toHaveLength(1)
       expect(ipc.calls('update_game')[0]).toMatchObject({
         input: { monitorMode: 'named' },
       })

@@ -29,15 +29,21 @@ export function ScriptList({
 }: ScriptListProps): React.JSX.Element {
   return (
     <div className="flex h-full flex-col border-r border-border bg-surface-low">
-      <header className="flex items-center justify-between gap-2 border-b border-border px-4 py-3">
-        <h2 className="font-heading text-sm font-semibold text-foreground">Registered Scripts</h2>
-        <Button type="button" size="sm" variant="outline" onClick={onNew}>
-          <Icon name="add" className="text-[18px]" />
-          New
+      <header className="flex items-center justify-between gap-2 border-b border-border px-5 py-4">
+        <h2 className="font-heading text-xl font-bold text-foreground">Registered Scripts</h2>
+        <Button
+          type="button"
+          size="icon"
+          variant="ghost"
+          aria-label="New"
+          onClick={onNew}
+          className="h-8 w-8 rounded-full bg-surface-high text-foreground hover:bg-primary hover:text-primary-foreground"
+        >
+          <Icon name="add" className="text-[20px]" />
         </Button>
       </header>
 
-      <ul className="flex-1 overflow-y-auto p-2" aria-label="Registered scripts">
+      <ul className="flex-1 space-y-2 overflow-y-auto p-3" aria-label="Registered scripts">
         {scripts.length === 0 ? (
           <li className="px-3 py-6 text-center text-sm text-muted-foreground">
             No scripts yet. Create one to get started.
@@ -54,34 +60,54 @@ export function ScriptList({
                   aria-label={`Edit ${script.name}`}
                   aria-current={active ? 'true' : undefined}
                   className={cn(
-                    'flex w-full cursor-pointer flex-col gap-1.5 rounded-lg border px-3 py-2.5 text-left transition-colors',
+                    'flex w-full cursor-pointer flex-col gap-2 rounded-xl border-2 p-4 text-left transition-colors',
                     active
-                      ? 'border-primary/30 bg-primary/10'
-                      : 'border-transparent hover:bg-surface-high'
+                      ? 'border-primary bg-surface-container'
+                      : 'border-transparent bg-surface hover:bg-surface-container'
                   )}
                 >
                   <div className="flex items-center justify-between gap-2">
-                    <span className="truncate font-mono text-sm text-foreground">
+                    <span
+                      className={cn(
+                        'truncate font-mono text-sm font-medium',
+                        active ? 'text-primary' : 'text-foreground'
+                      )}
+                    >
                       {script.name}
                     </span>
                     <Badge variant={KIND_BADGE[script.kind]}>{KIND_LABEL[script.kind]}</Badge>
                   </div>
-                  <div className="flex items-center gap-3 text-xs text-muted-foreground">
-                    <span className="font-mono" aria-label="Priority">
-                      {isUtility ? '–' : script.priority}
-                    </span>
+                  <div className="flex items-center justify-between gap-3 text-xs">
+                    {isUtility ? (
+                      <span aria-label="Priority" className="font-mono text-muted-foreground">
+                        –
+                      </span>
+                    ) : (
+                      <span aria-label="Priority" className="inline-flex items-center gap-2">
+                        <span className="relative h-1.5 w-16 overflow-hidden rounded-full bg-surface-high">
+                          <span
+                            className="absolute inset-y-0 left-0 rounded-full bg-primary"
+                            style={{ width: `${script.priority * 10}%` }}
+                          />
+                        </span>
+                        <span className="font-mono font-semibold text-foreground">
+                          {script.priority}
+                        </span>
+                      </span>
+                    )}
                     {isUtility ? null : (
                       <span className="flex items-center gap-1.5">
                         {PHASES.map((phase) => {
                           const enabled = phaseHasContent(script[phase.key])
                           return (
-                            <Icon
+                            <span
                               key={phase.key}
-                              name={phase.icon}
                               aria-label={`${phase.label}: ${enabled ? 'configured' : 'none'}`}
                               className={cn(
-                                'text-[16px]',
-                                enabled ? 'text-foreground' : 'text-muted-foreground/30'
+                                'h-2 w-2 rounded-full',
+                                enabled
+                                  ? 'bg-primary'
+                                  : 'border border-muted-foreground/40 bg-transparent'
                               )}
                             />
                           )

@@ -15,6 +15,8 @@ import { Button } from '@/components/ui/button'
 import { buttonVariants } from '@/components/ui/button-variants'
 import { Icon } from '@/components/ui/icon'
 import { Input } from '@/components/ui/input'
+import { Slider } from '@/components/ui/slider'
+import { Textarea } from '@/components/ui/textarea'
 import { toastError, toastSuccess } from '@/lib/app-log-commands'
 import type { SaveScriptInput } from '@/lib/ipc/scripts-commands'
 import {
@@ -34,11 +36,31 @@ import {
   MIN_PRIORITY,
   PHASES,
   type PhaseKey,
+  type PriorityTier,
   type ScriptDraft,
   draftFromScript,
   emptyPhase,
   newScriptDraft,
+  priorityTier,
 } from './script-form-types'
+
+const PRIORITY_RANGE_CLASS: Record<PriorityTier, string> = {
+  low: 'bg-priority-low',
+  medium: 'bg-priority-medium',
+  high: 'bg-priority-high',
+}
+
+const PRIORITY_THUMB_CLASS: Record<PriorityTier, string> = {
+  low: 'border-priority-low',
+  medium: 'border-priority-medium',
+  high: 'border-priority-high',
+}
+
+const PRIORITY_BADGE_CLASS: Record<PriorityTier, string> = {
+  low: 'border-transparent bg-priority-low text-priority-low-foreground',
+  medium: 'border-transparent bg-priority-medium text-priority-medium-foreground',
+  high: 'border-transparent bg-priority-high text-priority-high-foreground',
+}
 
 export interface ScriptEditorPanelProps {
   /** The script being edited, or null for a new draft. */
@@ -183,166 +205,197 @@ export function ScriptEditorPanel({
 
   return (
     <section
-      className="flex h-full flex-col gap-6 overflow-y-auto p-6"
+      className="mx-auto h-full w-[min(1100px,70%)] overflow-y-auto p-8"
       data-testid="script-editor-panel"
       aria-label={script ? `Editing ${script.name}` : 'New script'}
     >
-      <header className="flex items-start justify-between gap-4">
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">
-            {script ? 'Editing' : 'New script'}
-          </p>
-          <h2 className="font-heading text-xl font-semibold text-foreground">
-            {draft.name.trim() || 'Untitled script'}
-          </h2>
-        </div>
-        {script ? (
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            aria-label="Delete script"
-            onClick={() => setConfirmDelete(true)}
-            className="text-destructive hover:bg-destructive/10 hover:text-destructive"
-          >
-            <Icon name="delete" className="text-[18px]" />
-          </Button>
-        ) : null}
-      </header>
-
-      <div className="grid gap-4 sm:grid-cols-2">
-        <label className="cursor-pointer space-y-1.5" htmlFor="script-name">
-          <span className="text-sm font-medium text-foreground">Name</span>
-          <Input
-            id="script-name"
-            value={draft.name}
-            onChange={(event) => setDraft((c) => ({ ...c, name: event.target.value }))}
-          />
-        </label>
-        <label className="cursor-pointer space-y-1.5" htmlFor="script-description">
-          <span className="text-sm font-medium text-foreground">Description</span>
-          <Input
-            id="script-description"
-            placeholder="Optional"
-            value={draft.description}
-            onChange={(event) => setDraft((c) => ({ ...c, description: event.target.value }))}
-          />
-        </label>
-      </div>
-
-      <fieldset className="space-y-2">
-        <legend className="text-sm font-medium text-foreground">Kind</legend>
-        <div
-          role="radiogroup"
-          aria-label="Script kind"
-          className="grid gap-2 sm:grid-cols-3"
-          data-testid="script-kind-group"
-        >
-          {KIND_OPTIONS.map((option) => {
-            const active = draft.kind === option.value
-            return (
-              <button
-                key={option.value}
-                type="button"
-                role="radio"
-                aria-checked={active}
-                aria-label={`${option.label} kind`}
-                onClick={() => setDraft((c) => ({ ...c, kind: option.value as ScriptKind }))}
-                className={cn(
-                  'cursor-pointer rounded-lg border p-3 text-left transition-colors',
-                  active
-                    ? 'border-primary/40 bg-primary/10'
-                    : 'border-border bg-surface-low hover:border-primary/20'
-                )}
-              >
-                <span className="text-sm font-semibold text-foreground">{option.label}</span>
-                <span className="mt-1 block text-xs text-muted-foreground">
-                  {option.description}
-                </span>
-              </button>
-            )
-          })}
-        </div>
-      </fieldset>
-
-      {isUtility ? (
-        <div className="space-y-2" data-testid="script-utility-layout">
-          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-            Snippet
-          </p>
-          <PhaseBlock
-            label="Snippet"
-            icon="extension"
-            idPrefix="snippet"
-            value={draft.snippet}
-            onChange={(next) => setDraft((c) => ({ ...c, snippet: next }))}
-          />
-        </div>
-      ) : (
-        <div className="space-y-4" data-testid="script-phases-layout">
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <span className="text-sm font-medium text-foreground">Priority</span>
-              <Badge variant="outline" className="font-mono">
-                {draft.priority}
-              </Badge>
-            </div>
-            <input
-              type="range"
-              min={MIN_PRIORITY}
-              max={MAX_PRIORITY}
-              step={1}
-              value={draft.priority}
-              aria-label="Priority"
-              onChange={(event) =>
-                setDraft((c) => ({ ...c, priority: Number(event.target.value) }))
-              }
-              className="h-2 w-full cursor-pointer appearance-none rounded-full bg-surface-highest accent-primary"
-            />
-          </div>
-
-          <div className="space-y-3">
-            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-              Execution phases
+      <div className="flex flex-col gap-5">
+        <header className="flex items-start justify-between gap-4">
+          <div>
+            <h1 className="font-heading text-2xl font-semibold text-foreground">
+              {draft.name.trim() || (script ? script.name : 'New script')}
+            </h1>
+            <p className="mt-1 text-sm text-muted-foreground">
+              {script
+                ? 'Update the script definition, execution phases, and utility requirements.'
+                : 'Define how this script runs across launch phases or as a reusable utility snippet.'}
             </p>
-            {PHASES.map((phase) => (
-              <PhaseBlock
-                key={phase.key}
-                label={phase.label}
-                icon={phase.icon}
-                idPrefix={phase.key}
-                value={draft[phase.key]}
-                onChange={(next) => setPhase(phase.key, next)}
+          </div>
+          {script ? (
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              aria-label="Delete script"
+              onClick={() => setConfirmDelete(true)}
+              className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+            >
+              <Icon name="delete" className="text-[18px]" />
+            </Button>
+          ) : null}
+        </header>
+
+        <section className="space-y-4 rounded-2xl border border-border bg-surface-low p-5">
+          <div className="space-y-4">
+            <label className="block cursor-pointer space-y-2" htmlFor="script-name">
+              <span className="text-sm font-medium text-foreground">Name</span>
+              <Input
+                id="script-name"
+                value={draft.name}
+                onChange={(event) => setDraft((c) => ({ ...c, name: event.target.value }))}
               />
-            ))}
+            </label>
+            <label className="block cursor-pointer space-y-2" htmlFor="script-description">
+              <span className="text-sm font-medium text-foreground">Description</span>
+              <Textarea
+                id="script-description"
+                placeholder="Optional"
+                value={draft.description}
+                onChange={(event) => setDraft((c) => ({ ...c, description: event.target.value }))}
+              />
+            </label>
           </div>
+        </section>
 
-          <div className="space-y-2">
-            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-              Requires (utility scripts)
-            </p>
-            <DependencyPicker
-              scriptId={script?.id ?? -1}
-              allScripts={allScripts}
-              requires={requires}
-              onAdd={addRequirement}
-              onRemove={removeRequirement}
+        <section className="space-y-2 rounded-2xl border border-border bg-surface-low p-5">
+          <fieldset className="space-y-2">
+            <legend className="text-sm font-medium text-foreground">Kind</legend>
+            <div
+              role="radiogroup"
+              aria-label="Script kind"
+              className="grid gap-2 sm:grid-cols-3"
+              data-testid="script-kind-group"
+            >
+              {KIND_OPTIONS.map((option) => {
+                const active = draft.kind === option.value
+                return (
+                  <button
+                    key={option.value}
+                    type="button"
+                    role="radio"
+                    aria-checked={active}
+                    aria-label={`${option.label} kind`}
+                    onClick={() => setDraft((c) => ({ ...c, kind: option.value as ScriptKind }))}
+                    className={cn(
+                      'cursor-pointer rounded-lg border p-3 text-left transition-colors',
+                      active
+                        ? 'border-primary/40 bg-primary/10'
+                        : 'border-border bg-surface hover:border-primary/20'
+                    )}
+                  >
+                    <span className="text-sm font-semibold text-foreground">{option.label}</span>
+                    <span className="mt-1 block text-xs text-muted-foreground">
+                      {option.description}
+                    </span>
+                  </button>
+                )
+              })}
+            </div>
+          </fieldset>
+        </section>
+
+        {isUtility ? (
+          <section
+            className="space-y-3 rounded-2xl border border-border bg-surface-low p-5"
+            data-testid="script-utility-layout"
+          >
+            <div>
+              <h3 className="font-heading text-base font-semibold text-foreground">Snippet</h3>
+              <p className="text-sm text-muted-foreground">
+                Reusable code other scripts can require before they run.
+              </p>
+            </div>
+            <PhaseBlock
+              label="Snippet"
+              icon="extension"
+              idPrefix="snippet"
+              value={draft.snippet}
+              onChange={(next) => setDraft((c) => ({ ...c, snippet: next }))}
             />
-          </div>
+          </section>
+        ) : (
+          <section
+            className="space-y-4 rounded-2xl border border-border bg-surface-low p-5"
+            data-testid="script-phases-layout"
+          >
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-medium text-foreground">Priority</span>
+                <Badge
+                  variant="outline"
+                  className={cn('font-mono', PRIORITY_BADGE_CLASS[priorityTier(draft.priority)])}
+                >
+                  {draft.priority}
+                </Badge>
+              </div>
+              <Slider
+                min={MIN_PRIORITY}
+                max={MAX_PRIORITY}
+                step={1}
+                value={[draft.priority]}
+                aria-label="Priority"
+                onValueChange={([next]) => setDraft((c) => ({ ...c, priority: next }))}
+                rangeClassName={PRIORITY_RANGE_CLASS[priorityTier(draft.priority)]}
+                thumbClassName={PRIORITY_THUMB_CLASS[priorityTier(draft.priority)]}
+              />
+              <p className="text-xs text-muted-foreground">
+                Higher numbers are executed earlier.
+              </p>
+            </div>
+
+            <div className="space-y-3">
+              <div>
+                <h3 className="font-heading text-base font-semibold text-foreground">
+                  Execution phases
+                </h3>
+                <p className="text-sm text-muted-foreground">
+                  Configure what runs before launch, after launch, and on exit.
+                </p>
+              </div>
+              {PHASES.map((phase) => (
+                <PhaseBlock
+                  key={phase.key}
+                  label={phase.label}
+                  icon={phase.icon}
+                  idPrefix={phase.key}
+                  value={draft[phase.key]}
+                  onChange={(next) => setPhase(phase.key, next)}
+                />
+              ))}
+            </div>
+
+            <div className="space-y-2">
+              <div>
+                <h3 className="font-heading text-base font-semibold text-foreground">
+                  Requires (utility scripts)
+                </h3>
+                <p className="text-sm text-muted-foreground">
+                  Utility snippets this script depends on at runtime.
+                </p>
+              </div>
+              <DependencyPicker
+                scriptId={script?.id ?? -1}
+                allScripts={allScripts}
+                requires={requires}
+                onAdd={addRequirement}
+                onRemove={removeRequirement}
+              />
+            </div>
+          </section>
+        )}
+
+        {error ? (
+          <p className="rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+            {error}
+          </p>
+        ) : null}
+
+        <div className="flex justify-end">
+          <Button type="button" onClick={() => void handleSave()} disabled={saving}>
+            <Icon name="save" className="text-[18px]" />
+            {saving ? 'Saving…' : script ? 'Save changes' : 'Create script'}
+          </Button>
         </div>
-      )}
-
-      {error ? (
-        <p className="rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive">
-          {error}
-        </p>
-      ) : null}
-
-      <div className="flex justify-end">
-        <Button type="button" onClick={() => void handleSave()} disabled={saving}>
-          <Icon name="save" className="text-[18px]" />
-          {saving ? 'Saving…' : script ? 'Save changes' : 'Create script'}
-        </Button>
       </div>
 
       <AlertDialog open={confirmDelete} onOpenChange={setConfirmDelete}>

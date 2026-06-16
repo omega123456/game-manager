@@ -57,6 +57,20 @@ const config: Config = {
           DEFAULT: 'hsl(var(--destructive))',
           foreground: 'hsl(var(--destructive-foreground))',
         },
+        priority: {
+          low: {
+            DEFAULT: 'hsl(var(--priority-low))',
+            foreground: 'hsl(var(--priority-low-foreground))',
+          },
+          medium: {
+            DEFAULT: 'hsl(var(--priority-medium))',
+            foreground: 'hsl(var(--priority-medium-foreground))',
+          },
+          high: {
+            DEFAULT: 'hsl(var(--priority-high))',
+            foreground: 'hsl(var(--priority-high-foreground))',
+          },
+        },
       },
       fontFamily: {
         sans: ['Inter', 'system-ui', 'sans-serif'],

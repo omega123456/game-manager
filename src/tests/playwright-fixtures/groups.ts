@@ -36,4 +36,5 @@ export const groupsFixtures: Record<string, PlaywrightFixtureHandler> = {
   }),
   delete_group: () => undefined,
   set_group_scripts: (args) => args?.scriptIds ?? [],
+  set_group_games: (args) => args?.gameIds ?? [],
 }

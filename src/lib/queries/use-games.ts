@@ -102,6 +102,9 @@ export function useDeleteGameMutation() {
     mutationFn: (id: number) => deleteGame(id),
     onSuccess: (_value, id) => {
       invalidateGames(queryClient, id)
+      // The DB cascade removes the game's game_groups rows; refresh groups so
+      // member lists and counts drop the deleted game.
+      void queryClient.invalidateQueries({ queryKey: GROUPS_QUERY_KEY })
     },
   })
 }

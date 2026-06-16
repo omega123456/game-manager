@@ -35,6 +35,14 @@ import { launchGameById } from '@/features/launch/launch-controller'
 
 type GameDetailTab = 'overview' | 'edit' | 'groups' | 'scripts'
 
+const gameDetailTabTriggerClass = cn(
+  'relative flex w-full justify-center rounded-md border-0 bg-transparent px-3 py-4 text-sm font-medium shadow-none transition-colors',
+  'text-muted-foreground hover:bg-surface-high hover:text-foreground',
+  'data-[state=active]:bg-transparent data-[state=active]:!text-primary data-[state=active]:shadow-none',
+  'data-[state=active]:hover:bg-surface-high data-[state=active]:hover:!text-primary',
+  "data-[state=active]:after:absolute data-[state=active]:after:inset-x-0 data-[state=active]:after:bottom-0 data-[state=active]:after:h-0.5 data-[state=active]:after:bg-primary data-[state=active]:after:content-['']"
+)
+
 function closeDetailModal(): void {
   useUiStore.getState().setActiveOverlay('none')
   useUiStore.getState().setSelectedGameId(null)
@@ -138,12 +146,23 @@ function GameDetailModalInner({ selectedGameId }: GameDetailModalInnerProps): Re
         onValueChange={(value) => setActiveTab(value as GameDetailTab)}
         className="flex min-h-0 flex-1 flex-col"
       >
-        <div className="shrink-0 border-b border-border bg-surface-low/60 px-6 py-4">
-          <TabsList aria-label="Game detail tabs">
-            <TabsTrigger value="overview">Overview</TabsTrigger>
-            <TabsTrigger value="edit">Edit</TabsTrigger>
-            <TabsTrigger value="groups">Groups</TabsTrigger>
-            <TabsTrigger value="scripts">Scripts</TabsTrigger>
+        <div className="shrink-0 border-b border-border bg-surface-container px-6">
+          <TabsList
+            aria-label="Game detail tabs"
+            className="inline-grid h-auto w-auto grid-flow-col auto-cols-fr gap-2 rounded-none bg-transparent p-0"
+          >
+            <TabsTrigger value="overview" className={gameDetailTabTriggerClass}>
+              Overview
+            </TabsTrigger>
+            <TabsTrigger value="edit" className={gameDetailTabTriggerClass}>
+              Edit
+            </TabsTrigger>
+            <TabsTrigger value="groups" className={gameDetailTabTriggerClass}>
+              Groups
+            </TabsTrigger>
+            <TabsTrigger value="scripts" className={gameDetailTabTriggerClass}>
+              Scripts
+            </TabsTrigger>
           </TabsList>
         </div>
 

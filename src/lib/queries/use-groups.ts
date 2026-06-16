@@ -5,6 +5,7 @@ import {
   deleteGroup,
   getGroup,
   listGroups,
+  setGroupGames,
   setGroupScripts,
   updateGroup,
   type SaveGroupInput,
@@ -127,6 +128,40 @@ export function useSetGroupScriptsMutation() {
       }
     },
     onSuccess: (_scriptIds, { groupId }) => {
+      invalidateGroups(queryClient, groupId)
+      invalidateDependentGameQueries(queryClient)
+    },
+  })
+}
+
+/** Replace a group's member game ids and refresh caches. */
+export function useSetGroupGamesMutation() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ groupId, gameIds }: { groupId: number; gameIds: number[] }) =>
+      setGroupGames(groupId, gameIds),
+    onMutate: async ({ groupId, gameIds }) => {
+      const previousGroups = queryClient.getQueryData<Group[]>(GROUPS_QUERY_KEY)
+      const previousGroup = queryClient.getQueryData<Group>(groupDetailQueryKey(groupId))
+
+      queryClient.setQueryData<Group[] | undefined>(GROUPS_QUERY_KEY, (current) =>
+        current?.map((group) => (group.id === groupId ? { ...group, gameIds } : group))
+      )
+      queryClient.setQueryData<Group | undefined>(groupDetailQueryKey(groupId), (current) =>
+        current ? { ...current, gameIds } : current
+      )
+
+      return { previousGroups, previousGroup }
+    },
+    onError: (_error, { groupId }, context) => {
+      if (context?.previousGroups) {
+        queryClient.setQueryData(GROUPS_QUERY_KEY, context.previousGroups)
+      }
+      if (context?.previousGroup) {
+        queryClient.setQueryData(groupDetailQueryKey(groupId), context.previousGroup)
+      }
+    },
+    onSuccess: (_gameIds, { groupId }) => {
       invalidateGroups(queryClient, groupId)
       invalidateDependentGameQueries(queryClient)
     },

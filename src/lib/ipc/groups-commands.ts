@@ -36,3 +36,8 @@ export function deleteGroup(id: number): Promise<void> {
 export function setGroupScripts(groupId: number, scriptIds: number[]): Promise<number[]> {
   return invoke<number[]>('set_group_scripts', { groupId, scriptIds })
 }
+
+/** Replace the set of member games for a group. */
+export function setGroupGames(groupId: number, gameIds: number[]): Promise<number[]> {
+  return invoke<number[]>('set_group_games', { groupId, gameIds })
+}

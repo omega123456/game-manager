@@ -53,12 +53,13 @@ for (const theme of THEMES) {
     await expect(page).toHaveScreenshot(`library-empty-${theme}.png`)
   })
 
-  test(`play now disabled — ${theme}`, async ({ page }) => {
+  test(`launch card hidden — ${theme}`, async ({ page }) => {
     await gotoAppState(page, '#/library?libraryFixture=empty')
     await setTheme(page, theme)
-    await expect(page.getByTestId('launch-game-button')).toBeDisabled()
+    await page.getByRole('heading', { name: 'Your library is empty' }).waitFor({ state: 'visible' })
+    await expect(page.getByTestId('launch-game-button')).toHaveCount(0)
     await scrollRouteOutletToTop(page)
-    await expect(page).toHaveScreenshot(`play-now-disabled-${theme}.png`)
+    await expect(page).toHaveScreenshot(`launch-card-hidden-${theme}.png`)
   })
 
   test(`library loading — ${theme}`, async ({ page }) => {

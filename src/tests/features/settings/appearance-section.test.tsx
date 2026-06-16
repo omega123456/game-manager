@@ -22,9 +22,9 @@ describe('AppearanceSection', () => {
   it('applies the theme app-wide and persists it when a theme is chosen', async () => {
     const user = userEvent.setup()
     renderWithProviders(<AppearanceSection />)
-    await user.click(screen.getByRole('radio', { name: 'Dark theme' }))
+    await user.click(screen.getByRole('radio', { name: 'Dark Mode theme' }))
     await waitFor(() => expect(document.documentElement.getAttribute('data-theme')).toBe('dark'))
-    expect(screen.getByRole('radio', { name: 'Dark theme' })).toHaveAttribute(
+    expect(screen.getByRole('radio', { name: 'Dark Mode theme' })).toHaveAttribute(
       'aria-checked',
       'true'
     )

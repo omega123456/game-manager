@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { AnimatePresence, motion } from 'motion/react'
 
 import { Button } from '@/components/ui/button'
@@ -6,7 +7,10 @@ import { cn } from '@/lib/utils'
 import { useGamesQuery } from '@/lib/queries/use-games'
 import { useLaunchStore } from '@/stores/launch-store'
 import type { LiveLaunchPhase } from '@/stores/launch-store'
-import { cancelActiveLaunch } from '@/features/launch/launch-controller'
+import {
+  CancelLaunchConfirmDialog,
+  type CancelLaunchIntent,
+} from '@/features/launch/cancel-launch-confirm-dialog'
 import { formatElapsed, formatLoggedPlaytime, phaseLabel } from '@/features/launch/launch-format'
 
 /**
@@ -65,6 +69,7 @@ export function LaunchBanner(): React.JSX.Element {
                 elapsedSeconds={elapsedSeconds}
                 failedCount={failedCount}
                 cancelling={cancelling}
+                confirmIntent={phase === 'playing' ? 'stop-game' : 'cancel-launch'}
               />
             )}
           </motion.div>
@@ -84,6 +89,7 @@ interface ActiveRowProps {
   elapsedSeconds: number
   failedCount: number
   cancelling: boolean
+  confirmIntent: CancelLaunchIntent
 }
 
 function ActiveRow({
@@ -93,7 +99,9 @@ function ActiveRow({
   elapsedSeconds,
   failedCount,
   cancelling,
+  confirmIntent,
 }: ActiveRowProps): React.JSX.Element {
+  const [confirmOpen, setConfirmOpen] = useState(false)
   const showCounter = phase === 'waitingForProcess' || phase === 'playing'
   const showCancel = phase === 'waitingForProcess' || phase === 'playing'
   const spinning = phase === 'before' || phase === 'waitingForProcess' || phase === 'onExit'
@@ -135,7 +143,7 @@ function ActiveRow({
           type="button"
           variant="secondary"
           size="sm"
-          onClick={cancelActiveLaunch}
+          onClick={() => setConfirmOpen(true)}
           disabled={cancelling}
           data-testid="launch-banner-cancel"
         >
@@ -143,6 +151,14 @@ function ActiveRow({
           {cancelling ? 'Cancelling…' : 'Cancel'}
         </Button>
       ) : null}
+
+      <CancelLaunchConfirmDialog
+        open={confirmOpen}
+        onOpenChange={setConfirmOpen}
+        gameName={name}
+        intent={confirmIntent}
+        cancelling={cancelling}
+      />
     </div>
   )
 }

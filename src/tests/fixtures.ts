@@ -54,6 +54,7 @@ export const IPC_FIXTURES: Record<string, IpcHandler> = {
   }),
   delete_group: () => undefined,
   set_group_scripts: (args) => args?.scriptIds ?? [],
+  set_group_games: (args) => args?.gameIds ?? [],
 
   // --- Scripts. Phase C1 introduces the backend + wrappers; defaults keep the
   //     harness quiet until tests override specific flows. ---

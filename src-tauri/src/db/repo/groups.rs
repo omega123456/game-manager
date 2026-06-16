@@ -85,6 +85,23 @@ pub fn set_scripts(conn: &Connection, group_id: i64, script_ids: &[i64]) -> AppR
     Ok(())
 }
 
+/// Replace the set of games that belong to a group.
+pub fn set_games(conn: &Connection, group_id: i64, game_ids: &[i64]) -> AppResult<()> {
+    let tx = conn.unchecked_transaction()?;
+    tx.execute(
+        "DELETE FROM game_groups WHERE group_id = ?1",
+        params![group_id],
+    )?;
+    for game_id in game_ids {
+        tx.execute(
+            "INSERT INTO game_groups (game_id, group_id) VALUES (?1, ?2)",
+            params![game_id, group_id],
+        )?;
+    }
+    tx.commit()?;
+    Ok(())
+}
+
 /// List all groups (with assigned scripts + member games) ordered by name.
 pub fn list(conn: &Connection) -> AppResult<Vec<Group>> {
     let mut stmt =

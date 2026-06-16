@@ -35,6 +35,19 @@ export const MIN_PRIORITY = 1
 export const MAX_PRIORITY = 10
 export const DEFAULT_PRIORITY = 5
 
+export type PriorityTier = 'low' | 'medium' | 'high'
+
+/** Maps a 1–10 priority to a tier; higher numbers mean higher priority. */
+export function priorityTier(priority: number): PriorityTier {
+  if (priority <= 3) {
+    return 'low'
+  }
+  if (priority <= 7) {
+    return 'medium'
+  }
+  return 'high'
+}
+
 /** An empty (mode `none`) phase config. */
 export function emptyPhase(): PhaseConfig {
   return { mode: 'none' }

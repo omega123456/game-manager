@@ -70,6 +70,14 @@
   /* Status */
   --destructive: 0 75.5% 41.6%;
   --destructive-foreground: 0 0% 100%;
+
+  /* Priority scale (low -> high) */
+  --priority-low: 142 64% 34%;
+  --priority-low-foreground: 0 0% 100%;
+  --priority-medium: 38 92% 42%;
+  --priority-medium-foreground: 0 0% 100%;
+  --priority-high: 0 75.5% 41.6%;
+  --priority-high-foreground: 0 0% 100%;
 }
 
 [data-theme='dark'] {
@@ -110,6 +118,14 @@
   /* Status */
   --destructive: 6 100% 83.5%;
   --destructive-foreground: 357 100% 20.6%;
+
+  /* Priority scale (low -> high) */
+  --priority-low: 142 55% 62%;
+  --priority-low-foreground: 142 80% 12%;
+  --priority-medium: 38 95% 62%;
+  --priority-medium-foreground: 38 90% 14%;
+  --priority-high: 6 100% 78%;
+  --priority-high-foreground: 357 100% 18%;
 }
 
 * {
@@ -133,6 +149,21 @@ body {
     'Segoe UI',
     sans-serif;
   -webkit-font-smoothing: antialiased;
+  /* Behave like a native app: no chrome-style text selection. Re-enabled below
+     for editable fields and elements that opt in via `select-text`. */
+  user-select: none;
+}
+
+/* Re-enable text selection on editable fields, code/pre blocks, and any element
+   that opts in with the `select-text` Tailwind utility or a `[data-selectable]`. */
+input:not(:disabled),
+textarea:not(:disabled),
+[contenteditable='true'],
+code,
+pre,
+.select-text,
+[data-selectable] {
+  user-select: text;
 }
 
 /* Material Symbols baseline. */

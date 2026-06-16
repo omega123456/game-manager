@@ -1,5 +1,5 @@
 //! Groups commands (`list_groups`, `get_group`, `create_group`, `update_group`,
-//! `delete_group`, `set_group_scripts`).
+//! `delete_group`, `set_group_scripts`, `set_group_games`).
 //!
 //! Business logic lives in the `*_impl(&AppState, ...)` functions so it is
 //! testable without the Tauri runtime. The repository owns row read/write; this
@@ -9,7 +9,7 @@ use std::collections::HashSet;
 
 use serde::Deserialize;
 
-use crate::db::repo::{groups, scripts};
+use crate::db::repo::{games, groups, scripts};
 use crate::domain::{Group, ScriptKind};
 use crate::error::{AppError, AppResult};
 use crate::state::AppState;
@@ -123,6 +123,31 @@ pub fn set_group_scripts_impl(
     })
 }
 
+fn ensure_games_exist(state: &AppState, game_ids: &[i64]) -> AppResult<()> {
+    state.with_db(|conn| {
+        for game_id in game_ids {
+            let _ = games::get(conn, *game_id)?;
+        }
+        Ok(())
+    })
+}
+
+/// Replace the set of member games for a group.
+pub fn set_group_games_impl(
+    state: &AppState,
+    group_id: i64,
+    game_ids: Vec<i64>,
+) -> AppResult<Vec<i64>> {
+    let game_ids = dedupe_ids(game_ids);
+    ensure_games_exist(state, &game_ids)?;
+    state.with_db(|conn| {
+        let _ = groups::get(conn, group_id)?;
+        groups::set_games(conn, group_id, &game_ids)?;
+        let group = groups::get(conn, group_id)?;
+        Ok(group.game_ids)
+    })
+}
+
 /// Thin `#[tauri::command]` wrapper delegating to [`list_groups_impl`].
 #[cfg(not(coverage))]
 #[tauri::command]
@@ -174,4 +199,15 @@ pub fn set_group_scripts(
     script_ids: Vec<i64>,
 ) -> AppResult<Vec<i64>> {
     set_group_scripts_impl(&state, group_id, script_ids)
+}
+
+/// Thin `#[tauri::command]` wrapper delegating to [`set_group_games_impl`].
+#[cfg(not(coverage))]
+#[tauri::command]
+pub fn set_group_games(
+    state: tauri::State<'_, AppState>,
+    group_id: i64,
+    game_ids: Vec<i64>,
+) -> AppResult<Vec<i64>> {
+    set_group_games_impl(&state, group_id, game_ids)
 }
