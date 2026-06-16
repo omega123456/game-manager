@@ -18,6 +18,10 @@ export const IPC_FIXTURES: Record<string, IpcHandler> = {
   'plugin:event|listen': (args) => args?.handler ?? null,
   'plugin:event|unlisten': () => null,
   'plugin:dialog|open': () => null,
+  'plugin:updater|check': () => null,
+  'plugin:updater|download_and_install': () => null,
+  'plugin:process|relaunch': () => null,
+  'plugin:process|restart': () => null,
 
   // --- Logging (backend command lands in Phase A2) ---
   log_frontend: () => undefined,

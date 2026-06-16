@@ -19,4 +19,8 @@ export const settingsFixtures: Record<string, PlaywrightFixtureHandler> = {
   get_all_settings: () => SETTINGS_ROWS,
   get_setting: () => null,
   set_setting: () => undefined,
+  'plugin:updater|check': () => null,
+  'plugin:updater|download_and_install': () => null,
+  'plugin:process|relaunch': () => null,
+  'plugin:process|restart': () => null,
 }

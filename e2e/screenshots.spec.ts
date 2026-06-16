@@ -30,7 +30,7 @@ for (const theme of THEMES) {
     await gotoApp(page)
     await setTheme(page, theme)
     await page.getByRole('link', { name: /Settings/ }).click()
-    await page.getByRole('heading', { name: 'API Integrations' }).waitFor({ state: 'visible' })
+    await page.getByRole('heading', { name: 'Updates' }).waitFor({ state: 'visible' })
     await expect(page).toHaveScreenshot(`settings-page-${theme}.png`)
   })
 

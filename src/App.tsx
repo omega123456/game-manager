@@ -1,12 +1,13 @@
 import { QueryClientProvider } from '@tanstack/react-query'
 import { HashRouter } from 'react-router-dom'
-import { useState } from 'react'
+import React, { useState } from 'react'
 
 import { ThemeProvider } from '@/components/theme/theme-provider'
 import { Toaster } from '@/components/ui/toaster'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { createQueryClient } from '@/lib/query-client'
 import { AppRoutes } from '@/routes/app-routes'
+import { useUpdateStore } from '@/stores/update-store'
 
 /**
  * Application root: mounts the providers (TanStack Query, ThemeProvider, Tooltip,
@@ -15,6 +16,10 @@ import { AppRoutes } from '@/routes/app-routes'
 export default function App(): React.JSX.Element {
   // One client per app instance; kept stable across renders.
   const [queryClient] = useState(createQueryClient)
+
+  React.useEffect(() => {
+    void useUpdateStore.getState().checkOnStartup()
+  }, [])
 
   return (
     <QueryClientProvider client={queryClient}>

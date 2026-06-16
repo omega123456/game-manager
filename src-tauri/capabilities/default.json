@@ -6,6 +6,8 @@
   "permissions": [
     "core:default",
     "dialog:default",
+    "process:default",
+    "updater:default",
     "window-state:default",
     "allow-log-frontend",
     "allow-list-games",
