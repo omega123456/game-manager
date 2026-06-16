@@ -1,5 +1,6 @@
 import { NavLink } from 'react-router-dom'
 
+import appIcon from '@/assets/app-icon.png'
 import { NAV_ITEMS } from '@/components/layout/nav-items'
 import { Button } from '@/components/ui/button'
 import { Icon } from '@/components/ui/icon'
@@ -20,9 +21,7 @@ export function Sidebar(): React.JSX.Element {
       className="flex h-full w-64 flex-col border-r border-border bg-surface-low"
     >
       <div className="flex items-center gap-2 px-5 py-5">
-        <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-          <Icon name="stadia_controller" className="text-[22px]" />
-        </span>
+        <img src={appIcon} alt="" aria-hidden="true" className="h-9 w-9 rounded-lg" />
         <span className="font-heading text-lg font-bold tracking-tight text-foreground">
           Game Manager
         </span>

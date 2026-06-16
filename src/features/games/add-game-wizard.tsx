@@ -134,6 +134,15 @@ export function AddGameWizard(): React.JSX.Element {
     lastSearchTermRef.current = null
   }
 
+  function navigateToCompletedStep(targetStep: WizardStep): void {
+    if (targetStep >= step) {
+      return
+    }
+
+    setSaveError(null)
+    setStep(targetStep)
+  }
+
   useEffect(() => {
     if (!isOpen) {
       return
@@ -456,7 +465,7 @@ export function AddGameWizard(): React.JSX.Element {
   return (
     <Dialog open={isOpen} onOpenChange={(nextOpen) => (!nextOpen ? closeWizard() : undefined)}>
       <DialogContent
-        className="flex max-h-[90vh] max-w-2xl flex-col gap-0 overflow-hidden p-0"
+        className="flex h-[min(1100px,70vh)] w-[min(1500px,70vw)] max-w-none flex-col gap-0 overflow-hidden border-white/10 bg-background/95 p-0 backdrop-blur-xl"
         onOpenAutoFocus={(event) => event.preventDefault()}
       >
         <div className="shrink-0 border-b border-border bg-surface-low px-6 py-5">
@@ -488,44 +497,64 @@ export function AddGameWizard(): React.JSX.Element {
           </DialogHeader>
         </div>
 
-        <div className="min-h-0 flex-1 overflow-y-auto px-6 pb-6">
-          <ol className="mb-5 flex items-center gap-3 text-sm" aria-label="Wizard progress">
-            {(Object.entries(STEP_COPY) as Array<[string, (typeof STEP_COPY)[WizardStep]]>).map(
-              ([value, copy]) => {
-                const numericStep = Number(value) as WizardStep
-                const isCurrent = step === numericStep
-                const isComplete = step > numericStep
+        <div className="flex min-h-0 flex-1 flex-col">
+          <div className="shrink-0 px-6 pt-6 pb-2">
+            <ol className="flex items-stretch gap-3 text-sm" aria-label="Wizard progress">
+              {(Object.entries(STEP_COPY) as Array<[string, (typeof STEP_COPY)[WizardStep]]>).map(
+                ([value, copy]) => {
+                  const numericStep = Number(value) as WizardStep
+                  const isCurrent = step === numericStep
+                  const isComplete = step > numericStep
+                  const pillClassName = cn(
+                    'flex w-full flex-1 items-center gap-2.5 rounded-full border px-4 py-2.5 text-left',
+                    isCurrent
+                      ? 'border-primary bg-primary/10 text-foreground'
+                      : 'border-border bg-surface-low text-muted-foreground',
+                    isComplete &&
+                      'cursor-pointer transition hover:border-primary/50 hover:bg-primary/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2'
+                  )
+                  const pillContent = (
+                    <>
+                      <span
+                        className={cn(
+                          'flex h-7 w-7 shrink-0 items-center justify-center rounded-full border text-xs font-semibold',
+                          isComplete
+                            ? 'border-primary bg-primary text-primary-foreground'
+                            : isCurrent
+                              ? 'border-primary text-primary'
+                              : 'border-border'
+                        )}
+                      >
+                        {isComplete ? <Icon name="check" className="text-[15px]" /> : value}
+                      </span>
+                      <span className="font-medium leading-snug">{copy.title}</span>
+                    </>
+                  )
 
-                return (
-                  <li
-                    key={value}
-                    className={cn(
-                      'flex items-center gap-2 rounded-full border px-3 py-1.5',
-                      isCurrent
-                        ? 'border-primary bg-primary/10 text-foreground'
-                        : 'border-border bg-surface-low text-muted-foreground'
-                    )}
-                    aria-current={isCurrent ? 'step' : undefined}
-                  >
-                    <span
-                      className={cn(
-                        'flex h-6 w-6 items-center justify-center rounded-full border text-xs font-semibold',
-                        isComplete
-                          ? 'border-primary bg-primary text-primary-foreground'
-                          : isCurrent
-                            ? 'border-primary text-primary'
-                            : 'border-border'
+                  return (
+                    <li key={value} className="flex flex-1">
+                      {isComplete ? (
+                        <button
+                          type="button"
+                          className={pillClassName}
+                          onClick={() => navigateToCompletedStep(numericStep)}
+                          aria-label={`Go back to step ${value}: ${copy.title}`}
+                        >
+                          {pillContent}
+                        </button>
+                      ) : (
+                        <div className={pillClassName} aria-current={isCurrent ? 'step' : undefined}>
+                          {pillContent}
+                        </div>
                       )}
-                    >
-                      {isComplete ? <Icon name="check" className="text-[14px]" /> : value}
-                    </span>
-                    <span>{copy.title}</span>
-                  </li>
-                )
-              }
-            )}
-          </ol>
+                    </li>
+                  )
+                }
+              )}
+            </ol>
+          </div>
 
+          <div className="min-h-0 flex-1 overflow-y-auto px-6 py-6">
           {step === 1 ? (
             <section className="space-y-4" data-testid="add-game-step-1">
               <div className="rounded-2xl border border-border bg-surface-low p-5">
@@ -552,15 +581,6 @@ export function AddGameWizard(): React.JSX.Element {
                   {browseError}
                 </p>
               ) : null}
-
-              <DialogFooter>
-                <Button type="button" variant="ghost" onClick={closeWizard}>
-                  Cancel
-                </Button>
-                <Button type="button" onClick={() => setStep(2)} disabled={!hasExecutable}>
-                  Continue to cover art
-                </Button>
-              </DialogFooter>
             </section>
           ) : null}
 
@@ -709,19 +729,6 @@ export function AddGameWizard(): React.JSX.Element {
                   </div>
                 ) : null}
               </div>
-
-              <DialogFooter>
-                <Button type="button" variant="ghost" onClick={() => setStep(1)}>
-                  Back
-                </Button>
-                <Button
-                  type="button"
-                  onClick={() => void continueFromArt()}
-                  disabled={!canContinueFromArt || isPreparingArt}
-                >
-                  {isPreparingArt ? 'Preparing cover…' : 'Continue to details'}
-                </Button>
-              </DialogFooter>
             </section>
           ) : null}
 
@@ -798,12 +805,6 @@ export function AddGameWizard(): React.JSX.Element {
                       }
                     />
                   </div>
-
-                  <div className="rounded-xl border border-border bg-background px-4 py-3 text-sm text-muted-foreground">
-                    Monitor mode will start as{' '}
-                    <span className="font-medium text-foreground">tree</span>. Launcher-specific
-                    monitoring lands in the edit modal next.
-                  </div>
                 </div>
               </div>
 
@@ -812,7 +813,38 @@ export function AddGameWizard(): React.JSX.Element {
                   {saveError}
                 </p>
               ) : null}
+            </section>
+          ) : null}
+          </div>
 
+          <div className="shrink-0 border-t border-border bg-surface-low/80 px-6 py-4">
+            {step === 1 ? (
+              <DialogFooter>
+                <Button type="button" variant="ghost" onClick={closeWizard}>
+                  Cancel
+                </Button>
+                <Button type="button" onClick={() => setStep(2)} disabled={!hasExecutable}>
+                  Continue to cover art
+                </Button>
+              </DialogFooter>
+            ) : null}
+
+            {step === 2 ? (
+              <DialogFooter>
+                <Button type="button" variant="ghost" onClick={() => setStep(1)}>
+                  Back
+                </Button>
+                <Button
+                  type="button"
+                  onClick={() => void continueFromArt()}
+                  disabled={!canContinueFromArt || isPreparingArt}
+                >
+                  {isPreparingArt ? 'Preparing cover…' : 'Continue to details'}
+                </Button>
+              </DialogFooter>
+            ) : null}
+
+            {step === 3 ? (
               <DialogFooter>
                 <Button type="button" variant="ghost" onClick={() => setStep(2)}>
                   Back
@@ -825,8 +857,8 @@ export function AddGameWizard(): React.JSX.Element {
                   {createGameMutation.isPending ? 'Saving…' : 'Save game'}
                 </Button>
               </DialogFooter>
-            </section>
-          ) : null}
+            ) : null}
+          </div>
         </div>
       </DialogContent>
     </Dialog>

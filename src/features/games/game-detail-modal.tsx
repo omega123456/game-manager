@@ -90,10 +90,10 @@ function GameDetailModalInner({ selectedGameId }: GameDetailModalInnerProps): Re
 
   return (
     <DialogContent
-      className="max-h-[90vh] max-w-5xl gap-0 overflow-hidden border-white/10 bg-background/95 p-0 backdrop-blur-xl"
+      className="flex h-[min(1100px,70vh)] w-[min(1500px,70vw)] max-w-none flex-col gap-0 overflow-hidden border-white/10 bg-background/95 p-0 backdrop-blur-xl"
       onOpenAutoFocus={(event) => event.preventDefault()}
     >
-      <div className="border-b border-border bg-surface-low/80 px-6 py-5">
+      <div className="shrink-0 border-b border-border bg-surface-low/80 px-6 py-5">
         <DialogHeader className="gap-3">
           <div className="flex items-start justify-between gap-4">
             <div className="space-y-2">
@@ -133,8 +133,12 @@ function GameDetailModalInner({ selectedGameId }: GameDetailModalInnerProps): Re
         </DialogHeader>
       </div>
 
-      <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as GameDetailTab)}>
-        <div className="border-b border-border bg-surface-low/60 px-6 py-4">
+      <Tabs
+        value={activeTab}
+        onValueChange={(value) => setActiveTab(value as GameDetailTab)}
+        className="flex min-h-0 flex-1 flex-col"
+      >
+        <div className="shrink-0 border-b border-border bg-surface-low/60 px-6 py-4">
           <TabsList aria-label="Game detail tabs">
             <TabsTrigger value="overview">Overview</TabsTrigger>
             <TabsTrigger value="edit">Edit</TabsTrigger>
@@ -143,19 +147,19 @@ function GameDetailModalInner({ selectedGameId }: GameDetailModalInnerProps): Re
           </TabsList>
         </div>
 
-        <div className="max-h-[calc(90vh-10rem)] overflow-y-auto px-6 py-6">
+        <div className="min-h-0 flex-1 overflow-y-auto px-6 py-6">
           <TabsContent value="overview" className="mt-0">
             {gameQuery.isLoading || !game || !meta ? (
               <div
                 className="grid gap-6 lg:grid-cols-[19rem_1fr]"
                 data-testid="game-detail-loading"
               >
-                <div className="aspect-3/4 animate-pulse rounded-[1.8rem] bg-surface-high" />
+                <div className="aspect-3/4 self-start animate-pulse rounded-[1.8rem] bg-surface-high" />
                 <div className="space-y-4">
                   <div className="h-8 w-52 animate-pulse rounded-full bg-surface-high" />
                   <div className="h-24 animate-pulse rounded-[1.5rem] bg-surface-high" />
-                  <div className="grid gap-4 md:grid-cols-3">
-                    {Array.from({ length: 3 }).map((_, index) => (
+                  <div className="grid gap-4 md:grid-cols-2">
+                    {Array.from({ length: 2 }).map((_, index) => (
                       <div
                         key={index}
                         className="h-28 animate-pulse rounded-[1.4rem] bg-surface-high"
@@ -169,7 +173,7 @@ function GameDetailModalInner({ selectedGameId }: GameDetailModalInnerProps): Re
                 className="grid gap-6 lg:grid-cols-[19rem_1fr]"
                 data-testid="game-detail-overview"
               >
-                <div className="overflow-hidden rounded-[1.8rem] border border-border bg-card shadow-sm">
+                <div className="self-start overflow-hidden rounded-[1.8rem] border border-border bg-card shadow-sm">
                   <div className="aspect-3/4 overflow-hidden bg-surface-high">
                     {toCoverImageUrl(game.imagePath) ? (
                       <img
@@ -263,7 +267,7 @@ function GameDetailModalInner({ selectedGameId }: GameDetailModalInnerProps): Re
                     </div>
                   </section>
 
-                  <section className="grid gap-4 md:grid-cols-3">
+                  <section className="grid gap-4 md:grid-cols-2">
                     <StatCard
                       label="Total playtime"
                       value={meta.playtime}
@@ -276,12 +280,6 @@ function GameDetailModalInner({ selectedGameId }: GameDetailModalInnerProps): Re
                       icon="history"
                       tone="secondary"
                     />
-                    <StatCard
-                      label="Monitor mode"
-                      value={game.monitorMode === 'named' ? 'Launcher' : 'Tree'}
-                      icon={game.monitorMode === 'named' ? 'rocket_launch' : 'device_hub'}
-                      tone="default"
-                    />
                   </section>
                 </div>
               </div>
@@ -291,17 +289,8 @@ function GameDetailModalInner({ selectedGameId }: GameDetailModalInnerProps): Re
           <TabsContent value="edit" className="mt-0">
             {game ? (
               <GameEditForm
-                key={[
-                  game.id,
-                  game.name,
-                  game.launchTarget,
-                  game.monitorMode,
-                  game.monitorProcessName ?? '',
-                  game.arguments ?? '',
-                  game.imagePath ?? '',
-                ].join(':')}
+                key={game.id}
                 game={game}
-                onSaved={() => setActiveTab('overview')}
               />
             ) : null}
           </TabsContent>

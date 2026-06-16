@@ -136,6 +136,37 @@ describe('AddGameWizard', () => {
     expect(await screen.findByText('Alan Wake 2')).toBeInTheDocument()
   })
 
+  it('allows navigating back via completed step pills', async () => {
+    installStatefulGameMocks()
+    overrideIpcCommands({
+      'plugin:dialog|open': () => 'C:/Games/AlanWake2.exe',
+      fetch_metadata: () => ({ canonicalName: 'Alan Wake 2', source: 'steam' }),
+      search_art: () => ART_RESULTS,
+      cache_art_candidate: () => 'C:/Cache/alan-wake-2.png',
+    })
+
+    const user = userEvent.setup()
+    renderWithProviders(<AppRoutes />, { route: '/library' })
+
+    await screen.findByText('Balatro')
+    await user.click(screen.getByRole('button', { name: 'Add Game' }))
+    await user.click(screen.getByRole('button', { name: 'Browse for executable' }))
+    await user.click(screen.getByRole('button', { name: 'Continue to cover art' }))
+    await user.click(screen.getByRole('button', { name: 'Continue to details' }))
+
+    expect(await screen.findByText('Step 3 of 3')).toBeInTheDocument()
+
+    await user.click(
+      screen.getByRole('button', { name: 'Go back to step 1: Choose the game executable' })
+    )
+    expect(screen.getByText('Step 1 of 3')).toBeInTheDocument()
+    expect(screen.getByText('C:/Games/AlanWake2.exe')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Continue to cover art' }))
+    expect(await screen.findByText('Step 2 of 3')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Go back to step 3:/ })).not.toBeInTheDocument()
+  })
+
   it('supports the no-results branch and can continue without cover art', async () => {
     installStatefulGameMocks()
     overrideIpcCommands({

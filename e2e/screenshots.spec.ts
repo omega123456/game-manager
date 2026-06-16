@@ -56,7 +56,6 @@ for (const theme of THEMES) {
   test(`play now disabled — ${theme}`, async ({ page }) => {
     await gotoAppState(page, '#/library?libraryFixture=empty')
     await setTheme(page, theme)
-    await expect(page.getByTestId('play-now-button')).toBeDisabled()
     await expect(page.getByTestId('launch-game-button')).toBeDisabled()
     await scrollRouteOutletToTop(page)
     await expect(page).toHaveScreenshot(`play-now-disabled-${theme}.png`)

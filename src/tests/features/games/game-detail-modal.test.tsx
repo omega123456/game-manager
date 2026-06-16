@@ -1,6 +1,6 @@
-import { screen, waitFor, within } from '@testing-library/react'
+import { act, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { AppRoutes } from '@/routes/app-routes'
 import { renderWithProviders, resetUiStore } from '@/tests/helpers/render-app'
@@ -326,157 +326,216 @@ describe('GameDetailModal', () => {
     expect(within(groupsTab).getByText('HDR Games')).toBeInTheDocument()
   })
 
-  it('edits and saves a game, deriving the monitor process name from the selected executable', async () => {
-    const state = installGameMocks()
-    overrideIpcCommands({
-      'plugin:dialog|open': (args) => {
-        const options = args?.options as { title?: string } | undefined
-        switch (options?.title) {
-          case 'Select launch executable':
-            return 'D:/Launchers/EpicGamesLauncher.exe'
-          case 'Select monitor executable':
-            return 'D:/Games/AlanWake2/AlanWake2.exe'
-          case 'Select cover art':
-            return 'D:/Art/alan-wake-2-deluxe.png'
-          default:
-            return null
-        }
-      },
+  describe('auto-save (debounced)', () => {
+    beforeEach(() => {
+      vi.useFakeTimers({ shouldAdvanceTime: true })
     })
-    const user = userEvent.setup()
-
-    renderWithProviders(<AppRoutes />, { route: '/library' })
-
-    await screen.findByText('Alan Wake 2')
-    await user.click(screen.getByRole('button', { name: 'Open Alan Wake 2' }))
-    await user.click(await screen.findByRole('tab', { name: 'Edit' }))
-
-    await user.clear(screen.getByLabelText('Game name'))
-    await user.type(screen.getByLabelText('Game name'), 'Alan Wake 2 Deluxe')
-    await user.click(screen.getAllByRole('button', { name: 'Browse' })[0]!)
-    await user.type(screen.getByLabelText('Launch arguments'), ' -fullscreen')
-    await user.click(screen.getByRole('switch', { name: 'Enable launcher monitoring' }))
-    await user.click(screen.getAllByRole('button', { name: 'Browse' })[1]!)
-    await user.click(screen.getByRole('button', { name: 'Change cover' }))
-
-    expect(
-      screen.getByText((_, element) => element?.textContent === 'Saved process name: AlanWake2.exe')
-    ).toBeInTheDocument()
-
-    await user.click(screen.getByRole('button', { name: 'Save changes' }))
-
-    await waitFor(() => {
-      expect(ipc.calls('update_game')).toHaveLength(1)
+    afterEach(() => {
+      vi.useRealTimers()
     })
-    expect(ipc.calls('update_game')[0]).toEqual({
-      id: 1,
-      input: {
-        name: 'Alan Wake 2 Deluxe',
-        launchTarget: 'D:/Launchers/EpicGamesLauncher.exe',
+
+    it('edits and saves a game, deriving the monitor process name from the selected executable', async () => {
+      const state = installGameMocks()
+      overrideIpcCommands({
+        'plugin:dialog|open': (args) => {
+          const options = args?.options as { title?: string } | undefined
+          switch (options?.title) {
+            case 'Select launch executable':
+              return 'D:/Launchers/EpicGamesLauncher.exe'
+            case 'Select monitor executable':
+              return 'D:/Games/AlanWake2/AlanWake2.exe'
+            case 'Select cover art':
+              return 'D:/Art/alan-wake-2-deluxe.png'
+            default:
+              return null
+          }
+        },
+      })
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime.bind(vi) })
+
+      renderWithProviders(<AppRoutes />, { route: '/library' })
+
+      await screen.findByText('Alan Wake 2')
+      await user.click(screen.getByRole('button', { name: 'Open Alan Wake 2' }))
+      await user.click(await screen.findByRole('tab', { name: 'Edit' }))
+
+      await user.clear(screen.getByLabelText('Game name'))
+      await user.type(screen.getByLabelText('Game name'), 'Alan Wake 2 Deluxe')
+      await user.click(screen.getAllByRole('button', { name: 'Browse' })[0]!)
+      await user.type(screen.getByLabelText('Launch arguments'), ' -fullscreen')
+      await user.click(screen.getByRole('switch', { name: 'Enable launcher monitoring' }))
+      await user.click(screen.getAllByRole('button', { name: 'Browse' })[1]!)
+      await user.click(screen.getByRole('button', { name: 'Change cover' }))
+
+      expect(
+        screen.getByText((_, element) => element?.textContent === 'Process name: AlanWake2.exe')
+      ).toBeInTheDocument()
+
+      await act(async () => {
+        vi.advanceTimersByTime(800)
+      })
+
+      await waitFor(() => {
+        expect(ipc.calls('update_game')).toHaveLength(1)
+      })
+      expect(ipc.calls('update_game')[0]).toEqual({
+        id: 1,
+        input: {
+          name: 'Alan Wake 2 Deluxe',
+          launchTarget: 'D:/Launchers/EpicGamesLauncher.exe',
+          monitorMode: 'named',
+          monitorProcessName: 'AlanWake2.exe',
+          arguments: '-fullscreen',
+          imagePath: 'D:/Art/alan-wake-2-deluxe.png',
+        },
+      })
+      expect(state.getGame().monitorProcessName).toBe('AlanWake2.exe')
+    })
+
+    it('preserves the typed monitor executable value when launcher mode is toggled off and on', async () => {
+      installGameMocks({
         monitorMode: 'named',
-        monitorProcessName: 'AlanWake2.exe',
-        arguments: '-fullscreen',
-        imagePath: 'D:/Art/alan-wake-2-deluxe.png',
-      },
+        monitorProcessName: 'Balatro.exe',
+      })
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime.bind(vi) })
+
+      renderWithProviders(<AppRoutes />, { route: '/library' })
+
+      await screen.findByText('Alan Wake 2')
+      await user.click(screen.getByRole('button', { name: 'Open Alan Wake 2' }))
+      await user.click(await screen.findByRole('tab', { name: 'Edit' }))
+
+      const monitorInput = await screen.findByLabelText('Monitor executable')
+      await user.clear(monitorInput)
+      await user.type(monitorInput, 'C:/SteamLibrary/common/Balatro/Balatro.exe')
+      expect(
+        screen.getByText((_, element) => element?.textContent === 'Process name: Balatro.exe')
+      ).toBeInTheDocument()
+
+      await user.click(screen.getByRole('switch', { name: 'Enable launcher monitoring' }))
+      expect(screen.queryByLabelText('Monitor executable')).not.toBeInTheDocument()
+
+      await user.click(screen.getByRole('switch', { name: 'Enable launcher monitoring' }))
+      expect(
+        await screen.findByDisplayValue('C:/SteamLibrary/common/Balatro/Balatro.exe')
+      ).toBeInTheDocument()
+      expect(
+        screen.getByText((_, element) => element?.textContent === 'Process name: Balatro.exe')
+      ).toBeInTheDocument()
     })
-    expect(state.getGame().monitorProcessName).toBe('AlanWake2.exe')
-  })
 
-  it('preserves the typed monitor executable value when launcher mode is toggled off and on', async () => {
-    installGameMocks({
-      monitorMode: 'named',
-      monitorProcessName: 'Balatro.exe',
+    it('validates that name and launch target are required before saving', async () => {
+      installGameMocks()
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime.bind(vi) })
+
+      renderWithProviders(<AppRoutes />, { route: '/library' })
+
+      await screen.findByText('Alan Wake 2')
+      await user.click(screen.getByRole('button', { name: 'Open Alan Wake 2' }))
+      await user.click(await screen.findByRole('tab', { name: 'Edit' }))
+
+      await user.clear(screen.getByLabelText('Game name'))
+      await act(async () => {
+        vi.advanceTimersByTime(800)
+      })
+      expect(await screen.findByText('Enter a game name before saving.')).toBeInTheDocument()
+      expect(ipc.calls('update_game')).toHaveLength(0)
     })
-    const user = userEvent.setup()
 
-    renderWithProviders(<AppRoutes />, { route: '/library' })
+    it('defaults monitor process name to the launch target exe when none is provided', async () => {
+      installGameMocks()
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime.bind(vi) })
 
-    await screen.findByText('Alan Wake 2')
-    await user.click(screen.getByRole('button', { name: 'Open Alan Wake 2' }))
-    await user.click(await screen.findByRole('tab', { name: 'Edit' }))
+      renderWithProviders(<AppRoutes />, { route: '/library' })
 
-    const monitorInput = await screen.findByLabelText('Monitor executable')
-    await user.clear(monitorInput)
-    await user.type(monitorInput, 'C:/SteamLibrary/common/Balatro/Balatro.exe')
-    expect(
-      screen.getByText((_, element) => element?.textContent === 'Saved process name: Balatro.exe')
-    ).toBeInTheDocument()
+      await screen.findByText('Alan Wake 2')
+      await user.click(screen.getByRole('button', { name: 'Open Alan Wake 2' }))
+      await user.click(await screen.findByRole('tab', { name: 'Edit' }))
 
-    await user.click(screen.getByRole('switch', { name: 'Enable launcher monitoring' }))
-    expect(screen.queryByLabelText('Monitor executable')).not.toBeInTheDocument()
+      await user.click(screen.getByRole('switch', { name: 'Enable launcher monitoring' }))
+      expect(
+        await screen.findByText(
+          (_, element) => element?.textContent === 'Defaults to: AlanWake2.exe'
+        )
+      ).toBeInTheDocument()
 
-    await user.click(screen.getByRole('switch', { name: 'Enable launcher monitoring' }))
-    expect(
-      await screen.findByDisplayValue('C:/SteamLibrary/common/Balatro/Balatro.exe')
-    ).toBeInTheDocument()
-    expect(
-      screen.getByText((_, element) => element?.textContent === 'Saved process name: Balatro.exe')
-    ).toBeInTheDocument()
-  })
-
-  it('validates required fields before saving', async () => {
-    installGameMocks()
-    const user = userEvent.setup()
-
-    renderWithProviders(<AppRoutes />, { route: '/library' })
-
-    await screen.findByText('Alan Wake 2')
-    await user.click(screen.getByRole('button', { name: 'Open Alan Wake 2' }))
-    await user.click(await screen.findByRole('tab', { name: 'Edit' }))
-
-    await user.clear(screen.getByLabelText('Game name'))
-    await user.click(screen.getByRole('button', { name: 'Save changes' }))
-    expect(await screen.findByText('Enter a game name before saving.')).toBeInTheDocument()
-    expect(ipc.calls('update_game')).toHaveLength(0)
-
-    await user.type(screen.getByLabelText('Game name'), 'Alan Wake 2')
-    await user.click(screen.getByRole('switch', { name: 'Enable launcher monitoring' }))
-    await user.click(screen.getByRole('button', { name: 'Save changes' }))
-    expect(
-      await screen.findByText(
-        'Choose the executable the app should watch after the launcher opens.'
-      )
-    ).toBeInTheDocument()
-    expect(ipc.calls('update_game')).toHaveLength(0)
-  })
-
-  it('requires a launch target before saving edits', async () => {
-    installGameMocks()
-    const user = userEvent.setup()
-
-    renderWithProviders(<AppRoutes />, { route: '/library' })
-
-    await screen.findByText('Alan Wake 2')
-    await user.click(screen.getByRole('button', { name: 'Open Alan Wake 2' }))
-    await user.click(await screen.findByRole('tab', { name: 'Edit' }))
-
-    await user.clear(screen.getByLabelText('Launch target'))
-    await user.click(screen.getByRole('button', { name: 'Save changes' }))
-
-    expect(
-      await screen.findByText('Choose the executable Game Manager should launch.')
-    ).toBeInTheDocument()
-    expect(ipc.calls('update_game')).toHaveLength(0)
-  })
-
-  it('surfaces save failures from the backend', async () => {
-    installGameMocks()
-    ipc.override('update_game', () => {
-      throw new Error('disk full')
+      await act(async () => {
+        vi.advanceTimersByTime(800)
+      })
+      await waitFor(() => {
+        expect(ipc.calls('update_game')).toHaveLength(1)
+      })
+      expect(ipc.calls('update_game')[0]).toMatchObject({
+        input: { monitorMode: 'named', monitorProcessName: 'AlanWake2.exe' },
+      })
     })
-    const user = userEvent.setup()
 
-    renderWithProviders(<AppRoutes />, { route: '/library' })
+    it('requires a launch target before saving edits', async () => {
+      installGameMocks()
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime.bind(vi) })
 
-    await screen.findByText('Alan Wake 2')
-    await user.click(screen.getByRole('button', { name: 'Open Alan Wake 2' }))
-    await user.click(await screen.findByRole('tab', { name: 'Edit' }))
-    await user.click(screen.getByRole('button', { name: 'Save changes' }))
+      renderWithProviders(<AppRoutes />, { route: '/library' })
 
-    expect(
-      await screen.findByText('Could not save the game right now. Check the fields and try again.')
-    ).toBeInTheDocument()
-    expect(ipc.calls('log_frontend').length).toBeGreaterThan(0)
+      await screen.findByText('Alan Wake 2')
+      await user.click(screen.getByRole('button', { name: 'Open Alan Wake 2' }))
+      await user.click(await screen.findByRole('tab', { name: 'Edit' }))
+
+      await user.clear(screen.getByLabelText('Launch target'))
+      await act(async () => {
+        vi.advanceTimersByTime(800)
+      })
+
+      expect(
+        await screen.findByText('Choose the executable Game Manager should launch.')
+      ).toBeInTheDocument()
+      expect(ipc.calls('update_game')).toHaveLength(0)
+    })
+
+    it('surfaces save failures from the backend', async () => {
+      installGameMocks()
+      ipc.override('update_game', () => {
+        throw new Error('disk full')
+      })
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime.bind(vi) })
+
+      renderWithProviders(<AppRoutes />, { route: '/library' })
+
+      await screen.findByText('Alan Wake 2')
+      await user.click(screen.getByRole('button', { name: 'Open Alan Wake 2' }))
+      await user.click(await screen.findByRole('tab', { name: 'Edit' }))
+      await user.type(screen.getByLabelText('Game name'), ' ')
+      await act(async () => {
+        vi.advanceTimersByTime(800)
+      })
+
+      expect(
+        await screen.findByText('Could not save the game right now. Check the fields and try again.')
+      ).toBeInTheDocument()
+      expect(ipc.calls('log_frontend').length).toBeGreaterThan(0)
+    })
+
+    it('flushes a pending debounced save when the modal is closed before the timer fires', async () => {
+      installGameMocks()
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime.bind(vi) })
+
+      renderWithProviders(<AppRoutes />, { route: '/library' })
+
+      await screen.findByText('Alan Wake 2')
+      await user.click(screen.getByRole('button', { name: 'Open Alan Wake 2' }))
+      await user.click(await screen.findByRole('tab', { name: 'Edit' }))
+
+      await user.click(screen.getByRole('switch', { name: 'Enable launcher monitoring' }))
+      // Close before the 800 ms debounce fires
+      await user.click(screen.getByRole('button', { name: 'Close game detail' }))
+
+      await waitFor(() => {
+        expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+      })
+      expect(ipc.calls('update_game')).toHaveLength(1)
+      expect(ipc.calls('update_game')[0]).toMatchObject({
+        input: { monitorMode: 'named' },
+      })
+    })
   })
 
   it('shows a delete button once the game has loaded', async () => {
