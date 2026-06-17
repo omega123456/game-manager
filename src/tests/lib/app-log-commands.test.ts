@@ -1,6 +1,11 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { logFrontend, toast, toastError } from '../../lib/app-log-commands'
+import {
+  logFrontend,
+  shouldEmitFrontendLog,
+  toast,
+  toastError,
+} from '../../lib/app-log-commands'
 import { useToastStore } from '../../stores/toast-store'
 import { ipc } from '../ipc-mock'
 
@@ -31,6 +36,22 @@ describe('logFrontend', () => {
       expect(consoleError).toHaveBeenCalledWith('[app-log]', 'error', 'boom', expect.any(Error))
     })
     consoleError.mockRestore()
+  })
+
+})
+
+describe('shouldEmitFrontendLog', () => {
+  it('keeps trace+ enabled in development', () => {
+    expect(shouldEmitFrontendLog('trace', true)).toBe(true)
+    expect(shouldEmitFrontendLog('debug', true)).toBe(true)
+  })
+
+  it('limits production to info and above', () => {
+    expect(shouldEmitFrontendLog('trace', false)).toBe(false)
+    expect(shouldEmitFrontendLog('debug', false)).toBe(false)
+    expect(shouldEmitFrontendLog('info', false)).toBe(true)
+    expect(shouldEmitFrontendLog('warn', false)).toBe(true)
+    expect(shouldEmitFrontendLog('error', false)).toBe(true)
   })
 })
 

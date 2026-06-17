@@ -22,6 +22,17 @@ export interface FrontendLogDetails {
 }
 
 /**
+ * Production builds keep application logging at info+ to avoid persisting
+ * verbose diagnostics in packaged installs. Development keeps trace+.
+ */
+export function shouldEmitFrontendLog(
+  level: FrontendLogLevel,
+  isDev: boolean = import.meta.env.DEV
+): boolean {
+  return isDev || (level !== 'debug' && level !== 'trace')
+}
+
+/**
  * Emit a line to the application logger (Rust `tracing` + `logs` table). Fire-and-forget.
  */
 export function logFrontend(
@@ -29,6 +40,10 @@ export function logFrontend(
   message: string,
   extra?: FrontendLogDetails
 ): void {
+  if (!shouldEmitFrontendLog(level)) {
+    return
+  }
+
   void invoke('log_frontend', {
     level,
     message,
