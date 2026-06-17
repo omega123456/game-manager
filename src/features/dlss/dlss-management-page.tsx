@@ -39,29 +39,30 @@ export function DlssManagementPage(): React.JSX.Element {
   const statesQuery = useDlssGameStatesQuery()
   const scanLibrary = useScanDlssLibraryMutation()
 
-  // Scan-if-stale on mount: when any cached state is stale (or none exist yet),
-  // kick a single library scan to refresh the cache.
+  // Re-scan the whole library every time this page is opened so games added or
+  // deleted since the last scan are (re)counted — detection is session-only and
+  // intentionally not relied on as a cache here. The ref guards against duplicate
+  // runs within a single mount; navigating away and back remounts and re-scans.
   const scanned = React.useRef(false)
   React.useEffect(() => {
-    if (scanned.current || statesQuery.data === undefined) {
+    if (scanned.current) {
       return
     }
-    const stale = statesQuery.data.length === 0 || statesQuery.data.some((state) => state.stale)
-    if (stale) {
-      scanned.current = true
-      scanLibrary.mutate()
-      return
-    }
-    logFrontend('info', 'DLSS library scan skipped — cached detection rows are present', {
+    scanned.current = true
+    logFrontend('info', 'DLSS management opened — rescanning library', {
       category: 'dlss.scan',
-      details: `cached_games=${statesQuery.data.length}`,
     })
-  }, [statesQuery.data, scanLibrary])
+    scanLibrary.mutate()
+  }, [scanLibrary])
 
   const isElevated = supportQuery.data?.isElevated ?? true
   const nvapiAvailable = supportQuery.data?.nvapiAvailable ?? false
 
-  const loading = catalogQuery.isLoading || statesQuery.isLoading || scanLibrary.isPending
+  // Only block on the genuine first-load of the catalog/state queries. The
+  // on-open library rescan runs in the background and refreshes counts in place
+  // (via query invalidation) — it must not flip the whole page back to a
+  // skeleton, which looks like the page is stuck while re-reading DLLs.
+  const loading = catalogQuery.isLoading || statesQuery.isLoading
   const states = statesQuery.data ?? []
   const hasGames = states.some(
     (state) => state.superResolution || state.frameGeneration || state.rayReconstruction

@@ -125,8 +125,11 @@ export function Combobox({
     return trigger
   }
 
+  // `modal` is required when this combobox is rendered inside a Radix Dialog:
+  // without it, the dialog's body scroll lock prevents wheel scrolling in the
+  // portaled popover list (see radix-ui/primitives#1159).
   return (
-    <Popover open={open} onOpenChange={setOpen}>
+    <Popover open={open} onOpenChange={setOpen} modal>
       <PopoverTrigger asChild>{trigger}</PopoverTrigger>
       <PopoverContent className="w-(--radix-popover-trigger-width) min-w-72 p-0" align="start">
         <Command>

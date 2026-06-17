@@ -31,6 +31,10 @@ pub const MIGRATIONS: &[Migration] = &[
         version: 3,
         sql: include_str!("../../migrations/003_dlss.sql"),
     },
+    Migration {
+        version: 4,
+        sql: include_str!("../../migrations/004_dlss_detection_in_memory.sql"),
+    },
 ];
 
 /// Read the current schema version from `PRAGMA user_version`.

@@ -32,6 +32,10 @@ pub struct AppState {
     keep_awake: KeepAwake,
     /// Raises the running game's process priority when the setting is enabled.
     prioritizer: Box<dyn ProcessPrioritizer>,
+    /// Session-only DLSS DLL-detection cache, keyed by game id. Detection is
+    /// recomputed on every launch and **never** persisted to the DB; this map is
+    /// its sole store for the lifetime of the process.
+    dlss_detection: Mutex<HashMap<i64, crate::dlss::detect::DetectionResult>>,
 }
 
 impl AppState {
@@ -66,6 +70,7 @@ impl AppState {
             launches: Mutex::new(HashMap::new()),
             keep_awake: KeepAwake::new(blocker),
             prioritizer,
+            dlss_detection: Mutex::new(HashMap::new()),
         }
     }
 
@@ -178,6 +183,62 @@ impl AppState {
             },
             Err(_) => false,
         }
+    }
+
+    /// Store a game's session-only DLSS detection result, replacing any prior one.
+    pub fn dlss_detection_set(
+        &self,
+        game_id: i64,
+        result: crate::dlss::detect::DetectionResult,
+    ) {
+        match self.dlss_detection.lock() {
+            Ok(mut map) => {
+                map.insert(game_id, result);
+            }
+            Err(_) => {
+                tracing::warn!(
+                    category = "dlss",
+                    game_id,
+                    "dlss detection cache mutex poisoned; detection not cached"
+                );
+            }
+        }
+    }
+
+    /// Read a game's cached DLSS detection, or `None` if it has not been scanned
+    /// this session.
+    pub fn dlss_detection_get(
+        &self,
+        game_id: i64,
+    ) -> Option<crate::dlss::detect::DetectionResult> {
+        self.dlss_detection
+            .lock()
+            .ok()
+            .and_then(|map| map.get(&game_id).cloned())
+    }
+
+    /// Drop cached DLSS detections for any game id not in `live_ids` (called
+    /// after a full library scan so deleted games leave the cache).
+    pub fn dlss_detection_retain(&self, live_ids: &std::collections::HashSet<i64>) {
+        if let Ok(mut map) = self.dlss_detection.lock() {
+            map.retain(|game_id, _| live_ids.contains(game_id));
+        }
+    }
+
+    /// Drop the cached DLSS detection for a single game (called when it is
+    /// deleted) so it stops counting toward the applicable totals immediately.
+    pub fn dlss_detection_remove(&self, game_id: i64) {
+        if let Ok(mut map) = self.dlss_detection.lock() {
+            map.remove(&game_id);
+        }
+    }
+
+    /// Snapshot every cached DLSS detection as `(game_id, result)` pairs.
+    pub fn dlss_detection_snapshot(&self) -> Vec<(i64, crate::dlss::detect::DetectionResult)> {
+        self.dlss_detection
+            .lock()
+            .map(|map| map.iter().map(|(id, result)| (*id, result.clone())).collect())
+            .unwrap_or_default()
     }
 }
 

@@ -204,6 +204,19 @@ pub fn detect_in_folder(
     Ok(summary)
 }
 
+/// A session-only detection result for one game, held in [`AppState`]'s
+/// in-memory cache. DLSS detection is **never persisted** — it is recomputed on
+/// every app launch and lives only for the lifetime of the process.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct DetectionResult {
+    /// The install folder the scan resolved/used, if any.
+    pub folder_resolved: Option<String>,
+    /// The per-type detected DLLs from the scan.
+    pub summary: DetectionSummary,
+    /// Timestamp of the scan (RFC 3339).
+    pub last_scanned_at: Option<String>,
+}
+
 /// The per-type detection results for one folder scan.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct DetectionSummary {
@@ -215,9 +228,39 @@ pub struct DetectionSummary {
     pub ray_reconstruction: Option<DetectedDll>,
 }
 
-/// Scan a single game with a caller-supplied reader and catalog, persisting the
-/// result. The runtime entry points ([`scan_game_impl`]) wrap this with the real
-/// reader and the resolved catalog; tests call it with a fake reader.
+/// Assemble the IPC-facing [`GameDlssState`] for a game from its durable
+/// folder override and its session-only detection.
+///
+/// When `detection` is `None` the game has not been scanned this session yet, so
+/// the result is marked `stale` (the frontend treats this as "needs scan").
+pub fn build_game_state(
+    game_id: i64,
+    folder_override: Option<String>,
+    detection: Option<DetectionResult>,
+) -> GameDlssState {
+    match detection {
+        Some(det) => GameDlssState {
+            game_id,
+            folder_override,
+            folder_resolved: det.folder_resolved,
+            super_resolution: det.summary.super_resolution,
+            frame_generation: det.summary.frame_generation,
+            ray_reconstruction: det.summary.ray_reconstruction,
+            last_scanned_at: det.last_scanned_at,
+            stale: false,
+        },
+        None => GameDlssState {
+            game_id,
+            folder_override,
+            stale: true,
+            ..GameDlssState::default()
+        },
+    }
+}
+
+/// Scan a single game with a caller-supplied reader and catalog, caching the
+/// result in memory. The runtime entry points ([`scan_game_impl`]) wrap this with
+/// the real reader and the resolved catalog; tests call it with a fake reader.
 pub fn scan_game_with(
     state: &AppState,
     game_id: i64,
@@ -227,10 +270,9 @@ pub fn scan_game_with(
     let game = state
         .with_db(|conn| crate::db::repo::games::get(conn, game_id))
         .map_err(DlssError::from)?;
-    let cached = state
-        .with_db(|conn| crate::db::repo::dlss::get(conn, game_id))
+    let folder_override = state
+        .with_db(|conn| crate::db::repo::dlss::get_folder_override(conn, game_id))
         .map_err(DlssError::from)?;
-    let folder_override = cached.as_ref().and_then(|s| s.folder_override.clone());
 
     let folder = resolve_folder(folder_override.as_deref(), &game.launch_target);
     tracing::info!(
@@ -266,7 +308,16 @@ pub fn scan_game_with(
 
     let now = chrono::Utc::now().to_rfc3339();
     let resolved = folder.as_ref().map(|f| f.to_string_lossy().to_string());
-    let new_state = GameDlssState {
+    // Detection is session-only: cache it in memory, never in the DB.
+    state.dlss_detection_set(
+        game_id,
+        DetectionResult {
+            folder_resolved: resolved.clone(),
+            summary: summary.clone(),
+            last_scanned_at: Some(now.clone()),
+        },
+    );
+    Ok(GameDlssState {
         game_id,
         folder_override,
         folder_resolved: resolved,
@@ -275,11 +326,7 @@ pub fn scan_game_with(
         ray_reconstruction: summary.ray_reconstruction,
         last_scanned_at: Some(now),
         stale: false,
-    };
-    state
-        .with_db(|conn| crate::db::repo::dlss::upsert(conn, &new_state))
-        .map_err(DlssError::from)?;
-    Ok(new_state)
+    })
 }
 
 /// Re-scan a single game's folder and persist the detected versions.
@@ -297,8 +344,12 @@ pub fn scan_library_with(
     reader: &dyn FileVersionReader,
 ) -> DlssResult<Vec<GameDlssState>> {
     let games = state
-        .with_db(|conn| crate::db::repo::games::list(conn))
+        .with_db(crate::db::repo::games::list)
         .map_err(DlssError::from)?;
+    // Drop cached detections for games that no longer exist so deleted games stop
+    // counting toward the applicable totals (the cache is the source of truth).
+    let live_ids: std::collections::HashSet<i64> = games.iter().map(|game| game.id).collect();
+    state.dlss_detection_retain(&live_ids);
     let mut states = Vec::with_capacity(games.len());
     for game in games {
         match scan_game_with(state, game.id, catalog, reader) {

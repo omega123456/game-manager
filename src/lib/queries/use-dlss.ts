@@ -15,6 +15,7 @@ import {
   listDlssGameStates,
   onDlssApplyProgress,
   onDlssDownloadProgress,
+  onDlssLibraryScanned,
   saveDlssGame,
   scanDlssGame,
   scanDlssLibrary,
@@ -132,6 +133,45 @@ export function useInvalidateDlss() {
     void queryClient.invalidateQueries({ queryKey: DLSS_CATALOG_QUERY_KEY })
     void queryClient.invalidateQueries({ queryKey: GAMES_QUERY_KEY })
   }
+}
+
+/**
+ * Subscribe (once) to the backend's startup library-scan-complete event and
+ * refresh the DLSS state + games queries when it fires, so library pills appear
+ * as soon as the session detection cache is populated (no restart needed).
+ */
+export function useDlssLibraryScanSync(): void {
+  const queryClient = useQueryClient()
+
+  useEffect(() => {
+    let unlisten: (() => void) | undefined
+    let cancelled = false
+
+    void onDlssLibraryScanned(() => {
+      void queryClient.invalidateQueries({ queryKey: DLSS_STATES_QUERY_KEY })
+      void queryClient.invalidateQueries({ queryKey: DLSS_GAME_STATE_QUERY_KEY })
+      void queryClient.invalidateQueries({ queryKey: DLSS_APPLICABLE_QUERY_KEY })
+      void queryClient.invalidateQueries({ queryKey: GAMES_QUERY_KEY })
+    })
+      .then((fn) => {
+        if (cancelled) {
+          fn()
+          return
+        }
+        unlisten = fn
+      })
+      .catch((error: unknown) => {
+        logFrontend('warn', 'Failed to subscribe to DLSS library-scan events.', {
+          category: 'dlss.events',
+          details: error instanceof Error ? error.message : String(error),
+        })
+      })
+
+    return () => {
+      cancelled = true
+      unlisten?.()
+    }
+  }, [queryClient])
 }
 
 // ---------------------------------------------------------------------------

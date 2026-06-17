@@ -521,13 +521,15 @@ fn set_game_preset_for_is_noop_success_when_unmatched() {
 }
 
 // ---------------------------------------------------------------------------
-// Command impls (no NVIDIA driver in CI → unsupported, never panics).
+// Command impls. Tests build with `test-utils`, which forces `real_driver()` to
+// return `Unsupported`, so these NEVER reach the live driver — running them must
+// never mutate real NVIDIA preset state, even on a developer's GPU. The `Ok`
+// arms remain only as defensive no-panic guards.
 // ---------------------------------------------------------------------------
 
 #[test]
 fn global_get_impl_is_unsupported_or_ok_without_gpu() {
-    // Under coverage / non-NVIDIA CI this is `Unsupported`; on a real GPU it may
-    // succeed. Either way it must not panic.
+    // `test-utils` guarantees `Unsupported`; must not panic or touch the driver.
     match presets::get_global_preset_impl(&state(), PresetKind::Dlss) {
         Ok(_) => {}
         Err(err) => assert!(matches!(err, DlssError::Unsupported)),

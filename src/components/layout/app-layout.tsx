@@ -4,14 +4,17 @@ import { Sidebar } from '@/components/layout/sidebar'
 import { TopBar } from '@/components/layout/top-bar'
 import { LaunchBanner } from '@/features/launch/launch-banner'
 import { useLaunchEvents } from '@/features/launch/use-launch-events'
+import { useDlssLibraryScanSync } from '@/lib/queries/use-dlss'
 
 /**
  * App shell: a CSS grid with a fixed 256px sidebar column and a content column
  * holding the TopBar, the live LaunchBanner slot, and the routed outlet. The
- * launch lifecycle event subscription is established here, once, at mount.
+ * launch lifecycle and DLSS library-scan event subscriptions are established
+ * here, once, at mount.
  */
 export function AppLayout(): React.JSX.Element {
   useLaunchEvents()
+  useDlssLibraryScanSync()
 
   return (
     <div

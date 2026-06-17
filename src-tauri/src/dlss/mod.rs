@@ -88,7 +88,7 @@ impl From<std::io::Error> for DlssError {
 }
 
 /// Trim a trailing `.0` (repeatedly) from an upstream version so `3.7.0.0`
-/// renders as `3.7` (matching DLSS Swapper's display).
+/// renders as `3.7` in the UI.
 pub fn display_version(raw: &str) -> String {
     let mut value = raw.trim();
     while let Some(stripped) = value.strip_suffix(".0") {

@@ -210,18 +210,22 @@ pub trait NvapiDriver: Send {
 /// single legitimate runtime boundary excluded from CI coverage via the existing
 /// `cfg(coverage)` entrypoint carve-out — every line of *logic* lives in the
 /// `cfg(coverage)`-free orchestration layer ([`super::drs`]).
-#[cfg(all(windows, not(coverage)))]
+#[cfg(all(windows, not(coverage), not(feature = "test-utils")))]
 pub fn real_driver() -> DlssResult<Box<dyn NvapiDriver>> {
     windows_impl::RealDriver::open().map(|driver| Box::new(driver) as Box<dyn NvapiDriver>)
 }
 
-/// Fallback when NVAPI cannot be used at compile time (non-Windows / coverage).
-#[cfg(not(all(windows, not(coverage))))]
+/// Fallback when NVAPI cannot be used (non-Windows / coverage) or must never be
+/// reached (`test-utils`). Tests always build with `test-utils`, so this
+/// guarantees a test can never touch the live driver and mutate real preset
+/// state; it returns [`crate::dlss::DlssError::Unsupported`] just like a host
+/// with no NVIDIA driver.
+#[cfg(not(all(windows, not(coverage), not(feature = "test-utils"))))]
 pub fn real_driver() -> DlssResult<Box<dyn NvapiDriver>> {
     Err(crate::dlss::DlssError::Unsupported)
 }
 
-#[cfg(all(windows, not(coverage)))]
+#[cfg(all(windows, not(coverage), not(feature = "test-utils")))]
 mod windows_impl {
     use std::ffi::{c_void, OsStr};
     use std::os::windows::ffi::OsStrExt;

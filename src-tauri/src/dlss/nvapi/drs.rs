@@ -75,7 +75,7 @@ fn normalize_exe(name: &str) -> String {
         .unwrap_or_else(|| name.to_lowercase())
 }
 
-/// Find the per-game profile (port of DLSS Swapper `FindGameProfile`):
+/// Find the per-game DRS profile for a game:
 ///
 /// 1. order all driver profiles by Levenshtein distance between the profile name
 ///    and `game_name` (closest first);

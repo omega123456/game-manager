@@ -194,12 +194,9 @@ fn scan_game_with_persists_state() {
         Some(game_dir.path().to_string_lossy().as_ref())
     );
 
-    // Persisted to the cache.
-    let cached = st
-        .with_db(|c| game_manager_lib::db::repo::dlss::get(c, game_id))
-        .unwrap()
-        .unwrap();
-    assert_eq!(cached.super_resolution.unwrap().version, "3.7");
+    // Cached in the session (in-memory) detection store, never in the DB.
+    let cached = st.dlss_detection_get(game_id).unwrap();
+    assert_eq!(cached.summary.super_resolution.unwrap().version, "3.7");
 }
 
 #[test]

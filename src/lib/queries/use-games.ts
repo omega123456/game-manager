@@ -12,7 +12,13 @@ import {
   updateGame,
   type SaveGameInput,
 } from '@/lib/ipc/games-commands'
-import { GAMES_QUERY_KEY, GROUPS_QUERY_KEY, PLAY_NOW_QUERY_KEY } from '@/lib/queries/query-keys'
+import {
+  DLSS_APPLICABLE_QUERY_KEY,
+  DLSS_STATES_QUERY_KEY,
+  GAMES_QUERY_KEY,
+  GROUPS_QUERY_KEY,
+  PLAY_NOW_QUERY_KEY,
+} from '@/lib/queries/query-keys'
 import type { Game } from '@/types/domain'
 
 export function gameDetailQueryKey(id: number) {
@@ -60,6 +66,11 @@ export function useResolvedScriptsQuery(gameId: number | null | undefined) {
 function invalidateGames(queryClient: ReturnType<typeof useQueryClient>, gameId?: number) {
   void queryClient.invalidateQueries({ queryKey: GAMES_QUERY_KEY })
   void queryClient.invalidateQueries({ queryKey: PLAY_NOW_QUERY_KEY })
+  // Adding/removing/editing a game changes the set the backend scans for DLSS,
+  // so refresh the (session-only) detection that drives the library pills and
+  // the management-page applicable counts.
+  void queryClient.invalidateQueries({ queryKey: DLSS_STATES_QUERY_KEY })
+  void queryClient.invalidateQueries({ queryKey: DLSS_APPLICABLE_QUERY_KEY })
   if (typeof gameId === 'number') {
     void queryClient.invalidateQueries({ queryKey: gameDetailQueryKey(gameId) })
     void queryClient.invalidateQueries({ queryKey: resolvedScriptsQueryKey(gameId) })

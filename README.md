@@ -19,6 +19,8 @@ A **Windows 11 desktop game library and launch orchestrator** built with Tauri 2
   - [Stack](#stack)
   - [Project layout](#project-layout)
   - [Contributing](#contributing)
+  - [License](#license)
+  - [Third-party acknowledgments](#third-party-acknowledgments)
   - [CLAUDE.md](CLAUDE.md)
 
 ## Features
@@ -225,3 +227,19 @@ game-manager/
 1. Complete **Setup** (including Playwright, cargo-nextest, and Rust coverage tools if you run the full suite), then stay on the latest dependencies with `pnpm install` as needed.
 2. Run `pnpm lint`, `pnpm typecheck`, and `pnpm test:all` (Vitest coverage, Rust with llvm-cov, Playwright) before opening a PR.
 3. For behavior that depends on the native shell, verify with `pnpm tauri dev` when possible. See **CLAUDE.md** for IPC conventions, the 7-step command checklist, directory map, and screenshot baseline workflow.
+
+## License
+
+Copyright (C) 2026 omega123456
+
+Game Manager is free software: you can redistribute it and/or modify it under the
+terms of the GNU General Public License as published by the Free Software
+Foundation, either version 3 of the License, or (at your option) any later version.
+
+See [LICENSE](LICENSE) for the full text.
+
+## Third-party acknowledgments
+
+The DLSS version catalog and downloadable DLL packages are sourced from
+[DLSS Swapper](https://github.com/beeradmoore/dlss-swapper) by Brad Moore. See
+[THIRD_PARTY.md](THIRD_PARTY.md) for details.

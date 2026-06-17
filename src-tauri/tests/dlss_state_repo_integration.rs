@@ -1,8 +1,9 @@
 //! DLSS state repository + cached-command integration tests.
 //!
-//! Verifies migration 003 applies cleanly and that `game_dlss_state` rows
-//! round-trip (folder override + detected versions/paths + scan time) against an
-//! in-memory database, plus the Phase-1 cached command surface.
+//! Verifies the `game_dlss_state` table stores only the folder override (DLSS
+//! detection is session-only and held in `AppState`'s in-memory cache, never
+//! persisted), that overrides round-trip against an in-memory database, and the
+//! Phase-1 cached command surface that merges the two.
 
 use game_manager_lib::commands::dlss::{
     count_applicable_impl, get_game_state_impl, get_preset_options_impl, get_support_impl,
@@ -11,9 +12,9 @@ use game_manager_lib::commands::dlss::{
 use game_manager_lib::db::connection::open_in_memory;
 use game_manager_lib::db::repo::dlss as repo;
 use game_manager_lib::db::repo::games::{self, NewGame};
+use game_manager_lib::dlss::detect::{DetectionResult, DetectionSummary};
 use game_manager_lib::domain::{
-    DetectedDll, DllType, GameDlssState, MonitorMode, PresetKind, SaveGameDllSelection,
-    SaveGameDlss,
+    DetectedDll, DllType, MonitorMode, PresetKind, SaveGameDllSelection, SaveGameDlss,
 };
 use game_manager_lib::error::AppResult;
 use game_manager_lib::state::AppState;
@@ -40,61 +41,103 @@ fn seed_game(state: &AppState, name: &str) -> i64 {
         .unwrap()
 }
 
+fn dll(version: &str, path: &str) -> DetectedDll {
+    DetectedDll {
+        version: version.to_string(),
+        path: path.to_string(),
+        md5: None,
+    }
+}
+
+/// Seed a session detection result into the in-memory cache.
+fn cache_detection(
+    state: &AppState,
+    game_id: i64,
+    sr: Option<DetectedDll>,
+    fg: Option<DetectedDll>,
+    rr: Option<DetectedDll>,
+) {
+    state.dlss_detection_set(
+        game_id,
+        DetectionResult {
+            folder_resolved: Some("D:/Games/X".to_string()),
+            summary: DetectionSummary {
+                super_resolution: sr,
+                frame_generation: fg,
+                ray_reconstruction: rr,
+            },
+            last_scanned_at: Some("2026-06-17T12:00:00Z".to_string()),
+        },
+    );
+}
+
 #[test]
-fn migration_003_creates_the_table_and_get_is_empty() {
+fn migration_creates_the_table_and_override_is_empty() {
     let state = state();
     let game_id = seed_game(&state, "Elden Ring");
-    let cached = state.with_db(|conn| repo::get(conn, game_id)).unwrap();
-    assert!(cached.is_none());
+    let folder = state
+        .with_db(|conn| repo::get_folder_override(conn, game_id))
+        .unwrap();
+    assert!(folder.is_none());
 }
 
 #[test]
-fn upsert_round_trips_override_and_detection() {
+fn folder_override_round_trips_in_the_db() {
     let state = state();
     let game_id = seed_game(&state, "Cyberpunk");
-    let row = GameDlssState {
-        game_id,
-        folder_override: Some("D:/Games/Cyberpunk".to_string()),
-        super_resolution: Some(DetectedDll {
-            version: "3.7.10".to_string(),
-            path: "D:/Games/Cyberpunk/nvngx_dlss.dll".to_string(),
-            md5: None,
-        }),
-        ray_reconstruction: Some(DetectedDll {
-            version: "3.7".to_string(),
-            path: "D:/Games/Cyberpunk/nvngx_dlssd.dll".to_string(),
-            md5: None,
-        }),
-        last_scanned_at: Some("2026-06-17T12:00:00Z".to_string()),
-        ..GameDlssState::default()
-    };
-    state.with_db(|conn| repo::upsert(conn, &row)).unwrap();
-
+    state
+        .with_db(|conn| repo::set_folder_override(conn, game_id, Some("D:/Games/Cyberpunk")))
+        .unwrap();
     let read = state
-        .with_db(|conn| repo::get(conn, game_id))
-        .unwrap()
-        .expect("row exists");
-    assert_eq!(read.folder_override.as_deref(), Some("D:/Games/Cyberpunk"));
-    assert_eq!(read.super_resolution.unwrap().version, "3.7.10");
-    assert!(read.frame_generation.is_none());
-    assert_eq!(read.ray_reconstruction.unwrap().path, "D:/Games/Cyberpunk/nvngx_dlssd.dll");
-    assert_eq!(read.last_scanned_at.as_deref(), Some("2026-06-17T12:00:00Z"));
+        .with_db(|conn| repo::get_folder_override(conn, game_id))
+        .unwrap();
+    assert_eq!(read.as_deref(), Some("D:/Games/Cyberpunk"));
 }
 
 #[test]
-fn upsert_overwrites_existing_row() {
+fn detection_round_trips_in_the_session_cache_only() {
+    let state = state();
+    let game_id = seed_game(&state, "Cyberpunk");
+    cache_detection(
+        &state,
+        game_id,
+        Some(dll("3.7.10", "D:/Games/Cyberpunk/nvngx_dlss.dll")),
+        None,
+        Some(dll("3.7", "D:/Games/Cyberpunk/nvngx_dlssd.dll")),
+    );
+
+    // Detection is visible through the merged command read…
+    let read = get_game_state_impl(&state, game_id).unwrap();
+    assert!(!read.stale);
+    assert_eq!(read.super_resolution.unwrap().version, "3.7.10");
+    assert!(read.frame_generation.is_none());
+    assert_eq!(
+        read.ray_reconstruction.unwrap().path,
+        "D:/Games/Cyberpunk/nvngx_dlssd.dll"
+    );
+    assert_eq!(read.last_scanned_at.as_deref(), Some("2026-06-17T12:00:00Z"));
+
+    // …but nothing is persisted to the DB.
+    assert!(state
+        .with_db(|conn| repo::get_folder_override(conn, game_id))
+        .unwrap()
+        .is_none());
+}
+
+#[test]
+fn set_folder_override_overwrites_existing_value() {
     let state = state();
     let game_id = seed_game(&state, "Game");
-    let mut row = GameDlssState {
-        game_id,
-        folder_override: Some("A".to_string()),
-        ..GameDlssState::default()
-    };
-    state.with_db(|conn| repo::upsert(conn, &row)).unwrap();
-    row.folder_override = Some("B".to_string());
-    state.with_db(|conn| repo::upsert(conn, &row)).unwrap();
-    let read = state.with_db(|conn| repo::get(conn, game_id)).unwrap().unwrap();
-    assert_eq!(read.folder_override.as_deref(), Some("B"));
+    state
+        .with_db(|conn| repo::set_folder_override(conn, game_id, Some("A")))
+        .unwrap();
+    state
+        .with_db(|conn| repo::set_folder_override(conn, game_id, Some("B")))
+        .unwrap();
+    let read = state
+        .with_db(|conn| repo::get_folder_override(conn, game_id))
+        .unwrap();
+    assert_eq!(read.as_deref(), Some("B"));
 }
 
 #[test]
@@ -111,19 +154,10 @@ fn set_folder_override_inserts_then_clears() {
 }
 
 #[test]
-fn set_folder_override_preserves_detection() {
+fn set_folder_override_preserves_session_detection() {
     let state = state();
     let game_id = seed_game(&state, "Game");
-    let row = GameDlssState {
-        game_id,
-        super_resolution: Some(DetectedDll {
-            version: "3.7".to_string(),
-            path: "p".to_string(),
-            md5: None,
-        }),
-        ..GameDlssState::default()
-    };
-    state.with_db(|conn| repo::upsert(conn, &row)).unwrap();
+    cache_detection(&state, game_id, Some(dll("3.7", "p")), None, None);
     let updated = set_folder_override_impl(&state, game_id, Some("D:/Z")).unwrap();
     assert!(updated.super_resolution.is_some());
     assert_eq!(updated.folder_override.as_deref(), Some("D:/Z"));
@@ -140,23 +174,15 @@ fn get_game_state_returns_stale_default_when_unscanned() {
 }
 
 #[test]
-fn list_returns_all_cached_rows_ordered() {
+fn list_returns_games_from_cache_and_overrides_ordered() {
     let state = state();
     let a = seed_game(&state, "A");
     let b = seed_game(&state, "B");
-    for id in [b, a] {
-        state
-            .with_db(|conn| {
-                repo::upsert(
-                    conn,
-                    &GameDlssState {
-                        game_id: id,
-                        ..GameDlssState::default()
-                    },
-                )
-            })
-            .unwrap();
-    }
+    // Seed in reverse id order to prove the result is sorted by game id.
+    cache_detection(&state, b, Some(dll("3.7", "p")), None, None);
+    state
+        .with_db(|conn| repo::set_folder_override(conn, a, Some("D:/A")))
+        .unwrap();
     let states = list_game_states_impl(&state).unwrap();
     assert_eq!(states.len(), 2);
     assert!(states[0].game_id < states[1].game_id);
@@ -167,43 +193,14 @@ fn count_applicable_counts_detected_per_type() {
     let state = state();
     let g1 = seed_game(&state, "One");
     let g2 = seed_game(&state, "Two");
-    state
-        .with_db(|conn| {
-            repo::upsert(
-                conn,
-                &GameDlssState {
-                    game_id: g1,
-                    super_resolution: Some(DetectedDll {
-                        version: "3.7".into(),
-                        path: "p".into(),
-                        md5: None,
-                    }),
-                    ..GameDlssState::default()
-                },
-            )
-        })
-        .unwrap();
-    state
-        .with_db(|conn| {
-            repo::upsert(
-                conn,
-                &GameDlssState {
-                    game_id: g2,
-                    super_resolution: Some(DetectedDll {
-                        version: "3.5".into(),
-                        path: "q".into(),
-                        md5: None,
-                    }),
-                    frame_generation: Some(DetectedDll {
-                        version: "1.1".into(),
-                        path: "r".into(),
-                        md5: None,
-                    }),
-                    ..GameDlssState::default()
-                },
-            )
-        })
-        .unwrap();
+    cache_detection(&state, g1, Some(dll("3.7", "p")), None, None);
+    cache_detection(
+        &state,
+        g2,
+        Some(dll("3.5", "q")),
+        Some(dll("1.1", "r")),
+        None,
+    );
 
     assert_eq!(count_applicable_impl(&state, DllType::SuperResolution).unwrap(), 2);
     assert_eq!(count_applicable_impl(&state, DllType::FrameGeneration).unwrap(), 1);
@@ -211,22 +208,16 @@ fn count_applicable_counts_detected_per_type() {
 }
 
 #[test]
-fn deleting_a_game_cascades_to_its_dlss_state() {
+fn deleting_a_game_cascades_to_its_folder_override() {
     let state = state();
     let game_id = seed_game(&state, "Doomed");
     state
-        .with_db(|conn| {
-            repo::upsert(
-                conn,
-                &GameDlssState {
-                    game_id,
-                    ..GameDlssState::default()
-                },
-            )
-        })
+        .with_db(|conn| repo::set_folder_override(conn, game_id, Some("D:/Doomed")))
         .unwrap();
     state.with_db(|conn| games::delete(conn, game_id)).unwrap();
-    let read = state.with_db(|conn| repo::get(conn, game_id)).unwrap();
+    let read = state
+        .with_db(|conn| repo::get_folder_override(conn, game_id))
+        .unwrap();
     assert!(read.is_none());
 }
 

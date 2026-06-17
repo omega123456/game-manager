@@ -8,8 +8,8 @@ use std::path::Path;
 
 use game_manager_lib::db::connection::open_in_memory;
 use game_manager_lib::db::repo::games::{self, NewGame};
-use game_manager_lib::db::repo::dlss as dlss_repo;
-use game_manager_lib::domain::{DetectedDll, DllType, GameDlssState, MonitorMode};
+use game_manager_lib::dlss::detect::{DetectionResult, DetectionSummary};
+use game_manager_lib::domain::{DetectedDll, DllType, MonitorMode};
 use game_manager_lib::dlss::storage;
 use game_manager_lib::dlss::swap::{
     apply_to_all_impl, apply_to_game_impl, count_applicable_impl, ApplyProgressSink,
@@ -61,28 +61,40 @@ fn seed_storage_and_manifest(app_data: &Path, md5: &str, content: &[u8]) {
     std::fs::write(&manifest_path, manifest_json).unwrap();
 }
 
-fn detected_state(game_id: i64, dll_path: &Path) -> GameDlssState {
-    GameDlssState {
+/// Seed a session SR detection (in-memory; detection is never persisted).
+fn seed_sr_detection(st: &AppState, game_id: i64, dll_path: &Path) {
+    st.dlss_detection_set(
         game_id,
-        super_resolution: Some(DetectedDll {
-            version: "old".into(),
-            path: dll_path.to_string_lossy().to_string(),
-            md5: Some("oldmd5".into()),
-        }),
-        ..GameDlssState::default()
-    }
+        DetectionResult {
+            summary: DetectionSummary {
+                super_resolution: Some(DetectedDll {
+                    version: "old".into(),
+                    path: dll_path.to_string_lossy().to_string(),
+                    md5: Some("oldmd5".into()),
+                }),
+                ..DetectionSummary::default()
+            },
+            ..DetectionResult::default()
+        },
+    );
 }
 
-fn frame_generation_state(game_id: i64, dll_path: &Path) -> GameDlssState {
-    GameDlssState {
+/// Seed a session FG detection (in-memory; detection is never persisted).
+fn seed_fg_detection(st: &AppState, game_id: i64, dll_path: &Path) {
+    st.dlss_detection_set(
         game_id,
-        frame_generation: Some(DetectedDll {
-            version: "old-fg".into(),
-            path: dll_path.to_string_lossy().to_string(),
-            md5: Some("oldfgmd5".into()),
-        }),
-        ..GameDlssState::default()
-    }
+        DetectionResult {
+            summary: DetectionSummary {
+                frame_generation: Some(DetectedDll {
+                    version: "old-fg".into(),
+                    path: dll_path.to_string_lossy().to_string(),
+                    md5: Some("oldfgmd5".into()),
+                }),
+                ..DetectionSummary::default()
+            },
+            ..DetectionResult::default()
+        },
+    );
 }
 
 #[tokio::test]
@@ -103,8 +115,7 @@ async fn apply_version_backs_up_and_copies_over() {
     let game_id = st
         .with_db(|c| games::create(c, &new_game(exe.to_str().unwrap())))
         .unwrap();
-    st.with_db(|c| dlss_repo::upsert(c, &detected_state(game_id, &game_dll)))
-        .unwrap();
+    seed_sr_detection(&st, game_id, &game_dll);
 
     apply_to_game_impl(
         &st,
@@ -138,8 +149,7 @@ async fn system_default_restores_backup() {
     let game_id = st
         .with_db(|c| games::create(c, &new_game(exe.to_str().unwrap())))
         .unwrap();
-    st.with_db(|c| dlss_repo::upsert(c, &detected_state(game_id, &game_dll)))
-        .unwrap();
+    seed_sr_detection(&st, game_id, &game_dll);
 
     apply_to_game_impl(&st, game_id, DllType::SuperResolution, SwapTarget::SystemDefault)
         .await
@@ -167,8 +177,7 @@ async fn backup_is_created_only_once() {
     let game_id = st
         .with_db(|c| games::create(c, &new_game(exe.to_str().unwrap())))
         .unwrap();
-    st.with_db(|c| dlss_repo::upsert(c, &detected_state(game_id, &game_dll)))
-        .unwrap();
+    seed_sr_detection(&st, game_id, &game_dll);
 
     apply_to_game_impl(&st, game_id, DllType::SuperResolution, SwapTarget::Version("3.7".into()))
         .await
@@ -200,17 +209,13 @@ async fn apply_to_all_is_resilient() {
     let good_id = st
         .with_db(|c| games::create(c, &new_game(good_exe.to_str().unwrap())))
         .unwrap();
-    st.with_db(|c| dlss_repo::upsert(c, &detected_state(good_id, &good_dll)))
-        .unwrap();
+    seed_sr_detection(&st, good_id, &good_dll);
 
     // Bad game: cached detection points at a non-existent folder.
     let bad_id = st
         .with_db(|c| games::create(c, &new_game("steam://run/1")))
         .unwrap();
-    st.with_db(|c| {
-        dlss_repo::upsert(c, &detected_state(bad_id, Path::new("Z:/missing/nvngx_dlss.dll")))
-    })
-    .unwrap();
+    seed_sr_detection(&st, bad_id, Path::new("Z:/missing/nvngx_dlss.dll"));
 
     let recorder = Recorder { seen: std::sync::Mutex::new(vec![]) };
     let batch = apply_to_all_impl(&st, DllType::SuperResolution, "3.7", &recorder)
@@ -249,8 +254,7 @@ fn count_applicable_counts_detected() {
     let game_id = st
         .with_db(|c| games::create(c, &new_game("x.exe")))
         .unwrap();
-    st.with_db(|c| dlss_repo::upsert(c, &detected_state(game_id, Path::new("x.dll"))))
-        .unwrap();
+    seed_sr_detection(&st, game_id, Path::new("x.dll"));
     assert_eq!(
         count_applicable_impl(&st, DllType::SuperResolution).unwrap(),
         1
@@ -328,8 +332,7 @@ async fn system_default_without_backup_is_noop_ok() {
     let game_id = st
         .with_db(|c| games::create(c, &new_game(exe.to_str().unwrap())))
         .unwrap();
-    st.with_db(|c| dlss_repo::upsert(c, &detected_state(game_id, &game_dll)))
-        .unwrap();
+    seed_sr_detection(&st, game_id, &game_dll);
 
     // No .dlsss backup exists → reset is a no-op success.
     apply_to_game_impl(&st, game_id, DllType::SuperResolution, SwapTarget::SystemDefault)
@@ -377,10 +380,8 @@ async fn apply_to_all_only_targets_games_with_that_dll_detected() {
         .with_db(|c| games::create(c, &new_game(fg_exe.to_str().unwrap())))
         .unwrap();
 
-    st.with_db(|c| dlss_repo::upsert(c, &detected_state(sr_id, &sr_dll)))
-        .unwrap();
-    st.with_db(|c| dlss_repo::upsert(c, &frame_generation_state(fg_id, &fg_dll)))
-        .unwrap();
+    seed_sr_detection(&st, sr_id, &sr_dll);
+    seed_fg_detection(&st, fg_id, &fg_dll);
 
     let batch = apply_to_all_impl(&st, DllType::SuperResolution, "3.7", &NoopApplyProgressSink)
         .await

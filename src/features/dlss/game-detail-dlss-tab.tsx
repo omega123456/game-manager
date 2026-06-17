@@ -93,7 +93,7 @@ export function GameDetailDlssTab({ gameId }: GameDetailDlssTabProps): React.JSX
   React.useEffect(() => {
     logFrontend('info', 'DLSS detail tab mounted — fetching live preset state', {
       category: 'dlss.detail',
-      gameId,
+      details: `gameId=${gameId}`,
     })
   }, [gameId])
 

@@ -38,6 +38,9 @@
     "active": true,
     "targets": "all",
     "createUpdaterArtifacts": true,
+    "copyright": "Copyright (C) 2026 omega123456",
+    "license": "GPL-3.0-or-later",
+    "licenseFile": "../LICENSE",
     "icon": [
       "icons/32x32.png",
       "icons/64x64.png",

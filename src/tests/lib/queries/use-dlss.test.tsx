@@ -1,6 +1,6 @@
 import { act, renderHook, waitFor } from '@testing-library/react'
 import { QueryClientProvider } from '@tanstack/react-query'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import type { ReactNode } from 'react'
 
 import { createQueryClient } from '@/lib/query-client'
@@ -15,6 +15,7 @@ import {
   useDlssGamePresetQuery,
   useDlssGameStateQuery,
   useDlssGlobalPresetQuery,
+  useDlssLibraryScanSync,
   useDlssPresetOptionsQuery,
   useDlssSupportQuery,
   useDownloadDlssVersionMutation,
@@ -194,5 +195,19 @@ describe('useDlssApplyProgress', () => {
 
     act(() => result.current.reset())
     await waitFor(() => expect(result.current.results).toHaveLength(0))
+  })
+})
+
+describe('useDlssLibraryScanSync', () => {
+  it('invalidates DLSS + games queries when the library-scanned event fires', async () => {
+    const client = createQueryClient()
+    const invalidateSpy = vi.spyOn(client, 'invalidateQueries')
+    function scanWrapper({ children }: { children: ReactNode }) {
+      return <QueryClientProvider client={client}>{children}</QueryClientProvider>
+    }
+    renderHook(() => useDlssLibraryScanSync(), { wrapper: scanWrapper })
+
+    await ipc.emit(DLSS_EVENTS.libraryScanned, null)
+    await waitFor(() => expect(invalidateSpy).toHaveBeenCalled())
   })
 })

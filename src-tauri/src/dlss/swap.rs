@@ -66,17 +66,19 @@ fn destination_path(
     game_id: i64,
     dll_type: DllType,
 ) -> DlssResult<Option<PathBuf>> {
-    let cached = state
-        .with_db(|conn| crate::db::repo::dlss::get(conn, game_id))
-        .map_err(DlssError::from)?;
-    if let Some(detected) = cached.as_ref().and_then(|s| pick(s, dll_type).clone()) {
+    if let Some(detected) = state
+        .dlss_detection_get(game_id)
+        .and_then(|d| pick(&d.summary, dll_type).clone())
+    {
         return Ok(Some(PathBuf::from(detected.path)));
     }
     // Fall back to the resolved folder + the canonical filename.
     let game = state
         .with_db(|conn| crate::db::repo::games::get(conn, game_id))
         .map_err(DlssError::from)?;
-    let folder_override = cached.and_then(|s| s.folder_override);
+    let folder_override = state
+        .with_db(|conn| crate::db::repo::dlss::get_folder_override(conn, game_id))
+        .map_err(DlssError::from)?;
     let folder = detect::resolve_folder(folder_override.as_deref(), &game.launch_target);
     match folder {
         Some(dir) => {
@@ -88,12 +90,12 @@ fn destination_path(
     }
 }
 
-/// Borrow the detected DLL for `dll_type` from a state.
-fn pick(state: &GameDlssState, dll_type: DllType) -> &Option<DetectedDll> {
+/// Borrow the detected DLL for `dll_type` from a session detection summary.
+fn pick(summary: &detect::DetectionSummary, dll_type: DllType) -> &Option<DetectedDll> {
     match dll_type {
-        DllType::SuperResolution => &state.super_resolution,
-        DllType::FrameGeneration => &state.frame_generation,
-        DllType::RayReconstruction => &state.ray_reconstruction,
+        DllType::SuperResolution => &summary.super_resolution,
+        DllType::FrameGeneration => &summary.frame_generation,
+        DllType::RayReconstruction => &summary.ray_reconstruction,
     }
 }
 
@@ -184,13 +186,11 @@ pub async fn apply_to_all_impl(
     version: &str,
     sink: &dyn ApplyProgressSink,
 ) -> DlssResult<BatchApplyResult> {
-    let states = state
-        .with_db(|conn| crate::db::repo::dlss::list(conn))
-        .map_err(DlssError::from)?;
-    let applicable: Vec<i64> = states
-        .iter()
-        .filter(|s| pick(s, dll_type).is_some())
-        .map(|s| s.game_id)
+    let applicable: Vec<i64> = state
+        .dlss_detection_snapshot()
+        .into_iter()
+        .filter(|(_, detection)| pick(&detection.summary, dll_type).is_some())
+        .map(|(game_id, _)| game_id)
         .collect();
 
     let mut batch = BatchApplyResult {
@@ -232,9 +232,10 @@ pub async fn apply_to_all_impl(
 /// Count games where `dll_type` is currently detected (drives the button label
 /// + confirm). A cheap cache read, implemented in Phase 1.
 pub fn count_applicable_impl(state: &AppState, dll_type: DllType) -> DlssResult<u32> {
-    let states = state
-        .with_db(|conn| crate::db::repo::dlss::list(conn))
-        .map_err(DlssError::from)?;
-    let count = states.iter().filter(|s| pick(s, dll_type).is_some()).count() as u32;
+    let count = state
+        .dlss_detection_snapshot()
+        .iter()
+        .filter(|(_, detection)| pick(&detection.summary, dll_type).is_some())
+        .count() as u32;
     Ok(count)
 }

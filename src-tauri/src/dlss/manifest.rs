@@ -1,10 +1,10 @@
 //! DLSS version catalog: fetch, parse, cache, and static fallback.
 //!
-//! The upstream manifest (DLSS Swapper's public `manifest.json`) is fetched with
-//! the async `reqwest::Client`, cached to app-data, and falls back to the bundled
-//! static manifest when offline. Only the three managed DLL types (SR / FG / RR)
-//! are surfaced; FSR/XeSS and other keys are ignored. Versions are returned
-//! newest-first with a display label and per-version `is_downloaded` flag.
+//! The remote catalog manifest is fetched with the async `reqwest::Client`, cached
+//! to app-data, and falls back to the bundled static manifest when offline. Only
+//! the three managed DLL types (SR / FG / RR) are surfaced; FSR/XeSS and other
+//! keys are ignored. Versions are returned newest-first with a display label and
+//! per-version `is_downloaded` flag.
 
 use std::collections::BTreeMap;
 use std::path::Path;
@@ -31,7 +31,7 @@ struct RawManifest {
     dlss_d: Vec<RawRecord>,
 }
 
-/// A single upstream DLL record (DLSS Swapper `DLLRecord`).
+/// A single catalog DLL record from the upstream manifest.
 #[derive(Debug, Deserialize)]
 struct RawRecord {
     version: String,

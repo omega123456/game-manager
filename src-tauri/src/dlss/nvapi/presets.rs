@@ -211,9 +211,10 @@ pub fn set_game_preset_with(
 /// monitor process. Names are normalised to lowercase base file names downstream.
 pub fn game_identity(state: &AppState, game_id: i64) -> DlssResult<(String, Vec<String>)> {
     let game = state.with_db(|conn| crate::db::repo::games::get(conn, game_id))?;
-    let dlss_cached = state.with_db(|conn| crate::db::repo::dlss::get(conn, game_id))?;
+    let folder_override =
+        state.with_db(|conn| crate::db::repo::dlss::get_folder_override(conn, game_id))?;
+    let detection = state.dlss_detection_get(game_id);
     let mut exe_names = Vec::new();
-    let folder_override = dlss_cached.as_ref().and_then(|cached| cached.folder_override.clone());
     let resolved_folder =
         crate::dlss::detect::resolve_folder(folder_override.as_deref(), &game.launch_target);
     if let Some(folder) = resolved_folder.as_ref() {
@@ -231,15 +232,15 @@ pub fn game_identity(state: &AppState, game_id: i64) -> DlssResult<(String, Vec<
         folder_override = ?folder_override,
         resolved_folder = ?resolved_folder.as_ref().map(|path| path.to_string_lossy().to_string()),
         monitor_process_name = ?game.monitor_process_name,
-        detected_sr_path = ?dlss_cached
+        detected_sr_path = ?detection
             .as_ref()
-            .and_then(|cached| cached.super_resolution.as_ref().map(|dll| dll.path.as_str())),
-        detected_fg_path = ?dlss_cached
+            .and_then(|d| d.summary.super_resolution.as_ref().map(|dll| dll.path.as_str())),
+        detected_fg_path = ?detection
             .as_ref()
-            .and_then(|cached| cached.frame_generation.as_ref().map(|dll| dll.path.as_str())),
-        detected_rr_path = ?dlss_cached
+            .and_then(|d| d.summary.frame_generation.as_ref().map(|dll| dll.path.as_str())),
+        detected_rr_path = ?detection
             .as_ref()
-            .and_then(|cached| cached.ray_reconstruction.as_ref().map(|dll| dll.path.as_str())),
+            .and_then(|d| d.summary.ray_reconstruction.as_ref().map(|dll| dll.path.as_str())),
         candidate_exe_count = exe_names.len(),
         candidate_exes = ?exe_names,
         "nvapi profile match: resolved game identity"

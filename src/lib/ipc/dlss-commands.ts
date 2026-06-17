@@ -27,6 +27,8 @@ export const DLSS_EVENTS = {
   downloadProgress: 'dlss://download-progress',
   /** Per-game progress during an "Apply to All" batch. */
   applyProgress: 'dlss://apply-progress',
+  /** Emitted once the startup library scan finishes (session detection ready). */
+  libraryScanned: 'dlss://library-scanned',
 } as const
 
 /** NVAPI availability + elevation state. */
@@ -151,4 +153,9 @@ export function onDlssDownloadProgress(
 /** Subscribe to per-game apply-progress events. Returns the unlisten function. */
 export function onDlssApplyProgress(handler: (payload: ApplyResult) => void): Promise<UnlistenFn> {
   return listen<ApplyResult>(DLSS_EVENTS.applyProgress, (e) => handler(e.payload))
+}
+
+/** Subscribe to the startup library-scan-complete event. Returns the unlisten function. */
+export function onDlssLibraryScanned(handler: () => void): Promise<UnlistenFn> {
+  return listen<unknown>(DLSS_EVENTS.libraryScanned, () => handler())
 }

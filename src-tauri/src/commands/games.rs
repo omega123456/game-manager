@@ -185,11 +185,21 @@ pub fn get_play_now_game(state: tauri::State<'_, AppState>) -> AppResult<Option<
     get_play_now_game_impl(&state)
 }
 
-/// Thin `#[tauri::command]` wrapper delegating to [`create_game_impl`].
+/// Thin `#[tauri::command]` wrapper delegating to [`create_game_impl`], then
+/// scanning the new game for DLSS DLLs so its session detection (and the library
+/// pills) are available immediately — no restart or management-page visit needed.
 #[cfg(not(coverage))]
 #[tauri::command]
 pub fn create_game(state: tauri::State<'_, AppState>, input: GameUpsertInput) -> AppResult<Game> {
-    create_game_impl(&state, input)
+    let game = create_game_impl(&state, input)?;
+    if let Err(err) = crate::dlss::detect::scan_game_impl(&state, game.id) {
+        tracing::warn!(
+            category = "dlss",
+            game_id = game.id,
+            "DLSS scan of newly added game failed: {err}"
+        );
+    }
+    Ok(game)
 }
 
 /// Thin `#[tauri::command]` wrapper delegating to [`update_game_impl`].
@@ -203,11 +213,14 @@ pub fn update_game(
     update_game_impl(&state, id, input)
 }
 
-/// Thin `#[tauri::command]` wrapper delegating to [`delete_game_impl`].
+/// Thin `#[tauri::command]` wrapper delegating to [`delete_game_impl`], then
+/// dropping the game's session DLSS detection so it stops counting immediately.
 #[cfg(not(coverage))]
 #[tauri::command]
 pub fn delete_game(state: tauri::State<'_, AppState>, id: i64) -> AppResult<()> {
-    delete_game_impl(&state, id)
+    delete_game_impl(&state, id)?;
+    state.dlss_detection_remove(id);
+    Ok(())
 }
 
 /// Thin `#[tauri::command]` wrapper delegating to [`set_game_groups_impl`].

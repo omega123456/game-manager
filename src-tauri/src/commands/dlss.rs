@@ -25,6 +25,9 @@ use crate::state::AppState;
 pub const EVENT_DOWNLOAD_PROGRESS: &str = "dlss://download-progress";
 /// Tauri event channel for per-game batch-apply progress.
 pub const EVENT_APPLY_PROGRESS: &str = "dlss://apply-progress";
+/// Tauri event emitted once the startup library scan finishes, so the frontend
+/// can refetch the (session-only) detection that drives the library pills.
+pub const EVENT_LIBRARY_SCANNED: &str = "dlss://library-scanned";
 
 // ---------------------------------------------------------------------------
 // Testable impls (Phase 1 fully-implemented surface).
@@ -50,13 +53,11 @@ pub fn get_support_impl() -> DlssSupport {
 /// Returns a default (empty, `stale = true`) state when no row exists yet so the
 /// frontend can render a "needs scan" affordance without a NULL result.
 pub fn get_game_state_impl(state: &AppState, game_id: i64) -> AppResult<GameDlssState> {
-    let cached = state.with_db(|conn| crate::db::repo::dlss::get(conn, game_id))?;
-    let cache_hit = cached.is_some();
-    let result = cached.unwrap_or(GameDlssState {
-        game_id,
-        stale: true,
-        ..GameDlssState::default()
-    });
+    let folder_override =
+        state.with_db(|conn| crate::db::repo::dlss::get_folder_override(conn, game_id))?;
+    let detection = state.dlss_detection_get(game_id);
+    let cache_hit = detection.is_some();
+    let result = detect::build_game_state(game_id, folder_override, detection);
     tracing::info!(
         category = "dlss",
         game_id,
@@ -66,14 +67,37 @@ pub fn get_game_state_impl(state: &AppState, game_id: i64) -> AppResult<GameDlss
         has_fg = result.frame_generation.is_some(),
         has_rr = result.ray_reconstruction.is_some(),
         folder_override = ?result.folder_override,
-        "dlss_get_game_state: sqlite cache read (no folder scan)"
+        "dlss_get_game_state: in-memory detection read (no folder scan)"
     );
     Ok(result)
 }
 
-/// List every cached DLSS state (drives library pills). No NVAPI, no scanning.
+/// List every game's DLSS state (drives library pills) from the session detection
+/// cache, merged with durable folder overrides. No NVAPI, no scanning.
 pub fn list_game_states_impl(state: &AppState) -> AppResult<Vec<GameDlssState>> {
-    let states = state.with_db(|conn| crate::db::repo::dlss::list(conn))?;
+    use std::collections::BTreeMap;
+
+    let overrides: std::collections::HashMap<i64, String> = state
+        .with_db(crate::db::repo::dlss::list_folder_overrides)?
+        .into_iter()
+        .collect();
+
+    // Union of game ids that have a session detection or a stored override.
+    let mut detections: BTreeMap<i64, Option<detect::DetectionResult>> = BTreeMap::new();
+    for (game_id, detection) in state.dlss_detection_snapshot() {
+        detections.insert(game_id, Some(detection));
+    }
+    for game_id in overrides.keys() {
+        detections.entry(*game_id).or_insert(None);
+    }
+
+    let states: Vec<GameDlssState> = detections
+        .into_iter()
+        .map(|(game_id, detection)| {
+            detect::build_game_state(game_id, overrides.get(&game_id).cloned(), detection)
+        })
+        .collect();
+
     let with_dll = states
         .iter()
         .filter(|state| {
@@ -86,7 +110,7 @@ pub fn list_game_states_impl(state: &AppState) -> AppResult<Vec<GameDlssState>> 
         category = "dlss",
         count = states.len(),
         with_dll,
-        "dlss_list_game_states: sqlite cache read (no folder scan)"
+        "dlss_list_game_states: in-memory detection read (no folder scan)"
     );
     Ok(states)
 }
@@ -202,7 +226,9 @@ pub fn dlss_set_folder_override(
     game_id: i64,
     folder: Option<String>,
 ) -> AppResult<GameDlssState> {
-    set_folder_override_impl(&state, game_id, folder.as_deref())
+    set_folder_override_impl(&state, game_id, folder.as_deref())?;
+    // Re-scan immediately so detection reflects the new folder without a restart.
+    Ok(detect::scan_game_impl(&state, game_id)?)
 }
 
 /// Download a version (Phase 2 logic), emitting `dlss://download-progress`.
@@ -354,7 +380,10 @@ pub async fn save_game_impl(
     if let Some(value) = changes.rr_preset {
         nvapi::presets::set_game_preset_impl(state, game_id, PresetKind::RayReconstruction, value)?;
     }
-    get_game_state_impl(state, game_id)
+    // Re-scan so the returned state (and the in-memory cache that drives the
+    // library pills) reflects the just-saved folder override / DLL changes
+    // immediately, without waiting for the next launch's startup scan.
+    Ok(detect::scan_game_impl(state, game_id)?)
 }
 
 /// Apply a single optional DLL version change for one type during `save_game`.

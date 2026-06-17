@@ -16,6 +16,7 @@ import {
   listDlssGameStates,
   onDlssApplyProgress,
   onDlssDownloadProgress,
+  onDlssLibraryScanned,
   relaunchElevated,
   saveDlssGame,
   scanDlssGame,
@@ -33,6 +34,7 @@ describe('dlss-commands', () => {
     expect(DLSS_EVENTS).toEqual({
       downloadProgress: 'dlss://download-progress',
       applyProgress: 'dlss://apply-progress',
+      libraryScanned: 'dlss://library-scanned',
     })
   })
 
@@ -158,6 +160,13 @@ describe('dlss-commands', () => {
       const payload: ApplyResult = { gameId: 1, name: 'Elden Ring', ok: true }
       await ipc.emit(DLSS_EVENTS.applyProgress, payload)
       expect(handler).toHaveBeenCalledWith(payload)
+    })
+
+    it('notifies on the library-scanned event', async () => {
+      const handler = vi.fn<() => void>()
+      unlisteners.push(await onDlssLibraryScanned(handler))
+      await ipc.emit(DLSS_EVENTS.libraryScanned, null)
+      expect(handler).toHaveBeenCalled()
     })
   })
 })
