@@ -166,6 +166,21 @@ pre,
   user-select: text;
 }
 
+/* Freeze visual churn while a game process is active (see use-game-running-ui). */
+html.game-running *,
+html.game-running *::before,
+html.game-running *::after {
+  animation: none !important;
+  transition: none !important;
+  scroll-behavior: auto !important;
+}
+
+html.game-running [data-animated],
+html.game-running .animate-spin,
+html.game-running .animate-pulse {
+  animation: none !important;
+}
+
 /* Material Symbols baseline. */
 .material-symbols-rounded {
   font-variation-settings:

@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 
-import { isTickingPhase, useLaunchStore } from '@/stores/launch-store'
+import { isGameRunningPhase, isTickingPhase, useLaunchStore } from '@/stores/launch-store'
 import type { LaunchLifecycle } from '@/types/domain'
 
 function lifecycle(partial: Partial<LaunchLifecycle> & Pick<LaunchLifecycle, 'phase'>): LaunchLifecycle {
@@ -110,5 +110,12 @@ describe('launch-store', () => {
     expect(isTickingPhase('playing')).toBe(true)
     expect(isTickingPhase('before')).toBe(false)
     expect(isTickingPhase('idle')).toBe(false)
+  })
+
+  it('isGameRunningPhase is true only while playing', () => {
+    expect(isGameRunningPhase('playing')).toBe(true)
+    expect(isGameRunningPhase('waitingForProcess')).toBe(false)
+    expect(isGameRunningPhase('before')).toBe(false)
+    expect(isGameRunningPhase('idle')).toBe(false)
   })
 })

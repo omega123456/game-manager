@@ -5,6 +5,7 @@ import { LAUNCH_EVENTS, onLaunchEvent } from '@/lib/ipc/launch-commands'
 import { logFrontend } from '@/lib/app-log-commands'
 import { gameDetailQueryKey } from '@/lib/queries/use-games'
 import { GAMES_QUERY_KEY, PLAY_NOW_QUERY_KEY } from '@/lib/queries/query-keys'
+import { useGameRunningUi } from '@/features/launch/use-game-running-ui'
 import { isTickingPhase, useLaunchStore } from '@/stores/launch-store'
 import type { LaunchLifecycle } from '@/types/domain'
 
@@ -30,6 +31,7 @@ declare global {
  */
 export function useLaunchEvents(): void {
   const queryClient = useQueryClient()
+  useGameRunningUi()
 
   useEffect(() => {
     const applyLifecycle = useLaunchStore.getState().applyLifecycle

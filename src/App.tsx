@@ -4,6 +4,7 @@ import React, { useState } from 'react'
 
 import { ThemeProvider } from '@/components/theme/theme-provider'
 import { Toaster } from '@/components/ui/toaster'
+import { GameRunningMotionConfig } from '@/features/launch/game-running-motion-config'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { UpdateToast } from '@/features/updates/update-toast'
 import { createQueryClient } from '@/lib/query-client'
@@ -25,13 +26,15 @@ export default function App(): React.JSX.Element {
   return (
     <QueryClientProvider client={queryClient}>
       <ThemeProvider>
-        <TooltipProvider delayDuration={200}>
-          <HashRouter>
-            <AppRoutes />
-          </HashRouter>
-          <Toaster />
-          <UpdateToast />
-        </TooltipProvider>
+        <GameRunningMotionConfig>
+          <TooltipProvider delayDuration={200}>
+            <HashRouter>
+              <AppRoutes />
+            </HashRouter>
+            <Toaster />
+            <UpdateToast />
+          </TooltipProvider>
+        </GameRunningMotionConfig>
       </ThemeProvider>
     </QueryClientProvider>
   )

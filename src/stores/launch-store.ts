@@ -68,6 +68,11 @@ export function isTickingPhase(phase: LiveLaunchPhase): boolean {
   return phase === 'waitingForProcess' || phase === 'playing'
 }
 
+/** True while a game process is active — used to throttle UI churn during play. */
+export function isGameRunningPhase(phase: LiveLaunchPhase): boolean {
+  return phase === 'playing'
+}
+
 export const useLaunchStore = create<LaunchState>((set, get) => ({
   ...IDLE,
 
