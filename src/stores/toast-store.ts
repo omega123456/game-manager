@@ -3,11 +3,21 @@ import { create } from 'zustand'
 /** Visual tone of a toast notification. */
 export type ToastTone = 'info' | 'success' | 'error'
 
+/** Optional action button rendered inside a toast. */
+export interface ToastAction {
+  label: string
+  onClick: () => void
+}
+
 export interface Toast {
   id: number
   tone: ToastTone
   title: string
   description?: string
+  /** When true, the toast stays until dismissed (no auto-dismiss timer). */
+  persistent?: boolean
+  /** Optional action button rendered alongside the dismiss control. */
+  action?: ToastAction
 }
 
 interface ToastState {

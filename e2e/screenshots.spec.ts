@@ -34,6 +34,16 @@ for (const theme of THEMES) {
     await expect(page).toHaveScreenshot(`settings-page-${theme}.png`)
   })
 
+  test(`update available toast — ${theme}`, async ({ page }) => {
+    await gotoAppState(page, '#/library?updateFixture=available')
+    await setTheme(page, theme)
+    await page.getByText('Update available').waitFor({ state: 'visible' })
+    await page.getByRole('button', { name: 'Update now' }).waitFor({ state: 'visible' })
+    await waitForLibraryGridImagesSettled(page)
+    await scrollRouteOutletToTop(page)
+    await expect(page).toHaveScreenshot(`update-available-toast-${theme}.png`)
+  })
+
   test(`logs page — ${theme}`, async ({ page }) => {
     await gotoApp(page)
     await setTheme(page, theme)

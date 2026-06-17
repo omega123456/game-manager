@@ -1,9 +1,10 @@
 import * as React from 'react'
 import { AnimatePresence, motion } from 'motion/react'
 
+import { Button } from '@/components/ui/button'
 import { Icon } from '@/components/ui/icon'
 import { cn } from '@/lib/utils'
-import { useToastStore, type ToastTone } from '@/stores/toast-store'
+import { useToastStore, type ToastAction, type ToastTone } from '@/stores/toast-store'
 
 const TONE_ICON: Record<ToastTone, string> = {
   info: 'info',
@@ -47,6 +48,8 @@ export function Toaster(): React.JSX.Element {
             tone={toast.tone}
             title={toast.title}
             description={toast.description}
+            persistent={toast.persistent}
+            action={toast.action}
             onDismiss={() => dismiss(toast.id)}
           />
         ))}
@@ -59,14 +62,26 @@ interface ToastItemProps {
   tone: ToastTone
   title: string
   description?: string
+  persistent?: boolean
+  action?: ToastAction
   onDismiss: () => void
 }
 
-function ToastItem({ tone, title, description, onDismiss }: ToastItemProps): React.JSX.Element {
+function ToastItem({
+  tone,
+  title,
+  description,
+  persistent,
+  action,
+  onDismiss,
+}: ToastItemProps): React.JSX.Element {
   React.useEffect(() => {
+    if (persistent) {
+      return
+    }
     const timer = window.setTimeout(onDismiss, AUTO_DISMISS_MS)
     return () => window.clearTimeout(timer)
-  }, [onDismiss])
+  }, [onDismiss, persistent])
 
   return (
     <motion.div
@@ -86,6 +101,16 @@ function ToastItem({ tone, title, description, onDismiss }: ToastItemProps): Rea
       <div className="min-w-0 flex-1">
         <p className="text-sm font-medium">{title}</p>
         {description ? <p className="mt-1 text-sm text-muted-foreground">{description}</p> : null}
+        {action ? (
+          <Button
+            type="button"
+            size="sm"
+            className="mt-3"
+            onClick={action.onClick}
+          >
+            {action.label}
+          </Button>
+        ) : null}
       </div>
       <button
         type="button"

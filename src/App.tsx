@@ -5,6 +5,7 @@ import React, { useState } from 'react'
 import { ThemeProvider } from '@/components/theme/theme-provider'
 import { Toaster } from '@/components/ui/toaster'
 import { TooltipProvider } from '@/components/ui/tooltip'
+import { UpdateToast } from '@/features/updates/update-toast'
 import { createQueryClient } from '@/lib/query-client'
 import { AppRoutes } from '@/routes/app-routes'
 import { useUpdateStore } from '@/stores/update-store'
@@ -29,6 +30,7 @@ export default function App(): React.JSX.Element {
             <AppRoutes />
           </HashRouter>
           <Toaster />
+          <UpdateToast />
         </TooltipProvider>
       </ThemeProvider>
     </QueryClientProvider>
