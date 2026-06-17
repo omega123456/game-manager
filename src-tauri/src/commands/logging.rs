@@ -5,10 +5,21 @@
 //! wrapper is registered in `lib.rs` and granted via `permissions/logging.toml`
 //! + `capabilities/default.json`.
 
-use crate::domain::LogLevel;
+use chrono::{Duration, Utc};
+
+use crate::db::repo::logs::{self, LogFilter};
+use crate::domain::{LogLevel, LogPage};
 use crate::error::AppResult;
 use crate::logging::write_log;
 use crate::state::AppState;
+
+/// Number of log rows shown per page in the Log Viewer.
+pub const LOG_PAGE_SIZE: i64 = 25;
+
+/// Minimum number of pages always made available, regardless of age. The viewer
+/// pages over `max(LOG_PAGE_SIZE * LOG_MIN_PAGES, last 24h of logs)` rows,
+/// capped by the actual row count.
+pub const LOG_MIN_PAGES: i64 = 50;
 
 /// Map a frontend level string to a [`LogLevel`].
 ///
@@ -39,6 +50,48 @@ pub fn log_frontend_impl(
     state.with_db(|conn| write_log(conn, level, category, message, None, None, details))
 }
 
+/// Fetch one page of log rows (newest first) for the Log Viewer.
+///
+/// `page` is 1-based (values below 1 are clamped to 1). Results can be narrowed
+/// by an exact severity `level` and/or a free-text `search` term (matched
+/// against the message or category). Pagination spans a bounded window of
+/// `min(matching_rows, max(LOG_PAGE_SIZE * LOG_MIN_PAGES, matching_rows_in_last_24h))`
+/// rows, so the viewer always exposes at least [`LOG_MIN_PAGES`] pages, or a full
+/// day of logs when that is larger. The returned [`LogPage::total`] reflects that
+/// bounded window. Pages beyond the window resolve to an empty `entries` list.
+pub fn list_logs_impl(
+    state: &AppState,
+    page: i64,
+    page_size: i64,
+    level: Option<&str>,
+    search: Option<&str>,
+) -> AppResult<LogPage> {
+    let page = page.max(1);
+    let page_size = page_size.max(1);
+    let filter = LogFilter { level, search };
+    let day_cutoff = (Utc::now() - Duration::days(1)).to_rfc3339();
+    state.with_db(|conn| {
+        let actual_total = logs::count_filtered(conn, &filter, None)?;
+        let day_count = logs::count_filtered(conn, &filter, Some(&day_cutoff))?;
+        let bounded_total = actual_total.min((LOG_PAGE_SIZE * LOG_MIN_PAGES).max(day_count));
+
+        let offset = (page - 1) * page_size;
+        let remaining = (bounded_total - offset).max(0);
+        let limit = remaining.min(page_size);
+        let entries = if limit > 0 {
+            logs::list_filtered_page(conn, &filter, limit, offset)?
+        } else {
+            Vec::new()
+        };
+        Ok(LogPage {
+            entries,
+            total: bounded_total,
+            page,
+            page_size,
+        })
+    })
+}
+
 /// Thin `#[tauri::command]` wrapper delegating to [`log_frontend_impl`].
 ///
 /// Pure Tauri-runtime glue with no logic of its own (everything is in
@@ -61,5 +114,29 @@ pub fn log_frontend(
         category.as_deref(),
         &message,
         details.as_deref(),
+    )
+}
+
+/// Thin `#[tauri::command]` wrapper delegating to [`list_logs_impl`].
+///
+/// Pure Tauri-runtime glue (logic lives in the unit-tested `*_impl`), so it is
+/// excluded from coverage instrumentation under `--cfg coverage`, matching the
+/// sanctioned runtime-boundary exclusion established in Phase A1. `page_size`
+/// defaults to [`LOG_PAGE_SIZE`] when omitted by the caller.
+#[cfg(not(coverage))]
+#[tauri::command]
+pub fn list_logs(
+    state: tauri::State<'_, AppState>,
+    page: i64,
+    page_size: Option<i64>,
+    level: Option<String>,
+    search: Option<String>,
+) -> AppResult<LogPage> {
+    list_logs_impl(
+        &state,
+        page,
+        page_size.unwrap_or(LOG_PAGE_SIZE),
+        level.as_deref(),
+        search.as_deref(),
     )
 }

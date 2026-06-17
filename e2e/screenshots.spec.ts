@@ -34,6 +34,15 @@ for (const theme of THEMES) {
     await expect(page).toHaveScreenshot(`settings-page-${theme}.png`)
   })
 
+  test(`logs page — ${theme}`, async ({ page }) => {
+    await gotoApp(page)
+    await setTheme(page, theme)
+    await page.getByRole('link', { name: /Logs/ }).click()
+    await page.getByRole('heading', { name: 'Logs', level: 1 }).waitFor({ state: 'visible' })
+    await page.getByText('Showing', { exact: false }).first().waitFor({ state: 'visible' })
+    await expect(page).toHaveScreenshot(`logs-page-${theme}.png`)
+  })
+
   test(`library grid — ${theme}`, async ({ page }) => {
     await gotoApp(page)
     await setTheme(page, theme)

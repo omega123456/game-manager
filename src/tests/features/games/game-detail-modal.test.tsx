@@ -368,6 +368,10 @@ describe('GameDetailModal', () => {
       await user.click(screen.getAllByRole('button', { name: 'Browse' })[1]!)
       await user.click(screen.getByRole('button', { name: 'Change cover' }))
 
+      await waitFor(() => {
+        expect(screen.getByText('D:/Art/alan-wake-2-deluxe.png')).toBeInTheDocument()
+      })
+
       expect(
         screen.getByText((_, element) => element?.textContent === 'Process name: AlanWake2.exe')
       ).toBeInTheDocument()

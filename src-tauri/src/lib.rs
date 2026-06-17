@@ -171,6 +171,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             commands::logging::log_frontend,
+            commands::logging::list_logs,
             commands::games::list_games,
             commands::games::get_game,
             commands::games::get_play_now_game,

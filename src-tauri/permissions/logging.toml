@@ -9,3 +9,8 @@
 identifier = "allow-log-frontend"
 description = "Allows the frontend to persist a structured log row via log_frontend."
 commands.allow = ["log_frontend"]
+
+[[permission]]
+identifier = "allow-list-logs"
+description = "Allows the frontend to read a paginated page of log rows via list_logs."
+commands.allow = ["list_logs"]

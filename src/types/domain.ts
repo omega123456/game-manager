@@ -138,3 +138,14 @@ export interface LogEntry {
   scriptId?: number
   details?: string
 }
+
+/** A single page of log rows plus the bounded total used to drive pagination. */
+export interface LogPage {
+  entries: LogEntry[]
+  /** Total rows across all pages (bounded by the backend window). */
+  total: number
+  /** The 1-based page number these entries belong to. */
+  page: number
+  /** Rows per page. */
+  pageSize: number
+}

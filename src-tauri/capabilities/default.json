@@ -10,6 +10,7 @@
     "updater:default",
     "window-state:default",
     "allow-log-frontend",
+    "allow-list-logs",
     "allow-list-games",
     "allow-get-game",
     "allow-get-play-now-game",

@@ -25,6 +25,12 @@ export const IPC_FIXTURES: Record<string, IpcHandler> = {
 
   // --- Logging (backend command lands in Phase A2) ---
   log_frontend: () => undefined,
+  list_logs: (args) => ({
+    entries: [],
+    total: 0,
+    page: Number(args?.page ?? 1),
+    pageSize: Number(args?.pageSize ?? 25),
+  }),
 
   // --- Settings. Theme/accent persist fire-and-forget; the Settings page and
   //     startup theme hydration read these. Defaults are empty/no-op so the

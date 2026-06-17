@@ -437,3 +437,18 @@ pub struct LogEntry {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub details: Option<String>,
 }
+
+/// A single page of log rows plus the bounded total used to drive pagination.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LogPage {
+    /// The log rows for this page, newest first.
+    pub entries: Vec<LogEntry>,
+    /// Total number of rows available across all pages (bounded — see
+    /// `list_logs_impl`). `ceil(total / page_size)` is the page count.
+    pub total: i64,
+    /// The 1-based page number these entries belong to.
+    pub page: i64,
+    /// The number of rows per page.
+    pub page_size: i64,
+}

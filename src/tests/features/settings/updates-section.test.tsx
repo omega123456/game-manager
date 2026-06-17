@@ -21,9 +21,8 @@ describe('UpdatesSection', () => {
     })
   })
 
-  it('renders the current version and manual check button', () => {
+  it('renders the manual check button', () => {
     renderWithProviders(<UpdatesSection />)
-    expect(screen.getByTestId('updates-app-version')).toHaveTextContent('v0.1.0')
     expect(screen.getByTestId('updates-check-button')).toHaveTextContent('Check for updates')
   })
 

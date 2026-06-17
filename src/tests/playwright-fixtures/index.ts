@@ -15,6 +15,7 @@ import { artFixtures } from './art'
 import { dialogFixtures } from './dialog'
 import { groupsFixtures } from './groups'
 import { launchFixtures } from './launch'
+import { logsFixtures } from './logs'
 
 export type PlaywrightFixtureHandler = (args?: Record<string, unknown>) => unknown
 
@@ -24,6 +25,7 @@ export type PlaywrightFixtureHandler = (args?: Record<string, unknown>) => unkno
 export const FIXTURE_REGISTRY: Record<string, PlaywrightFixtureHandler> = {
   // Logging command (backend lands in Phase A2). Safe no-op for the web build.
   log_frontend: () => undefined,
+  ...logsFixtures,
   ...dialogFixtures,
   ...artFixtures,
   ...gamesFixtures,

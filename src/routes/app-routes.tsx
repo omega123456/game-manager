@@ -5,6 +5,7 @@ import { LibraryRoute } from '@/routes/library-route'
 import { ScriptsRoute } from '@/routes/scripts-route'
 import { GroupsRoute } from '@/routes/groups-route'
 import { SettingsRoute } from '@/routes/settings-route'
+import { LogsRoute } from '@/routes/logs-route'
 
 /**
  * Route table. `/library` is home; unknown paths redirect to it. Overlays
@@ -19,6 +20,7 @@ export function AppRoutes(): React.JSX.Element {
         <Route path="/scripts" element={<ScriptsRoute />} />
         <Route path="/groups" element={<GroupsRoute />} />
         <Route path="/settings" element={<SettingsRoute />} />
+        <Route path="/logs" element={<LogsRoute />} />
         <Route path="*" element={<Navigate to="/library" replace />} />
       </Route>
     </Routes>
