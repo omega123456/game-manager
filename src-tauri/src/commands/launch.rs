@@ -13,11 +13,11 @@
 
 use std::sync::Arc;
 
-#[cfg(not(coverage))]
-use crate::domain::LaunchPhase;
 use crate::error::AppResult;
 use crate::launch::cancel::CancelToken;
 use crate::launch::events::EventSink;
+#[cfg(not(coverage))]
+use crate::domain::LaunchPhase;
 #[cfg(not(coverage))]
 use crate::launch::events::{LaunchLifecycle, EVENT_ENDED, EVENT_ERROR};
 use crate::launch::state_machine;
@@ -103,48 +103,6 @@ fn emit_terminal_launch_failure(
     );
 }
 
-#[cfg(not(coverage))]
-fn hide_main_window_for_launch(app: &tauri::AppHandle) -> bool {
-    use tauri::Manager;
-
-    let Some(window) = app.get_webview_window("main") else {
-        tracing::warn!(category = "launch", "main window not found; cannot hide for launch");
-        return false;
-    };
-
-    match window.is_visible() {
-        Ok(false) => false,
-        Ok(true) => match window.hide() {
-            Ok(()) => true,
-            Err(err) => {
-                tracing::warn!(category = "launch", "failed to hide main window: {err}");
-                false
-            }
-        },
-        Err(err) => {
-            tracing::warn!(
-                category = "launch",
-                "failed to read main window visibility state: {err}"
-            );
-            false
-        }
-    }
-}
-
-#[cfg(not(coverage))]
-fn show_main_window_after_launch(app: &tauri::AppHandle) {
-    use tauri::Manager;
-
-    let Some(window) = app.get_webview_window("main") else {
-        tracing::warn!(category = "launch", "main window not found; cannot show after launch");
-        return;
-    };
-
-    if let Err(err) = window.show() {
-        tracing::warn!(category = "launch", "failed to show main window: {err}");
-    }
-}
-
 /// Thin `#[tauri::command]` wrapper: spawn the launch on the async runtime.
 ///
 /// Returns immediately so the WebView is never blocked; progress arrives via
@@ -158,7 +116,6 @@ pub fn launch_game(
     game_id: i64,
 ) -> AppResult<()> {
     let (cancel, monitor) = prepare_launch_impl(&state, game_id)?;
-    let should_show_window = hide_main_window_for_launch(&app);
     let app_handle = app.clone();
     tauri::async_runtime::spawn(async move {
         use tauri::Manager;
@@ -169,9 +126,6 @@ pub fn launch_game(
         if let Err(err) = run_launch_impl(&state, game_id, monitor, &sink, cancel).await {
             tracing::error!(category = "launch", "launch {game_id} failed: {err}");
             emit_terminal_launch_failure(&sink, game_id, 0, err.to_string());
-        }
-        if should_show_window {
-            show_main_window_after_launch(&app_handle);
         }
     });
     Ok(())
