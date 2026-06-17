@@ -1,5 +1,6 @@
 import { Button } from '@/components/ui/button'
 import { Icon } from '@/components/ui/icon'
+import { Input } from '@/components/ui/input'
 import {
   Select,
   SelectContent,
@@ -19,6 +20,7 @@ export interface LibraryToolbarProps {
   groupFilter: 'all' | number
   onGroupFilterChange: (value: 'all' | number) => void
   onSortChange: (value: LibrarySortKey) => void
+  onSearchChange: (value: string) => void
   onAddGame: () => void
 }
 
@@ -31,6 +33,7 @@ export function LibraryToolbar({
   groupFilter,
   onGroupFilterChange,
   onSortChange,
+  onSearchChange,
   onAddGame,
 }: LibraryToolbarProps): React.JSX.Element {
   const countLabel =
@@ -52,12 +55,36 @@ export function LibraryToolbar({
         </div>
         <p className="text-sm text-muted-foreground">
           {searchQuery
-            ? `Filtered by "${searchQuery}". Top bar search applies here.`
+            ? `Filtered by "${searchQuery}".`
             : 'Browse cover art, filter by group, sort by recent activity, and jump into adding new games.'}
         </p>
       </div>
 
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+        <div className="w-full sm:w-64">
+          <label
+            htmlFor="library-search"
+            className="mb-2 block cursor-pointer text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground"
+          >
+            Search
+          </label>
+          <div className="relative">
+            <Icon
+              name="search"
+              className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[20px] text-muted-foreground"
+            />
+            <Input
+              id="library-search"
+              type="search"
+              aria-label="Search games"
+              placeholder="Search games…"
+              className="pl-10"
+              value={searchQuery}
+              onChange={(e) => onSearchChange(e.target.value)}
+            />
+          </div>
+        </div>
+
         <div className="w-full sm:w-56">
           <label
             htmlFor="library-group-filter"

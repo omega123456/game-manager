@@ -77,6 +77,12 @@ function HeroCard({
   const coverFailed = coverUrl !== null && failedCoverUrl === coverUrl
   const showCover = coverUrl !== null && !coverFailed
 
+  const handleCoverError = () => {
+    if (coverUrl) {
+      setFailedCoverUrl(coverUrl)
+    }
+  }
+
   const handlePlay = () => {
     if (game) {
       launchGameById(game.id, game.name)
@@ -92,13 +98,10 @@ function HeroCard({
       {showCover ? (
         <img
           src={coverUrl}
-          alt={`${displayName} cover art`}
-          className="absolute inset-0 h-full w-full object-cover"
-          onError={() => {
-            if (coverUrl) {
-              setFailedCoverUrl(coverUrl)
-            }
-          }}
+          alt=""
+          aria-hidden
+          className="absolute inset-0 h-full w-full scale-105 object-cover blur-md"
+          onError={handleCoverError}
         />
       ) : (
         <div
@@ -109,7 +112,16 @@ function HeroCard({
       <div className="absolute inset-0 bg-linear-to-t from-background/95 via-background/55 to-transparent" />
 
       <div className="relative z-10 flex flex-col gap-6 p-6 sm:flex-row sm:items-end sm:justify-between">
-        <div className="max-w-2xl space-y-3">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-end">
+          {showCover ? (
+            <img
+              src={coverUrl ?? undefined}
+              alt={`${displayName} cover art`}
+              className="hidden aspect-3/4 w-32 shrink-0 rounded-[1.1rem] border border-border object-cover shadow-lg sm:block"
+              onError={handleCoverError}
+            />
+          ) : null}
+          <div className="max-w-2xl space-y-3">
           <span className="inline-flex items-center gap-2 rounded-full border border-primary/30 bg-primary/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.2em] text-primary backdrop-blur">
             <Icon name="play_circle" className="text-[16px]" />
             {isActive ? 'Currently Playing' : 'Continue Playing'}
@@ -132,6 +144,7 @@ function HeroCard({
               </span>
             )}
           </p>
+          </div>
         </div>
 
         {isActive ? (

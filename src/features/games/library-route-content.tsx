@@ -35,6 +35,7 @@ function compareByName(a: Game, b: Game): number {
 
 export function LibraryRouteContent(): React.JSX.Element {
   const searchQuery = useUiStore((s) => s.searchQuery)
+  const setSearchQuery = useUiStore((s) => s.setSearchQuery)
   const setActiveOverlay = useUiStore((s) => s.setActiveOverlay)
   const setSelectedGameId = useUiStore((s) => s.setSelectedGameId)
   const [sortKey, setSortKey] = useState<LibrarySortKey>('recent')
@@ -86,7 +87,7 @@ export function LibraryRouteContent(): React.JSX.Element {
 
   return (
     <>
-      <div className="mx-auto flex min-h-full w-full max-w-7xl flex-col gap-6 p-6 lg:p-8">
+      <div className="flex min-h-full w-full flex-col gap-6 p-6 lg:p-8">
         <CurrentlyPlayingHero />
         <LibraryToolbar
           gameCount={totalGameCount}
@@ -97,6 +98,7 @@ export function LibraryRouteContent(): React.JSX.Element {
           groupFilter={groupFilter}
           onGroupFilterChange={setGroupFilter}
           onSortChange={setSortKey}
+          onSearchChange={setSearchQuery}
           onAddGame={openAddGame}
         />
 
@@ -106,7 +108,10 @@ export function LibraryRouteContent(): React.JSX.Element {
             <LibraryEmptyState hasSearch={normalizedSearch.length > 0} onAddGame={openAddGame} />
           ) : null}
           {!gamesQuery.isLoading && visibleGames.length > 0 ? (
-            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4" data-testid="library-grid">
+            <div
+              className="grid gap-4 [grid-template-columns:repeat(auto-fill,220px)]"
+              data-testid="library-grid"
+            >
               {visibleGames.map((game) => (
                 <GameCard
                   key={game.id}
