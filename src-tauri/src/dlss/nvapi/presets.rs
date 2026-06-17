@@ -17,8 +17,11 @@
 use serde::Deserialize;
 
 use crate::domain::{GamePresetState, PresetKind, PresetOption};
-use crate::dlss::nvapi::drs::real_nvapi_drs;
-use crate::dlss::nvapi::ffi::{NvapiDrs, SETTING_ID_DLSS_RR, SETTING_ID_DLSS_SR};
+use crate::dlss::nvapi::drs::{real_nvapi_drs, NvapiDrs};
+use crate::dlss::nvapi::ffi::{
+    SettingValue, PRESET_DEFAULT, SETTING_ID_DLSS_RR, SETTING_ID_DLSS_RR_OVERRIDE,
+    SETTING_ID_DLSS_SR, SETTING_ID_DLSS_SR_OVERRIDE,
+};
 use crate::dlss::{DlssError, DlssResult};
 use crate::state::AppState;
 
@@ -54,7 +57,7 @@ pub fn preset_options(kind: PresetKind) -> DlssResult<Vec<PresetOption>> {
         .collect())
 }
 
-/// The NVAPI DRS setting id backing a [`PresetKind`].
+/// The NVAPI DRS render-preset *selection* setting id backing a [`PresetKind`].
 pub fn setting_id(kind: PresetKind) -> u32 {
     match kind {
         PresetKind::Dlss => SETTING_ID_DLSS_SR,
@@ -63,18 +66,103 @@ pub fn setting_id(kind: PresetKind) -> u32 {
 }
 
 // ---------------------------------------------------------------------------
+// DRS preset semantics — pure functions over the raw settings.
+//
+// A preset is governed by two DRS DWORDs per kind: a render-preset *selection*
+// (`0x10E41DF3` SR / `0x10E41DF7` RR) and an *override-enable* flag (`0x10E41E01`
+// SR / `0x10E41E02` RR). The effective preset that matches the NVIDIA App view
+// depends on these *and* on each value's `settingLocation`: only values stored
+// locally on the queried profile count — inherited DWORDs (global / base) must
+// not be displayed as the profile's preset. See the DLSS preset root-cause
+// handoff for why location-awareness (not the override flag alone) is the fix.
+//
+// The `NVIDIA recommended` choice is just the selection sentinel `0x00FFFFFF`,
+// so SR and RR share one symmetric model (the older `0x00634291` "profile mode"
+// setting is not a recognised DRS setting on current drivers and is not used).
+// ---------------------------------------------------------------------------
+
+/// The override-enable setting id paired with a kind's selection id.
+fn override_id(kind: PresetKind) -> u32 {
+    match kind {
+        PresetKind::Dlss => SETTING_ID_DLSS_SR_OVERRIDE,
+        PresetKind::RayReconstruction => SETTING_ID_DLSS_RR_OVERRIDE,
+    }
+}
+
+/// The DRS setting ids read to compute `kind`'s effective preset, in a fixed
+/// order: `[selection, override_enable]`.
+fn read_ids(kind: PresetKind) -> Vec<u32> {
+    vec![setting_id(kind), override_id(kind)]
+}
+
+/// The relevant DRS settings for one kind, parsed from a [`read_ids`]-ordered read.
+struct PresetReadings {
+    selection: Option<SettingValue>,
+    override_enable: Option<SettingValue>,
+}
+
+impl PresetReadings {
+    fn parse(reads: &[Option<SettingValue>]) -> Self {
+        Self {
+            selection: reads.first().copied().flatten(),
+            override_enable: reads.get(1).copied().flatten(),
+        }
+    }
+}
+
+/// Compute the effective preset value (what the NVIDIA App shows) from the raw
+/// DRS settings, applying local-vs-inherited semantics.
+fn effective_preset(r: &PresetReadings) -> u32 {
+    // An explicit local "override off" means Default regardless of any selection.
+    if matches!(r.override_enable, Some(o) if o.location.is_local() && o.value == 0) {
+        return PRESET_DEFAULT;
+    }
+    // Only a *locally* stored selection counts; inherited DWORDs are not the
+    // per-profile preset (they do not reflect the NVIDIA App view).
+    r.selection
+        .and_then(SettingValue::local_value)
+        .unwrap_or(PRESET_DEFAULT)
+}
+
+/// The `(setting_id, value)` writes that set `kind` to `value`. Writes are local
+/// (the driver stores them on the queried profile). `Default` clears the
+/// override and selection; any other preset (including the `NVIDIA recommended`
+/// sentinel) enables the override and writes the selection.
+fn write_plan(kind: PresetKind, value: u32) -> Vec<(u32, u32)> {
+    let enable = u32::from(value != PRESET_DEFAULT);
+    vec![(override_id(kind), enable), (setting_id(kind), value)]
+}
+
+/// Log the raw readings and the effective preset for observability.
+fn log_readings(scope: &str, kind: PresetKind, r: &PresetReadings, effective: u32) {
+    tracing::info!(
+        category = "dlss",
+        scope,
+        preset_kind = ?kind,
+        selection = ?r.selection,
+        override_enable = ?r.override_enable,
+        effective_preset = effective,
+        "nvapi preset read"
+    );
+}
+
+// ---------------------------------------------------------------------------
 // Pure orchestration over `NvapiDrs` (testable against a fake driver).
 // ---------------------------------------------------------------------------
 
-/// Read the global (base profile) preset value over `drs`. An unset setting
-/// reads as `Default` (`0`).
+/// Read the global preset value over `drs` (current global profile). An unset /
+/// inherited-only setting reads as `Default` (`0`).
 pub fn get_global_preset_with(drs: &dyn NvapiDrs, kind: PresetKind) -> DlssResult<u32> {
-    Ok(drs.get_base_setting(setting_id(kind))?.unwrap_or(0))
+    let reads = drs.read_global(&read_ids(kind))?;
+    let readings = PresetReadings::parse(&reads);
+    let value = effective_preset(&readings);
+    log_readings("global", kind, &readings, value);
+    Ok(value)
 }
 
-/// Write the global (base profile) preset value over `drs`.
+/// Write the global preset value over `drs` (current global profile).
 pub fn set_global_preset_with(drs: &dyn NvapiDrs, kind: PresetKind, value: u32) -> DlssResult<()> {
-    drs.set_base_setting(setting_id(kind), value)
+    drs.write_global(&write_plan(kind, value))
 }
 
 /// Read the per-game preset state over `drs`, translating "no matched profile"
@@ -85,11 +173,16 @@ pub fn get_game_preset_with(
     exe_names: &[String],
     kind: PresetKind,
 ) -> DlssResult<GamePresetState> {
-    match drs.get_app_setting(game_name, exe_names, setting_id(kind))? {
-        Some(value) => Ok(GamePresetState {
-            available: true,
-            value,
-        }),
+    match drs.read_app(game_name, exe_names, &read_ids(kind))? {
+        Some(reads) => {
+            let readings = PresetReadings::parse(&reads);
+            let value = effective_preset(&readings);
+            log_readings("app", kind, &readings, value);
+            Ok(GamePresetState {
+                available: true,
+                value,
+            })
+        }
         None => Ok(GamePresetState {
             available: false,
             value: 0,
@@ -106,7 +199,7 @@ pub fn set_game_preset_with(
     kind: PresetKind,
     value: u32,
 ) -> DlssResult<bool> {
-    drs.set_app_setting(game_name, exe_names, setting_id(kind), value)
+    drs.write_app(game_name, exe_names, &write_plan(kind, value))
 }
 
 // ---------------------------------------------------------------------------

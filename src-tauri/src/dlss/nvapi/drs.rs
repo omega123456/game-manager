@@ -9,8 +9,38 @@
 //! The real, `nvapi64.dll`-backed driver is constructed by [`real_nvapi_drs`],
 //! which wraps [`super::ffi::real_driver`] in a [`DrsOrchestrator`].
 
-use crate::dlss::nvapi::ffi::{self, NvapiDriver, NvapiDrs};
+use crate::dlss::nvapi::ffi::{self, NvapiDriver, SettingValue};
 use crate::dlss::DlssResult;
+
+/// High-level NVAPI preset access so the preset surface in [`super::presets`] is
+/// testable against a fake driver. Reads return each requested setting paired
+/// with its [`SettingValue`] (value + location) so callers can apply the
+/// inherited-vs-local DRS semantics; writes are batched and persisted once.
+///
+/// Implemented by [`DrsOrchestrator`] over any [`NvapiDriver`].
+pub trait NvapiDrs: Send {
+    /// Read `setting_ids` (in order) from the current global profile, reloading
+    /// driver settings first so external edits are observed.
+    fn read_global(&self, setting_ids: &[u32]) -> DlssResult<Vec<Option<SettingValue>>>;
+    /// Write `(id, value)` pairs to the current global profile and persist once.
+    fn write_global(&self, writes: &[(u32, u32)]) -> DlssResult<()>;
+    /// Read `setting_ids` (in order) from the app profile matching
+    /// `game_name`/`exe_names`. `None` when no profile matches.
+    fn read_app(
+        &self,
+        game_name: &str,
+        exe_names: &[String],
+        setting_ids: &[u32],
+    ) -> DlssResult<Option<Vec<Option<SettingValue>>>>;
+    /// Write `(id, value)` pairs to the matched app profile and persist once.
+    /// `false` when no profile matches.
+    fn write_app(
+        &self,
+        game_name: &str,
+        exe_names: &[String],
+        writes: &[(u32, u32)],
+    ) -> DlssResult<bool>;
+}
 
 /// Compute the Levenshtein edit distance between two strings (case-insensitive),
 /// using a single rolling row. Small standalone helper — no external crate.
@@ -129,59 +159,70 @@ impl DrsOrchestrator {
     }
 }
 
+impl DrsOrchestrator {
+    /// Read each id from `profile` in order.
+    fn read_profile(
+        &self,
+        profile: usize,
+        setting_ids: &[u32],
+    ) -> DlssResult<Vec<Option<SettingValue>>> {
+        setting_ids
+            .iter()
+            .map(|&id| self.driver.get_setting(profile, id))
+            .collect()
+    }
+
+    /// Write each `(id, value)` to `profile`, then persist once.
+    fn write_profile(&self, profile: usize, writes: &[(u32, u32)]) -> DlssResult<()> {
+        for &(id, value) in writes {
+            self.driver.set_setting(profile, id, value)?;
+        }
+        self.driver.save()
+    }
+}
+
 impl NvapiDrs for DrsOrchestrator {
-    fn get_base_setting(&self, setting_id: u32) -> DlssResult<Option<u32>> {
-        let profile = self.driver.base_profile()?;
-        self.driver.get_setting(profile, setting_id)
+    fn read_global(&self, setting_ids: &[u32]) -> DlssResult<Vec<Option<SettingValue>>> {
+        self.driver.reload()?;
+        let profile = self.driver.global_profile()?;
+        self.read_profile(profile, setting_ids)
     }
 
-    fn set_base_setting(&self, setting_id: u32, value: u32) -> DlssResult<()> {
-        let profile = self.driver.base_profile()?;
-        self.driver.set_setting(profile, setting_id, value)
+    fn write_global(&self, writes: &[(u32, u32)]) -> DlssResult<()> {
+        let profile = self.driver.global_profile()?;
+        self.write_profile(profile, writes)
     }
 
-    fn get_app_setting(
+    fn read_app(
         &self,
         game_name: &str,
         exe_names: &[String],
-        setting_id: u32,
-    ) -> DlssResult<Option<u32>> {
+        setting_ids: &[u32],
+    ) -> DlssResult<Option<Vec<Option<SettingValue>>>> {
+        self.driver.reload()?;
         let profiles = self.driver.enumerate_profiles()?;
         tracing::info!(
             category = "dlss",
             game_name = %game_name,
-            setting_id,
             enumerated_profile_count = profiles.len(),
             "nvapi profile match: enumerated driver profiles"
         );
         match find_app_profile(&profiles, game_name, exe_names) {
-            Some(profile) => {
-                let value = self.driver.get_setting(profile, setting_id)?.unwrap_or(0);
-                tracing::info!(
-                    category = "dlss",
-                    game_name = %game_name,
-                    profile_handle = profile,
-                    setting_id,
-                    preset_value = value,
-                    "nvapi profile match: read preset from matched profile"
-                );
-                Ok(Some(value))
-            }
+            Some(profile) => Ok(Some(self.read_profile(profile, setting_ids)?)),
             None => Ok(None),
         }
     }
 
-    fn set_app_setting(
+    fn write_app(
         &self,
         game_name: &str,
         exe_names: &[String],
-        setting_id: u32,
-        value: u32,
+        writes: &[(u32, u32)],
     ) -> DlssResult<bool> {
         let profiles = self.driver.enumerate_profiles()?;
         match find_app_profile(&profiles, game_name, exe_names) {
             Some(profile) => {
-                self.driver.set_setting(profile, setting_id, value)?;
+                self.write_profile(profile, writes)?;
                 Ok(true)
             }
             None => Ok(false),

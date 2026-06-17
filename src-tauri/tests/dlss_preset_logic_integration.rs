@@ -6,14 +6,17 @@
 //! matches, and error classification (privilege-required vs unsupported). Also
 //! covers the bundled preset-option lists and the game-identity resolution.
 
-use std::sync::Mutex;
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::{Arc, Mutex};
 
 use game_manager_lib::db::connection::open_in_memory;
 use game_manager_lib::db::repo::games::{self, NewGame};
 use game_manager_lib::domain::{MonitorMode, PresetKind};
 use game_manager_lib::dlss::nvapi::drs::{find_app_profile, levenshtein, DrsOrchestrator};
 use game_manager_lib::dlss::nvapi::ffi::{
-    make_nvapi_version, NvapiDriver, ProfileInfo, SETTING_ID_DLSS_RR, SETTING_ID_DLSS_SR,
+    make_nvapi_version, NvapiDriver, ProfileInfo, SettingLocation, SettingValue, PRESET_RECOMMENDED,
+    SETTING_ID_DLSS_RR, SETTING_ID_DLSS_RR_OVERRIDE, SETTING_ID_DLSS_SR,
+    SETTING_ID_DLSS_SR_OVERRIDE,
 };
 use game_manager_lib::dlss::nvapi::presets::{self, game_identity, setting_id};
 use game_manager_lib::dlss::DlssError;
@@ -25,39 +28,72 @@ use game_manager_lib::state::AppState;
 
 /// A configurable in-memory [`NvapiDriver`] fake.
 struct FakeDriver {
-    base_profile: usize,
+    global_profile: usize,
     profiles: Vec<ProfileInfo>,
-    /// Settings keyed by `(profile_handle, setting_id)`.
-    settings: Mutex<Vec<((usize, u32), u32)>>,
+    /// Settings keyed by `(profile_handle, setting_id)` → value + location.
+    settings: Mutex<Vec<((usize, u32), SettingValue)>>,
+    /// Number of times [`NvapiDriver::reload`] / [`NvapiDriver::save`] were called
+    /// (shared so a test can inspect them after the driver is boxed).
+    reloads: Arc<AtomicUsize>,
+    saves: Arc<AtomicUsize>,
     /// Optional forced error for every call.
     error: Option<fn() -> DlssError>,
 }
 
 impl FakeDriver {
-    fn new(base_profile: usize, profiles: Vec<ProfileInfo>) -> Self {
+    fn new(global_profile: usize, profiles: Vec<ProfileInfo>) -> Self {
         Self {
-            base_profile,
+            global_profile,
             profiles,
             settings: Mutex::new(Vec::new()),
+            reloads: Arc::new(AtomicUsize::new(0)),
+            saves: Arc::new(AtomicUsize::new(0)),
             error: None,
         }
     }
 
+    /// Shared handles to the reload / save call counters.
+    fn counters(&self) -> (Arc<AtomicUsize>, Arc<AtomicUsize>) {
+        (Arc::clone(&self.reloads), Arc::clone(&self.saves))
+    }
+
+    /// Store a value as *locally* stored on `profile`.
     fn with_setting(self, profile: usize, setting_id: u32, value: u32) -> Self {
-        self.settings.lock().unwrap().push(((profile, setting_id), value));
+        self.put(profile, setting_id, value, SettingLocation::Current);
         self
+    }
+
+    /// Store a value at an explicit [`SettingLocation`] (e.g. inherited).
+    fn with_setting_at(
+        self,
+        profile: usize,
+        setting_id: u32,
+        value: u32,
+        location: SettingLocation,
+    ) -> Self {
+        self.put(profile, setting_id, value, location);
+        self
+    }
+
+    fn put(&self, profile: usize, setting_id: u32, value: u32, location: SettingLocation) {
+        self.settings
+            .lock()
+            .unwrap()
+            .push(((profile, setting_id), SettingValue { value, location }));
     }
 
     fn failing(error: fn() -> DlssError) -> Self {
         Self {
-            base_profile: 1,
+            global_profile: 1,
             profiles: Vec::new(),
             settings: Mutex::new(Vec::new()),
+            reloads: Arc::new(AtomicUsize::new(0)),
+            saves: Arc::new(AtomicUsize::new(0)),
             error: Some(error),
         }
     }
 
-    fn lookup(&self, profile: usize, setting_id: u32) -> Option<u32> {
+    fn lookup(&self, profile: usize, setting_id: u32) -> Option<SettingValue> {
         self.settings
             .lock()
             .unwrap()
@@ -68,11 +104,11 @@ impl FakeDriver {
 }
 
 impl NvapiDriver for FakeDriver {
-    fn base_profile(&self) -> Result<usize, DlssError> {
+    fn global_profile(&self) -> Result<usize, DlssError> {
         if let Some(err) = self.error {
             return Err(err());
         }
-        Ok(self.base_profile)
+        Ok(self.global_profile)
     }
 
     fn enumerate_profiles(&self) -> Result<Vec<ProfileInfo>, DlssError> {
@@ -82,7 +118,19 @@ impl NvapiDriver for FakeDriver {
         Ok(self.profiles.clone())
     }
 
-    fn get_setting(&self, profile: usize, setting_id: u32) -> Result<Option<u32>, DlssError> {
+    fn reload(&self) -> Result<(), DlssError> {
+        if let Some(err) = self.error {
+            return Err(err());
+        }
+        self.reloads.fetch_add(1, Ordering::SeqCst);
+        Ok(())
+    }
+
+    fn get_setting(
+        &self,
+        profile: usize,
+        setting_id: u32,
+    ) -> Result<Option<SettingValue>, DlssError> {
         if let Some(err) = self.error {
             return Err(err());
         }
@@ -98,10 +146,28 @@ impl NvapiDriver for FakeDriver {
             .iter_mut()
             .find(|((p, s), _)| *p == profile && *s == setting_id)
         {
-            entry.1 = value;
+            // Writes always store locally on the queried profile.
+            entry.1 = SettingValue {
+                value,
+                location: SettingLocation::Current,
+            };
         } else {
-            settings.push(((profile, setting_id), value));
+            settings.push((
+                (profile, setting_id),
+                SettingValue {
+                    value,
+                    location: SettingLocation::Current,
+                },
+            ));
         }
+        Ok(())
+    }
+
+    fn save(&self) -> Result<(), DlssError> {
+        if let Some(err) = self.error {
+            return Err(err());
+        }
+        self.saves.fetch_add(1, Ordering::SeqCst);
         Ok(())
     }
 }
@@ -494,4 +560,160 @@ fn game_set_impl_is_unsupported_or_ok_without_gpu() {
         Ok(_) => {}
         Err(err) => assert!(matches!(err, DlssError::Unsupported | DlssError::Privilege)),
     }
+}
+
+// ---------------------------------------------------------------------------
+// DRS local-vs-inherited setting-location semantics (the root-cause fix).
+//
+// Only values stored *locally* on the queried profile are the effective preset;
+// inherited DWORDs (global / base) must read as Default, matching NVIDIA App.
+// ---------------------------------------------------------------------------
+
+#[test]
+fn inherited_global_selection_reads_as_default_not_the_dword() {
+    // The global profile carries an inherited Preset D (4) but nothing local:
+    // the effective global preset must be Default, not Preset D.
+    let driver = FakeDriver::new(1, vec![]).with_setting_at(
+        1,
+        SETTING_ID_DLSS_SR,
+        4,
+        SettingLocation::Base,
+    );
+    let drs = orchestrator(driver);
+    assert_eq!(
+        presets::get_global_preset_with(&drs, PresetKind::Dlss).unwrap(),
+        0
+    );
+}
+
+#[test]
+fn local_recommended_sentinel_reads_back_as_recommended() {
+    // "NVIDIA recommended" is just the local selection sentinel `0x00FFFFFF`.
+    let driver = FakeDriver::new(1, vec![]).with_setting(1, SETTING_ID_DLSS_SR, PRESET_RECOMMENDED);
+    let drs = orchestrator(driver);
+    assert_eq!(
+        presets::get_global_preset_with(&drs, PresetKind::Dlss).unwrap(),
+        PRESET_RECOMMENDED
+    );
+}
+
+#[test]
+fn local_selection_with_override_on_uses_the_selection() {
+    let driver = FakeDriver::new(1, vec![])
+        .with_setting(1, SETTING_ID_DLSS_SR_OVERRIDE, 1)
+        .with_setting(1, SETTING_ID_DLSS_SR, 11);
+    let drs = orchestrator(driver);
+    assert_eq!(
+        presets::get_global_preset_with(&drs, PresetKind::Dlss).unwrap(),
+        11
+    );
+}
+
+#[test]
+fn per_game_inherited_selection_with_override_on_reads_default() {
+    // The BG3 case: override on, but the selection DWORD is inherited from global.
+    let profiles = vec![profile(20, "My Game", &["mygame.exe"])];
+    let driver = FakeDriver::new(1, profiles)
+        .with_setting(20, SETTING_ID_DLSS_SR_OVERRIDE, 1)
+        .with_setting_at(20, SETTING_ID_DLSS_SR, 4, SettingLocation::Global);
+    let drs = orchestrator(driver);
+    let exes = vec!["mygame.exe".to_string()];
+    let preset = presets::get_game_preset_with(&drs, "My Game", &exes, PresetKind::Dlss).unwrap();
+    assert!(preset.available);
+    assert_eq!(preset.value, 0);
+}
+
+#[test]
+fn per_game_local_override_off_reads_default() {
+    let profiles = vec![profile(20, "My Game", &["mygame.exe"])];
+    let driver = FakeDriver::new(1, profiles)
+        .with_setting(20, SETTING_ID_DLSS_RR_OVERRIDE, 0)
+        .with_setting(20, SETTING_ID_DLSS_RR, 4);
+    let drs = orchestrator(driver);
+    let exes = vec!["mygame.exe".to_string()];
+    let preset = presets::get_game_preset_with(
+        &drs,
+        "My Game",
+        &exes,
+        PresetKind::RayReconstruction,
+    )
+    .unwrap();
+    assert_eq!(preset.value, 0);
+}
+
+#[test]
+fn set_default_clears_override_and_round_trips_to_default() {
+    let driver = FakeDriver::new(1, vec![])
+        .with_setting(1, SETTING_ID_DLSS_SR, 11)
+        .with_setting(1, SETTING_ID_DLSS_SR_OVERRIDE, 1);
+    let drs = orchestrator(driver);
+    presets::set_global_preset_with(&drs, PresetKind::Dlss, 0).unwrap();
+    assert_eq!(
+        presets::get_global_preset_with(&drs, PresetKind::Dlss).unwrap(),
+        0
+    );
+}
+
+#[test]
+fn set_recommended_round_trips_to_recommended() {
+    let drs = orchestrator(FakeDriver::new(1, vec![]));
+    presets::set_global_preset_with(&drs, PresetKind::Dlss, PRESET_RECOMMENDED).unwrap();
+    assert_eq!(
+        presets::get_global_preset_with(&drs, PresetKind::Dlss).unwrap(),
+        PRESET_RECOMMENDED
+    );
+}
+
+#[test]
+fn setting_location_decodes_raw_values() {
+    use game_manager_lib::dlss::nvapi::ffi::status;
+
+    assert_eq!(SettingLocation::from_raw(0), SettingLocation::Current);
+    assert_eq!(SettingLocation::from_raw(1), SettingLocation::Global);
+    assert_eq!(SettingLocation::from_raw(2), SettingLocation::Base);
+    assert_eq!(SettingLocation::from_raw(9), SettingLocation::Other(9));
+
+    assert!(SettingLocation::Current.is_local());
+    assert!(!SettingLocation::Global.is_local());
+    assert!(!SettingLocation::Other(9).is_local());
+
+    // A local value yields its value; an inherited one yields `None`.
+    assert_eq!(
+        SettingValue {
+            value: 7,
+            location: SettingLocation::Current,
+        }
+        .local_value(),
+        Some(7)
+    );
+    assert_eq!(
+        SettingValue {
+            value: 7,
+            location: SettingLocation::Base,
+        }
+        .local_value(),
+        None
+    );
+
+    // Both driver "not found" codes mean the setting is absent.
+    assert!(status::is_setting_absent(-165));
+    assert!(status::is_setting_absent(-160));
+    assert!(!status::is_setting_absent(0));
+    assert!(!status::is_setting_absent(-130));
+}
+
+#[test]
+fn read_reloads_driver_and_write_saves_once() {
+    // A read reloads driver settings first (so external NVIDIA App / Inspector
+    // edits are observed); a write persists exactly once after its batch.
+    let driver = FakeDriver::new(1, vec![]);
+    let (reloads, saves) = driver.counters();
+    let drs = DrsOrchestrator::new(Box::new(driver));
+
+    presets::get_global_preset_with(&drs, PresetKind::RayReconstruction).unwrap();
+    assert_eq!(reloads.load(Ordering::SeqCst), 1);
+    assert_eq!(saves.load(Ordering::SeqCst), 0);
+
+    presets::set_global_preset_with(&drs, PresetKind::RayReconstruction, 4).unwrap();
+    assert_eq!(saves.load(Ordering::SeqCst), 1);
 }
