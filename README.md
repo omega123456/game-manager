@@ -1,6 +1,6 @@
 # Game Manager
 
-A **Windows 11 desktop game library and launch orchestrator** built with Tauri 2 and React 19 (TypeScript). The UI is a native shell—sidebar navigation, cover-art library grid, script and group managers, and a live launch lifecycle banner—with light/dark theming and accent colors. **SQLite** is the single source of truth in the Rust backend; the frontend talks to the database only through Tauri IPC (`invoke`). Game launches run a configurable script pipeline across three lifecycle phases, monitor the game process for playtime, and log every step locally.
+A **Windows 11 desktop game library and launch orchestrator** built with Tauri 2 and React 19 (TypeScript). The UI is a native shell—sidebar navigation, cover-art library grid, script and group managers, and a live launch lifecycle banner—with light/dark theming and accent colors. **SQLite** is the single source of truth in the Rust backend; the frontend talks to the database only through Tauri IPC (`invoke`). Game launches run a configurable script pipeline across three lifecycle phases, monitor the game process for playtime, and log every step locally. 
 
 ## Contents
 
