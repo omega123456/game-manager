@@ -170,7 +170,7 @@ fn to_version(record: RawRecord, dll_type: DllType) -> DllVersion {
 /// attempted first, falling back to cache then static on failure. The returned
 /// catalog has `is_downloaded` flags applied from local storage.
 pub async fn build_catalog(app_data_dir: &Path, refresh: bool) -> DlssResult<DllCatalog> {
-    tracing::info!(
+    tracing::debug!(
         category = "dlss",
         refresh,
         "dlss_get_catalog: resolving version catalog"
@@ -190,7 +190,7 @@ pub async fn build_catalog(app_data_dir: &Path, refresh: bool) -> DlssResult<Dll
         }
     };
     apply_downloaded_flags(app_data_dir, &mut catalog);
-    tracing::info!(
+    tracing::debug!(
         category = "dlss",
         source = ?catalog.source,
         sr_versions = catalog.super_resolution.len(),

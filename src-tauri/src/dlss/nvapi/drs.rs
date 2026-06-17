@@ -90,7 +90,7 @@ pub fn find_app_profile(
     exe_names: &[String],
 ) -> Option<usize> {
     let wanted: Vec<String> = exe_names.iter().map(|e| normalize_exe(e)).collect();
-    tracing::info!(
+    tracing::debug!(
         category = "dlss",
         game_name = %game_name,
         candidate_exe_count = wanted.len(),
@@ -99,7 +99,7 @@ pub fn find_app_profile(
         "nvapi profile match: starting"
     );
     if wanted.is_empty() {
-        tracing::info!(
+        tracing::debug!(
             category = "dlss",
             game_name = %game_name,
             "nvapi profile match: no exe candidates — per-game presets unavailable"
@@ -114,7 +114,7 @@ pub fn find_app_profile(
             .iter()
             .find(|registered| wanted.iter().any(|w| w == *registered));
         if let Some(exe) = matched_exe {
-            tracing::info!(
+            tracing::debug!(
                 category = "dlss",
                 game_name = %game_name,
                 profile_name = %profile.name,
@@ -137,7 +137,7 @@ pub fn find_app_profile(
             )
         })
         .collect();
-    tracing::info!(
+    tracing::debug!(
         category = "dlss",
         game_name = %game_name,
         candidate_exes = ?wanted,
@@ -201,7 +201,7 @@ impl NvapiDrs for DrsOrchestrator {
     ) -> DlssResult<Option<Vec<Option<SettingValue>>>> {
         self.driver.reload()?;
         let profiles = self.driver.enumerate_profiles()?;
-        tracing::info!(
+        tracing::debug!(
             category = "dlss",
             game_name = %game_name,
             enumerated_profile_count = profiles.len(),

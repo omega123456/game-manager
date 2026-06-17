@@ -324,3 +324,77 @@ fn dto_serializes_camel_case() {
     assert!(json.contains("\"provenance\":\"group\""));
     assert!(json.contains("\"requiredUtilityNames\":[\"Lib\"]"));
 }
+
+#[test]
+fn games_get_play_now_prefers_cached_setting() {
+    let conn = open_in_memory().unwrap();
+    let id = games::create(&conn, &sample_game("Play Now")).unwrap();
+    settings::set(&conn, "last_played_game_id", &id.to_string()).unwrap();
+    let play_now = games::get_play_now(&conn).unwrap().expect("cached game");
+    assert_eq!(play_now.id, id);
+}
+
+#[test]
+fn games_get_play_now_ignores_unparseable_cached_setting() {
+    let conn = open_in_memory().unwrap();
+    let id = games::create(&conn, &sample_game("Fallback")).unwrap();
+    settings::set(&conn, "last_played_game_id", "not-a-number").unwrap();
+    let session_id = sessions::start(&conn, id).unwrap();
+    sessions::end(&conn, session_id).unwrap();
+    let play_now = games::get_play_now(&conn).unwrap().expect("session fallback");
+    assert_eq!(play_now.id, id);
+}
+
+#[test]
+fn games_get_play_now_skips_stale_cached_game_id() {
+    let conn = open_in_memory().unwrap();
+    let id = games::create(&conn, &sample_game("Fallback")).unwrap();
+    settings::set(&conn, "last_played_game_id", "9999").unwrap();
+    let session_id = sessions::start(&conn, id).unwrap();
+    sessions::end(&conn, session_id).unwrap();
+    let play_now = games::get_play_now(&conn).unwrap().expect("session fallback");
+    assert_eq!(play_now.id, id);
+}
+
+#[test]
+fn scripts_kind_of_and_dependent_ids() {
+    let conn = open_in_memory().unwrap();
+    let utility = scripts::create(
+        &conn,
+        &scripts::NewScript {
+            name: "Util".into(),
+            description: None,
+            kind: ScriptKind::Utility,
+            priority: 1,
+            before_launch: PhaseConfig::default(),
+            after_launch: PhaseConfig::default(),
+            on_exit: PhaseConfig::default(),
+            snippet: PhaseConfig {
+                mode: PhaseMode::Inline,
+                path: None,
+                inline: Some("function U {}".into()),
+                interpreter: Some(Interpreter::Powershell),
+            },
+        },
+    )
+    .unwrap();
+    let runner = scripts::create(
+        &conn,
+        &scripts::NewScript {
+            name: "Runner".into(),
+            description: None,
+            kind: ScriptKind::Normal,
+            priority: 5,
+            before_launch: PhaseConfig::default(),
+            after_launch: PhaseConfig::default(),
+            on_exit: PhaseConfig::default(),
+            snippet: PhaseConfig::default(),
+        },
+    )
+    .unwrap();
+    scripts::set_dependencies(&conn, runner, &[utility]).unwrap();
+
+    assert_eq!(scripts::kind_of(&conn, utility).unwrap(), Some(ScriptKind::Utility));
+    assert_eq!(scripts::dependent_ids(&conn, utility).unwrap(), vec![runner]);
+    assert!(scripts::kind_of(&conn, 404).unwrap().is_none());
+}

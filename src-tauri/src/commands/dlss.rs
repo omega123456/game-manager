@@ -12,12 +12,19 @@
 //! **Phases 2 & 3 must NOT edit this file** — the contract is fixed here.
 
 use crate::domain::{
-    BatchApplyResult, DllCatalog, DllType, DlssSupport, GameDlssState, GamePresetState, PresetKind,
-    PresetOption, SaveGameDlss, SaveGameDllSelection,
+    DllType, DlssSupport, GameDlssState, PresetKind, PresetOption, SaveGameDlss,
+    SaveGameDllSelection,
 };
+#[cfg(not(coverage))]
+use crate::domain::{BatchApplyResult, DllCatalog, GamePresetState};
+#[cfg(not(coverage))]
 use crate::dlss::download::{download_version_impl, ProgressSink};
-use crate::dlss::swap::{apply_to_all_impl, apply_to_game_impl, ApplyProgressSink, SwapTarget};
-use crate::dlss::{detect, download, elevation, manifest, nvapi, swap};
+use crate::dlss::swap::{apply_to_game_impl, SwapTarget};
+#[cfg(not(coverage))]
+use crate::dlss::swap::{apply_to_all_impl, ApplyProgressSink};
+use crate::dlss::{detect, elevation, nvapi, swap};
+#[cfg(not(coverage))]
+use crate::dlss::{download, manifest};
 use crate::error::AppResult;
 use crate::state::AppState;
 
@@ -39,7 +46,7 @@ pub fn get_support_impl() -> DlssSupport {
         nvapi_available: nvapi::is_nvapi_available(),
         is_elevated: elevation::is_elevated(),
     };
-    tracing::info!(
+    tracing::debug!(
         category = "dlss",
         nvapi_available = support.nvapi_available,
         is_elevated = support.is_elevated,
@@ -58,7 +65,7 @@ pub fn get_game_state_impl(state: &AppState, game_id: i64) -> AppResult<GameDlss
     let detection = state.dlss_detection_get(game_id);
     let cache_hit = detection.is_some();
     let result = detect::build_game_state(game_id, folder_override, detection);
-    tracing::info!(
+    tracing::debug!(
         category = "dlss",
         game_id,
         cache_hit,
@@ -106,7 +113,7 @@ pub fn list_game_states_impl(state: &AppState) -> AppResult<Vec<GameDlssState>> 
                 || state.ray_reconstruction.is_some()
         })
         .count();
-    tracing::info!(
+    tracing::debug!(
         category = "dlss",
         count = states.len(),
         with_dll,

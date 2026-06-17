@@ -275,7 +275,7 @@ pub fn scan_game_with(
         .map_err(DlssError::from)?;
 
     let folder = resolve_folder(folder_override.as_deref(), &game.launch_target);
-    tracing::info!(
+    tracing::debug!(
         category = "dlss",
         game_id,
         game_name = %game.name,
@@ -288,7 +288,7 @@ pub fn scan_game_with(
         Some(dir) => detect_in_folder(dir, catalog, reader)?,
         None => DetectionSummary::default(),
     };
-    tracing::info!(
+    tracing::debug!(
         category = "dlss",
         game_id,
         detected_sr = ?summary
@@ -331,7 +331,7 @@ pub fn scan_game_with(
 
 /// Re-scan a single game's folder and persist the detected versions.
 pub fn scan_game_impl(state: &AppState, game_id: i64) -> DlssResult<GameDlssState> {
-    tracing::info!(category = "dlss", game_id, "dlss_scan_game: starting folder scan");
+    tracing::debug!(category = "dlss", game_id, "dlss_scan_game: starting folder scan");
     let catalog = load_catalog(state)?;
     let reader = RealFileVersionReader;
     scan_game_with(state, game_id, &catalog, &reader)
@@ -364,11 +364,11 @@ pub fn scan_library_with(
 
 /// Re-scan every applicable game and return the refreshed states.
 pub fn scan_library_impl(state: &AppState) -> DlssResult<Vec<GameDlssState>> {
-    tracing::info!(category = "dlss", "dlss_scan_library: starting full library scan");
+    tracing::debug!(category = "dlss", "dlss_scan_library: starting full library scan");
     let catalog = load_catalog(state)?;
     let reader = RealFileVersionReader;
     let states = scan_library_with(state, &catalog, &reader)?;
-    tracing::info!(
+    tracing::debug!(
         category = "dlss",
         games_scanned = states.len(),
         with_dll = states

@@ -7,6 +7,35 @@
 
 use game_manager_lib::domain::{CatalogSource, DllType};
 use game_manager_lib::dlss::{display_version, manifest, storage};
+use std::sync::{Mutex, OnceLock};
+
+struct EnvGuard {
+    key: &'static str,
+    previous: Option<String>,
+}
+
+impl EnvGuard {
+    fn set(key: &'static str, value: &str) -> Self {
+        let previous = std::env::var(key).ok();
+        std::env::set_var(key, value);
+        Self { key, previous }
+    }
+}
+
+impl Drop for EnvGuard {
+    fn drop(&mut self) {
+        if let Some(value) = &self.previous {
+            std::env::set_var(self.key, value);
+        } else {
+            std::env::remove_var(self.key);
+        }
+    }
+}
+
+fn proxy_env_lock() -> std::sync::MutexGuard<'static, ()> {
+    static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+    LOCK.get_or_init(|| Mutex::new(())).lock().unwrap()
+}
 
 #[test]
 fn static_manifest_parses_into_all_three_types() {
@@ -57,6 +86,24 @@ fn find_by_version_resolves_display_version() {
         .expect("version must resolve");
     assert_eq!(found.version, target);
     assert!(manifest::find_by_version(&catalog, DllType::FrameGeneration, "0.0.0").is_none());
+}
+
+#[test]
+fn find_by_md5_matches_frame_generation_case_insensitively() {
+    let catalog = manifest::load_static().unwrap();
+    let target = &catalog.frame_generation[0];
+    let found = manifest::find_by_md5(&catalog, DllType::FrameGeneration, &target.md5.to_uppercase())
+        .expect("frame-generation md5 must resolve case-insensitively");
+    assert_eq!(found.version, target.version);
+}
+
+#[test]
+fn find_by_version_resolves_ray_reconstruction() {
+    let catalog = manifest::load_static().unwrap();
+    let target = catalog.ray_reconstruction[0].version.clone();
+    let found = manifest::find_by_version(&catalog, DllType::RayReconstruction, &target)
+        .expect("ray-reconstruction version must resolve");
+    assert_eq!(found.version, target);
 }
 
 #[test]
@@ -147,6 +194,30 @@ async fn build_catalog_refresh_attempts_remote_then_falls_back() {
         catalog.source,
         CatalogSource::Remote | CatalogSource::Cache | CatalogSource::Static
     ));
+}
+
+#[tokio::test]
+async fn build_catalog_refresh_uses_cache_when_remote_fetch_cannot_connect() {
+    let _lock = proxy_env_lock();
+    let _http_proxy = EnvGuard::set("HTTP_PROXY", "http://127.0.0.1:1");
+    let _https_proxy = EnvGuard::set("HTTPS_PROXY", "http://127.0.0.1:1");
+    let _http_proxy_lower = EnvGuard::set("http_proxy", "http://127.0.0.1:1");
+    let _https_proxy_lower = EnvGuard::set("https_proxy", "http://127.0.0.1:1");
+    let _no_proxy = EnvGuard::set("NO_PROXY", "");
+    let _no_proxy_lower = EnvGuard::set("no_proxy", "");
+
+    let dir = tempfile::tempdir().unwrap();
+    let cache_body = r#"{ "dlss": [
+        { "version": "8.8.8.0", "version_number": 8008008000, "md5_hash": "abc",
+          "zip_md5_hash": "def", "download_url": "http://x", "file_size": 1,
+          "zip_file_size": 1, "is_signature_valid": true } ],
+        "dlss_g": [], "dlss_d": [] }"#;
+    std::fs::create_dir_all(storage::root(dir.path())).unwrap();
+    std::fs::write(storage::manifest_path(dir.path()), cache_body).unwrap();
+
+    let catalog = manifest::build_catalog(dir.path(), true).await.unwrap();
+    assert_eq!(catalog.source, CatalogSource::Cache);
+    assert_eq!(catalog.super_resolution[0].version, "8.8.8");
 }
 
 #[test]

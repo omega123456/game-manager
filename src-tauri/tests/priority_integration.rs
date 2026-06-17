@@ -3,7 +3,7 @@
 
 use std::sync::{Arc, Mutex};
 
-use game_manager_lib::error::AppResult;
+use game_manager_lib::error::{AppError, AppResult};
 use game_manager_lib::priority::{NoopProcessPrioritizer, ProcessPrioritizer};
 use game_manager_lib::state::AppState;
 
@@ -74,6 +74,26 @@ fn noop_prioritizer_is_inert() {
     assert!(prioritizer.set_high(1).is_ok());
 }
 
+struct FailingPrioritizer;
+
+impl ProcessPrioritizer for FailingPrioritizer {
+    fn set_high(&self, _pid: u32) -> AppResult<()> {
+        Err(AppError::other("priority boost failed"))
+    }
+}
+
+#[test]
+fn raise_priority_swallows_prioritizer_errors() {
+    let state = AppState::in_memory_with_prioritizer(Box::new(FailingPrioritizer)).unwrap();
+    state.raise_priority_if_enabled(4242);
+}
+
+#[test]
+fn default_prioritizer_is_used_by_app_state_new() {
+    let state = AppState::new(game_manager_lib::db::connection::open_in_memory().unwrap());
+    state.raise_priority_if_enabled(std::process::id());
+}
+
 #[cfg(windows)]
 #[test]
 fn windows_prioritizer_raises_a_real_child() {
@@ -96,4 +116,32 @@ fn windows_prioritizer_raises_a_real_child() {
     let _ = child.wait();
 
     result.expect("SetPriorityClass on an owned child should succeed");
+}
+
+#[cfg(windows)]
+#[test]
+fn windows_prioritizer_surfaces_open_process_failure() {
+    use game_manager_lib::priority::default_prioritizer;
+
+    let prioritizer = default_prioritizer();
+    let err = prioritizer
+        .set_high(0)
+        .expect_err("OpenProcess must fail for pid 0");
+    assert!(err.to_string().contains("OpenProcess"));
+}
+
+#[cfg(windows)]
+#[test]
+fn windows_prioritizer_surfaces_set_priority_failure() {
+    use game_manager_lib::priority::default_prioritizer;
+
+    let prioritizer = default_prioritizer();
+    let err = prioritizer
+        .set_high(4)
+        .expect_err("SetPriorityClass should fail for the System process");
+    let message = err.to_string();
+    assert!(
+        message.contains("SetPriorityClass") || message.contains("OpenProcess"),
+        "unexpected error: {message}"
+    );
 }

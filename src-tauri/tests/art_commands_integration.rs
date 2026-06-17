@@ -380,6 +380,42 @@ fn steam_search_and_metadata_round_trip_through_mock_server() {
 }
 
 #[test]
+fn steam_provider_surfaces_connect_failures() {
+    let _steam = EnvGuard::set("GM_TEST_STEAM_APP_LIST_URL", "http://127.0.0.1:1/app-list");
+    let client = reqwest::blocking::Client::builder()
+        .timeout(std::time::Duration::from_millis(250))
+        .build()
+        .unwrap();
+
+    assert!(steam::search_cover_candidates(&client, "steam-key", "hades").is_err());
+    assert!(steam::fetch_metadata(&client, "steam-key", "hades").is_err());
+}
+
+#[test]
+fn steam_provider_surfaces_response_read_failures() {
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let addr = listener.local_addr().unwrap();
+    let handle = thread::spawn(move || {
+        let (mut stream, _) = listener.accept().unwrap();
+        let mut buf = [0_u8; 1024];
+        let _ = stream.read(&mut buf);
+        stream
+            .write_all(
+                b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 64\r\nConnection: close\r\n\r\n{\"applist\":{\"apps\":[",
+            )
+            .unwrap();
+    });
+    let _steam = EnvGuard::set("GM_TEST_STEAM_APP_LIST_URL", format!("http://{addr}/app-list"));
+    let client = reqwest::blocking::Client::builder()
+        .timeout(std::time::Duration::from_millis(250))
+        .build()
+        .unwrap();
+
+    assert!(steam::search_cover_candidates(&client, "steam-key", "hades").is_err());
+    handle.join().unwrap();
+}
+
+#[test]
 fn steam_fetch_metadata_returns_none_for_unknown_title() {
     let (base, handle) = spawn_fixture_server(&[("/app-list", fixture("steam-app-list"))], 1);
     let _steam = EnvGuard::set("GM_TEST_STEAM_APP_LIST_URL", format!("{base}/app-list"));
@@ -396,6 +432,33 @@ fn steam_parse_app_matches_respects_limit_and_partial_matches() {
     assert_eq!(matches[0].name, "ELDEN RING");
 
     assert!(steam::parse_app_matches("{bad", "hades", 4).is_err());
+}
+
+#[test]
+fn steamgriddb_search_surfaces_connect_failure_before_parsing() {
+    let _search =
+        EnvGuard::set("GM_TEST_STEAMGRIDDB_SEARCH_BASE", "http://127.0.0.1:1/search");
+    let _grid = EnvGuard::set("GM_TEST_STEAMGRIDDB_GRID_BASE", "http://127.0.0.1:1/grids");
+    let client = reqwest::blocking::Client::builder()
+        .timeout(std::time::Duration::from_millis(250))
+        .build()
+        .unwrap();
+
+    assert!(steamgriddb::search_grids(&client, "sgdb-key", "Hades").is_err());
+}
+
+#[test]
+fn steamgriddb_grid_fetch_surfaces_connect_failure_after_search_match() {
+    let (base, handle) = spawn_fixture_server(&[("/search", fixture("steamgriddb-search"))], 1);
+    let _search = EnvGuard::set("GM_TEST_STEAMGRIDDB_SEARCH_BASE", format!("{base}/search"));
+    let _grid = EnvGuard::set("GM_TEST_STEAMGRIDDB_GRID_BASE", "http://127.0.0.1:1/grids");
+    let client = reqwest::blocking::Client::builder()
+        .timeout(std::time::Duration::from_millis(250))
+        .build()
+        .unwrap();
+
+    assert!(steamgriddb::search_grids(&client, "sgdb-key", "Counter-Strike").is_err());
+    handle.join().unwrap();
 }
 
 #[test]
@@ -769,6 +832,53 @@ fn search_art_with_providers_returns_empty_for_blank_name() {
     )
     .unwrap();
     assert!(art.is_empty());
+}
+
+#[test]
+fn validate_remote_art_url_allows_exact_provider_suffix_hosts() {
+    cache::validate_remote_art_url("https://steamstatic.com/grid.png").unwrap();
+    cache::validate_remote_art_url("https://steamgriddb.com/grid.png").unwrap();
+}
+
+#[test]
+fn steam_parse_app_matches_uses_contains_scoring() {
+    let matches = steam::parse_app_matches(fixture("steam-app-list"), "knight", 4).unwrap();
+    assert!(matches.iter().any(|entry| entry.name == "Hollow Knight"));
+}
+
+#[test]
+fn cache_remote_image_accepts_known_image_content_types() {
+    let (_state, dir) = temp_state();
+    let (url, handle) = spawn_image_server(b"not-png-bytes", "image/png");
+    let client = reqwest::blocking::Client::new();
+    let cached_path = cache::cache_remote_image(&client, dir.path(), &url).unwrap();
+    handle.join().unwrap();
+    assert!(cached_path.ends_with(".png"));
+}
+
+#[test]
+fn validate_remote_art_url_rejects_missing_host() {
+    assert!(cache::validate_remote_art_url("https:///cover.png").is_err());
+}
+
+#[test]
+fn steam_parse_app_matches_skips_empty_names() {
+    let payload = r#"{"applist":{"apps":[{"appid":1,"name":""},{"appid":2,"name":"Hades"}]}}"#;
+    let matches = steam::parse_app_matches(payload, "hades", 4).unwrap();
+    assert_eq!(matches.len(), 1);
+    assert_eq!(matches[0].name, "Hades");
+}
+
+#[test]
+fn cache_remote_image_accepts_localhost_host() {
+    let (_state, dir) = temp_state();
+    let image_bytes = b"\x89PNG\r\n\x1a\nfakepng";
+    let (url, handle) = spawn_image_server(image_bytes, "image/png");
+    let localhost_url = url.replace("127.0.0.1", "localhost");
+    let client = reqwest::blocking::Client::new();
+    let cached_path = cache::cache_remote_image(&client, dir.path(), &localhost_url).unwrap();
+    handle.join().unwrap();
+    assert!(cached_path.contains("art-cache"));
 }
 
 #[test]

@@ -5,6 +5,8 @@
 //! persisted), that overrides round-trip against an in-memory database, and the
 //! Phase-1 cached command surface that merges the two.
 
+use std::collections::HashSet;
+
 use game_manager_lib::commands::dlss::{
     count_applicable_impl, get_game_state_impl, get_preset_options_impl, get_support_impl,
     list_game_states_impl, save_game_impl, set_folder_override_impl,
@@ -13,6 +15,8 @@ use game_manager_lib::db::connection::open_in_memory;
 use game_manager_lib::db::repo::dlss as repo;
 use game_manager_lib::db::repo::games::{self, NewGame};
 use game_manager_lib::dlss::detect::{DetectionResult, DetectionSummary};
+use game_manager_lib::dlss::elevation;
+use game_manager_lib::dlss::DlssError;
 use game_manager_lib::domain::{
     DetectedDll, DllType, MonitorMode, PresetKind, SaveGameDllSelection, SaveGameDlss,
 };
@@ -361,4 +365,91 @@ fn folder_override_command_round_trips_with_none() {
     let game_id = seed_game(&state, "NoneOverride");
     let result = set_folder_override_impl(&state, game_id, None).unwrap();
     assert!(result.folder_override.is_none());
+}
+
+#[test]
+fn relaunch_as_admin_reports_unsupported_under_coverage() {
+    let err = elevation::relaunch_as_admin().unwrap_err();
+    assert!(matches!(err, DlssError::Unsupported));
+}
+
+#[test]
+fn dlss_detection_cache_retain_remove_and_snapshot() {
+    let state = state();
+    let keep_id = seed_game(&state, "Keep");
+    let drop_id = seed_game(&state, "Drop");
+    let remove_id = seed_game(&state, "Remove");
+
+    cache_detection(
+        &state,
+        keep_id,
+        Some(dll("3.7", "a")),
+        None,
+        None,
+    );
+    cache_detection(
+        &state,
+        drop_id,
+        Some(dll("3.7", "b")),
+        None,
+        None,
+    );
+    cache_detection(
+        &state,
+        remove_id,
+        Some(dll("3.7", "c")),
+        None,
+        None,
+    );
+
+    state.dlss_detection_remove(remove_id);
+    assert!(state.dlss_detection_get(remove_id).is_none());
+
+    let live = HashSet::from([keep_id]);
+    state.dlss_detection_retain(&live);
+
+    let snapshot = state.dlss_detection_snapshot();
+    assert_eq!(snapshot.len(), 1);
+    assert_eq!(snapshot[0].0, keep_id);
+    assert!(state.dlss_detection_get(drop_id).is_none());
+}
+
+#[test]
+fn dlss_detection_set_tolerates_poisoned_cache_mutex() {
+    let state = state();
+    let game_id = seed_game(&state, "Poisoned");
+    cache_detection(
+        &state,
+        game_id,
+        Some(dll("3.7", "x")),
+        None,
+        None,
+    );
+    assert!(state.dlss_detection_get(game_id).is_some());
+
+    state.poison_dlss_detection_mutex_for_test();
+    cache_detection(
+        &state,
+        game_id,
+        Some(dll("3.8", "y")),
+        None,
+        None,
+    );
+    assert!(state.dlss_detection_get(game_id).is_none());
+}
+
+#[test]
+fn dlss_detection_retain_noops_when_cache_mutex_is_poisoned() {
+    let state = state();
+    let game_id = seed_game(&state, "Retain");
+    cache_detection(
+        &state,
+        game_id,
+        Some(dll("3.7", "x")),
+        None,
+        None,
+    );
+    state.poison_dlss_detection_mutex_for_test();
+    state.dlss_detection_retain(&HashSet::from([game_id]));
+    assert!(state.dlss_detection_get(game_id).is_none());
 }

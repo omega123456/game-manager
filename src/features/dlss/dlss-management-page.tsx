@@ -49,7 +49,7 @@ export function DlssManagementPage(): React.JSX.Element {
       return
     }
     scanned.current = true
-    logFrontend('info', 'DLSS management opened — rescanning library', {
+    logFrontend('debug', 'DLSS management opened — rescanning library', {
       category: 'dlss.scan',
     })
     scanLibrary.mutate()

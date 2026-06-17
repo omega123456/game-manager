@@ -408,3 +408,35 @@ fn noop_apply_sink_emit_does_not_panic() {
 fn system_default_target_is_distinct_from_version() {
     assert_ne!(SwapTarget::SystemDefault, SwapTarget::Version("3.7".into()));
 }
+
+#[tokio::test]
+async fn apply_to_all_records_per_game_failures() {
+    let app_data = TempDir::new().unwrap();
+    let st = state_with_app_data(app_data.path());
+    let game_id = st
+        .with_db(|c| games::create(c, &new_game("steam://run/42")))
+        .unwrap();
+    st.dlss_detection_set(
+        game_id,
+        DetectionResult {
+            summary: DetectionSummary {
+                super_resolution: Some(DetectedDll {
+                    version: "old".into(),
+                    path: "C:/missing/nvngx_dlss.dll".into(),
+                    md5: Some("oldmd5".into()),
+                }),
+                ..DetectionSummary::default()
+            },
+            ..DetectionResult::default()
+        },
+    );
+
+    let batch = apply_to_all_impl(&st, DllType::SuperResolution, "3.7", &NoopApplyProgressSink)
+        .await
+        .unwrap();
+
+    assert_eq!(batch.total, 1);
+    assert_eq!(batch.failed, 1);
+    assert_eq!(batch.succeeded, 0);
+    assert!(!batch.results[0].ok);
+}

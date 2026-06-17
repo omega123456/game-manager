@@ -108,6 +108,13 @@ fn resolve_folder_none_for_missing_override() {
 }
 
 #[test]
+fn resolve_folder_accepts_directory_launch_target() {
+    let dir = TempDir::new().unwrap();
+    let resolved = detect::resolve_folder(None, dir.path().to_str().unwrap());
+    assert_eq!(resolved.as_deref(), Some(dir.path()));
+}
+
+#[test]
 fn find_dll_recurses_subdirs() {
     let dir = TempDir::new().unwrap();
     let nested = dir.path().join("bin").join("plugins");
@@ -561,6 +568,50 @@ fn scan_game_impl_uses_real_reader_and_cached_manifest() {
 }
 
 #[test]
+fn build_game_state_marks_missing_detection_as_stale() {
+    let state = detect::build_game_state(99, Some("D:/Games/X".into()), None);
+    assert!(state.stale);
+    assert_eq!(state.game_id, 99);
+    assert_eq!(state.folder_override.as_deref(), Some("D:/Games/X"));
+}
+
+#[test]
+fn detect_in_folder_finds_frame_generation_dll() {
+    let dir = TempDir::new().unwrap();
+    let dll = dir.path().join("nvngx_dlssg.dll");
+    std::fs::write(&dll, b"fg").unwrap();
+    let md5 = detect::md5_hex(b"fg");
+    let mut catalog = catalog_with(sr_version(&md5));
+    catalog.frame_generation = vec![DllVersion {
+        dll_type: DllType::FrameGeneration,
+        version: "1.1".into(),
+        version_number: 11,
+        label: "v1.1".into(),
+        md5: md5.clone(),
+        zip_md5: "zz".into(),
+        download_url: "https://example/x.zip".into(),
+        file_size_bytes: 1,
+        zip_size_bytes: 1,
+        is_signature_valid: true,
+        is_downloaded: false,
+    }];
+    let mut map = HashMap::new();
+    map.insert(
+        dll.clone(),
+        DllIdentity {
+            md5,
+            file_version: "1.1.0.0".into(),
+        },
+    );
+    let reader = FakeReader { map };
+    let summary = detect::detect_in_folder(dir.path(), &catalog, &reader).unwrap();
+    assert_eq!(
+        summary.frame_generation.as_ref().unwrap().version,
+        "1.1"
+    );
+}
+
+#[test]
 fn scan_library_impl_runs_over_all_games() {
     let app_data = TempDir::new().unwrap();
     let st = state_with_app_data(app_data.path());
@@ -570,6 +621,21 @@ fn scan_library_impl_runs_over_all_games() {
     let states = detect::scan_library_impl(&st).unwrap();
     assert_eq!(states.len(), 1);
     assert!(states[0].super_resolution.is_none());
+}
+
+#[test]
+fn clear_cancelled_clears_a_pending_download_cancel() {
+    use game_manager_lib::dlss::download::{cancel_download_impl, clear_cancelled, is_cancel_pending};
+
+    cancel_download_impl(
+        &state_with_app_data(TempDir::new().unwrap().path()),
+        DllType::SuperResolution,
+        "3.7",
+    )
+    .unwrap();
+    assert!(is_cancel_pending(DllType::SuperResolution, "3.7"));
+    clear_cancelled(DllType::SuperResolution, "3.7");
+    assert!(!is_cancel_pending(DllType::SuperResolution, "3.7"));
 }
 
 #[test]

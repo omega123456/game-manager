@@ -135,7 +135,7 @@ fn write_plan(kind: PresetKind, value: u32) -> Vec<(u32, u32)> {
 
 /// Log the raw readings and the effective preset for observability.
 fn log_readings(scope: &str, kind: PresetKind, r: &PresetReadings, effective: u32) {
-    tracing::info!(
+    tracing::debug!(
         category = "dlss",
         scope,
         preset_kind = ?kind,
@@ -224,7 +224,7 @@ pub fn game_identity(state: &AppState, game_id: i64) -> DlssResult<(String, Vec<
     if let Some(process) = game.monitor_process_name.as_deref() {
         push_exe(&mut exe_names, process);
     }
-    tracing::info!(
+    tracing::debug!(
         category = "dlss",
         game_id,
         game_name = %game.name,
@@ -309,7 +309,7 @@ pub fn get_game_preset_for(
 ) -> DlssResult<GamePresetState> {
     let (name, exe_names) = game_identity(state, game_id)?;
     let preset = get_game_preset_with(drs, &name, &exe_names, kind)?;
-    tracing::info!(
+    tracing::debug!(
         category = "dlss",
         game_id,
         game_name = %name,
@@ -350,7 +350,7 @@ pub fn set_game_preset_for(
 
 /// Read the global (base profile) preset value.
 pub fn get_global_preset_impl(_state: &AppState, kind: PresetKind) -> DlssResult<u32> {
-    tracing::info!(
+    tracing::debug!(
         category = "dlss",
         preset_kind = ?kind,
         "dlss_get_global_preset: reading base profile"
@@ -369,7 +369,7 @@ pub fn get_game_preset_impl(
     game_id: i64,
     kind: PresetKind,
 ) -> DlssResult<GamePresetState> {
-    tracing::info!(
+    tracing::debug!(
         category = "dlss",
         game_id,
         preset_kind = ?kind,

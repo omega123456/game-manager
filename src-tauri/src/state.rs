@@ -279,4 +279,16 @@ impl AppState {
         }));
         assert!(poisoned.is_err(), "mutex poison helper must panic");
     }
+
+    /// Poison the DLSS detection-cache mutex so error paths can be exercised in tests.
+    pub fn poison_dlss_detection_mutex_for_test(&self) {
+        let poisoned = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let _guard = self
+                .dlss_detection
+                .lock()
+                .expect("dlss detection mutex should be available");
+            panic!("poison dlss detection mutex for test");
+        }));
+        assert!(poisoned.is_err(), "mutex poison helper must panic");
+    }
 }

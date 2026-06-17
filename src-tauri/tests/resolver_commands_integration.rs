@@ -248,3 +248,28 @@ fn resolved_scripts_error_when_dependency_is_not_utility() {
     let err = get_resolved_scripts_impl(&state, game.id).expect_err("non-utility dependency");
     assert!(err.to_string().contains("not a utility dependency"));
 }
+
+#[test]
+fn resolved_scripts_tolerates_cyclic_utility_dependencies() {
+    let state = state();
+    let game = create_game_impl(&state, game_input("Cycle")).unwrap();
+
+    let runner_id = state
+        .with_db(|conn| {
+            let util_a = scripts::create(conn, &utility_script("Util A", &[]))?;
+            let util_b = scripts::create(conn, &utility_script("Util B", &[]))?;
+            scripts::set_dependencies(conn, util_a, &[util_b])?;
+            scripts::set_dependencies(conn, util_b, &[util_a])?;
+            let runner_id = scripts::create(conn, &normal_script("Runner", 5, true, false, false))?;
+            scripts::set_dependencies(conn, runner_id, &[util_a])?;
+            Ok(runner_id)
+        })
+        .unwrap();
+
+    set_game_scripts_impl(&state, game.id, vec![runner_id]).unwrap();
+
+    let resolved = get_resolved_scripts_impl(&state, game.id).unwrap();
+    assert_eq!(resolved.len(), 1);
+    assert!(resolved[0].required_utility_names.iter().any(|name| name == "Util A"));
+    assert!(resolved[0].required_utility_names.iter().any(|name| name == "Util B"));
+}

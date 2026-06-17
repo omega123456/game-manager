@@ -24,10 +24,17 @@ pub const RETENTION_DAYS: i64 = 7;
 /// Initialize the global `tracing` subscriber exactly once.
 ///
 /// Idempotent: safe to call from both the app entrypoint and tests. The log
-/// level is read from `RUST_LOG`, defaulting to `info`.
+/// level is read from `RUST_LOG`, defaulting to `trace` in debug builds and
+/// `info` in release.
 pub fn init_tracing() {
     INIT.call_once(|| {
-        let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"));
+        let default_level = if cfg!(debug_assertions) {
+            "trace"
+        } else {
+            "info"
+        };
+        let filter =
+            EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new(default_level));
         let _ = tracing_subscriber::fmt()
             .with_env_filter(filter)
             .with_target(false)

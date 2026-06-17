@@ -705,6 +705,22 @@ fn setting_location_decodes_raw_values() {
 }
 
 #[test]
+fn game_identity_finds_exes_in_nested_subfolders() {
+    let state = state();
+    let folder = tempfile::TempDir::new().unwrap();
+    let launcher = folder.path().join("launcher.exe");
+    let nested_dir = folder.path().join("bin");
+    std::fs::create_dir_all(&nested_dir).unwrap();
+    std::fs::write(&launcher, b"x").unwrap();
+    std::fs::write(nested_dir.join("nested.exe"), b"x").unwrap();
+
+    let id = insert_game(&state, "Nested Scan", launcher.to_str().unwrap(), None);
+    let (_, exes) = game_identity(&state, id).unwrap();
+    assert!(exes.iter().any(|exe| exe == "launcher.exe"));
+    assert!(exes.iter().any(|exe| exe == "nested.exe"));
+}
+
+#[test]
 fn read_reloads_driver_and_write_saves_once() {
     // A read reloads driver settings first (so external NVIDIA App / Inspector
     // edits are observed); a write persists exactly once after its batch.

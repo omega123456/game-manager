@@ -91,7 +91,7 @@ function DetectedRow({ label, version }: { label: string; version?: string }): R
  */
 export function GameDetailDlssTab({ gameId }: GameDetailDlssTabProps): React.JSX.Element {
   React.useEffect(() => {
-    logFrontend('info', 'DLSS detail tab mounted — fetching live preset state', {
+    logFrontend('debug', 'DLSS detail tab mounted — fetching live preset state', {
       category: 'dlss.detail',
       details: `gameId=${gameId}`,
     })
@@ -260,12 +260,17 @@ export function GameDetailDlssTab({ gameId }: GameDetailDlssTabProps): React.JSX
   const canSave = isDirty && !busy && !saveGame.isPending
 
   return (
-    <div className="mx-auto max-w-2xl space-y-8" data-testid="game-detail-dlss">
-      <section className="space-y-3">
-        <h3 className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-          Detected versions
-        </h3>
-        <div className="space-y-2 rounded-[1.4rem] border border-border bg-background/70 p-4">
+    <div className="space-y-5" data-testid="game-detail-dlss">
+      <section className="space-y-3 rounded-[1.5rem] border border-border bg-surface-low p-5">
+        <div>
+          <h3 className="font-heading text-base font-semibold text-foreground">
+            Detected versions
+          </h3>
+          <p className="text-sm text-muted-foreground">
+            Versions currently installed in this game&apos;s folder.
+          </p>
+        </div>
+        <div className="space-y-2 rounded-xl border border-border bg-background/70 p-4">
           {DLL_TYPES.map((type) => (
             <DetectedRow
               key={type}
@@ -276,7 +281,13 @@ export function GameDetailDlssTab({ gameId }: GameDetailDlssTabProps): React.JSX
         </div>
       </section>
 
-      <section className="space-y-4">
+      <section className="space-y-4 rounded-[1.5rem] border border-border bg-surface-low p-5">
+        <div>
+          <h3 className="font-heading text-base font-semibold text-foreground">DLL versions</h3>
+          <p className="text-sm text-muted-foreground">
+            Overrides the global setting for this game only.
+          </p>
+        </div>
         {DLL_TYPES.map((type) => (
           <div key={type} className="space-y-2">
             <span className="block text-sm font-medium text-foreground">
@@ -295,12 +306,17 @@ export function GameDetailDlssTab({ gameId }: GameDetailDlssTabProps): React.JSX
             />
           </div>
         ))}
-        <p className="text-sm text-muted-foreground">
-          Overrides the global setting for this game only.
-        </p>
       </section>
 
-      <section className="space-y-4">
+      <section className="space-y-4 rounded-[1.5rem] border border-border bg-surface-low p-5">
+        <div>
+          <h3 className="font-heading text-base font-semibold text-foreground">
+            Driver presets
+          </h3>
+          <p className="text-sm text-muted-foreground">
+            Per-game NVIDIA driver profile overrides for DLSS quality.
+          </p>
+        </div>
         {showPresetCallout ? (
           <DlssUnsupportedCallout
             title="Presets unavailable"
@@ -331,10 +347,14 @@ export function GameDetailDlssTab({ gameId }: GameDetailDlssTabProps): React.JSX
         </div>
       </section>
 
-      <section className="space-y-2">
-        <span className="block text-sm font-medium text-foreground">
-          Game folder (optional override)
-        </span>
+      <section className="space-y-3 rounded-[1.5rem] border border-border bg-surface-low p-5">
+        <div>
+          <h3 className="font-heading text-base font-semibold text-foreground">Game folder</h3>
+          <p className="text-sm text-muted-foreground">
+            Auto-detected when possible. Override only if the scanner can&apos;t find the right
+            folder.
+          </p>
+        </div>
         <div className="flex items-center gap-2">
           <Input
             value={folder}
@@ -353,9 +373,6 @@ export function GameDetailDlssTab({ gameId }: GameDetailDlssTabProps): React.JSX
           </Button>
         </div>
         {folderError ? <p className="text-sm text-destructive">{folderError}</p> : null}
-        <p className="text-sm text-muted-foreground">
-          Auto-detected when possible. Override only if the scanner can't find the right folder.
-        </p>
       </section>
 
       <div className="flex justify-end">
