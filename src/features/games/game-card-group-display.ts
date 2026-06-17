@@ -6,10 +6,7 @@ export interface GameCardGroupDisplay {
 }
 
 /** Resolve up to four group pills for a library card (3 + overflow when needed). */
-export function resolveGameCardGroups(
-  groupIds: number[],
-  groups: Group[]
-): GameCardGroupDisplay {
+export function resolveGameCardGroups(groupIds: number[], groups: Group[]): GameCardGroupDisplay {
   const resolved = groupIds
     .map((id) => groups.find((group) => group.id === id))
     .filter((group): group is Group => group !== undefined)

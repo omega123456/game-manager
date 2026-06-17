@@ -1,0 +1,9 @@
+[
+  { "value": 0, "name": "Default", "deprecated": false },
+  { "value": 1, "name": "Preset A", "deprecated": true },
+  { "value": 2, "name": "Preset B", "deprecated": true },
+  { "value": 3, "name": "Preset C", "deprecated": true },
+  { "value": 4, "name": "Preset D", "deprecated": false },
+  { "value": 5, "name": "Preset E", "deprecated": false },
+  { "value": 16777215, "name": "NVIDIA recommended", "deprecated": false }
+]

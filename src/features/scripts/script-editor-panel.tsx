@@ -338,9 +338,7 @@ export function ScriptEditorPanel({
                 rangeClassName={PRIORITY_RANGE_CLASS[priorityTier(draft.priority)]}
                 thumbClassName={PRIORITY_THUMB_CLASS[priorityTier(draft.priority)]}
               />
-              <p className="text-xs text-muted-foreground">
-                Higher numbers are executed earlier.
-              </p>
+              <p className="text-xs text-muted-foreground">Higher numbers are executed earlier.</p>
             </div>
 
             <div className="space-y-3">

@@ -1,0 +1,79 @@
+{
+  "version": 1,
+  "updated_at": "2026-06-17T00:00:00Z",
+  "dlss": [
+    {
+      "version": "3.7.10.0",
+      "version_number": 3007010000,
+      "additional_label": "",
+      "md5_hash": "a1b2c3d4e5f60718293a4b5c6d7e8f90",
+      "zip_md5_hash": "0f1e2d3c4b5a69788796a5b4c3d2e1f0",
+      "download_url": "https://github.com/beeradmoore/dlss-swapper/releases/download/static/nvngx_dlss_3.7.10.zip",
+      "file_size": 19283456,
+      "zip_file_size": 9123456,
+      "is_signature_valid": true
+    },
+    {
+      "version": "3.5.10.0",
+      "version_number": 3005010000,
+      "additional_label": "",
+      "md5_hash": "11223344556677889900aabbccddeeff",
+      "zip_md5_hash": "ffeeddccbbaa00998877665544332211",
+      "download_url": "https://github.com/beeradmoore/dlss-swapper/releases/download/static/nvngx_dlss_3.5.10.zip",
+      "file_size": 18900000,
+      "zip_file_size": 8900000,
+      "is_signature_valid": true
+    },
+    {
+      "version": "2.5.1.0",
+      "version_number": 2005001000,
+      "additional_label": "",
+      "md5_hash": "deadbeefdeadbeefdeadbeefdeadbeef",
+      "zip_md5_hash": "beefdeadbeefdeadbeefdeadbeefdead",
+      "download_url": "https://github.com/beeradmoore/dlss-swapper/releases/download/static/nvngx_dlss_2.5.1.zip",
+      "file_size": 12000000,
+      "zip_file_size": 6000000,
+      "is_signature_valid": true
+    }
+  ],
+  "dlss_g": [
+    {
+      "version": "3.8.0.0",
+      "version_number": 3008000000,
+      "additional_label": "",
+      "md5_hash": "0123456789abcdef0123456789abcdef",
+      "zip_md5_hash": "fedcba9876543210fedcba9876543210",
+      "download_url": "https://github.com/beeradmoore/dlss-swapper/releases/download/static/nvngx_dlssg_3.8.0.zip",
+      "file_size": 22000000,
+      "zip_file_size": 10500000,
+      "is_signature_valid": true
+    },
+    {
+      "version": "1.1.0.0",
+      "version_number": 1001000000,
+      "additional_label": "",
+      "md5_hash": "abcabcabcabcabcabcabcabcabcabcab",
+      "zip_md5_hash": "cbacbacbacbacbacbacbacbacbacbacb",
+      "download_url": "https://github.com/beeradmoore/dlss-swapper/releases/download/static/nvngx_dlssg_1.1.0.zip",
+      "file_size": 15000000,
+      "zip_file_size": 7000000,
+      "is_signature_valid": true
+    }
+  ],
+  "dlss_d": [
+    {
+      "version": "3.7.0.0",
+      "version_number": 3007000000,
+      "additional_label": "",
+      "md5_hash": "11112222333344445555666677778888",
+      "zip_md5_hash": "8888777766665555444433332222111",
+      "download_url": "https://github.com/beeradmoore/dlss-swapper/releases/download/static/nvngx_dlssd_3.7.0.zip",
+      "file_size": 20000000,
+      "zip_file_size": 9500000,
+      "is_signature_valid": true
+    }
+  ],
+  "fsr_31_dx12": [],
+  "xess": [],
+  "known_dlls": []
+}

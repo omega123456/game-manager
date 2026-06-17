@@ -54,7 +54,12 @@ export function GroupScriptAssignment({
         </div>
         <Popover open={open} onOpenChange={setOpen}>
           <PopoverTrigger asChild>
-            <Button type="button" variant="outline" size="sm" data-testid="group-script-picker-trigger">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              data-testid="group-script-picker-trigger"
+            >
               <Icon name="playlist_add" className="text-[18px]" />
               Add script
             </Button>

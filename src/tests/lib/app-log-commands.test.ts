@@ -1,6 +1,7 @@
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { logFrontend } from '../../lib/app-log-commands'
+import { logFrontend, toast, toastError } from '../../lib/app-log-commands'
+import { useToastStore } from '../../stores/toast-store'
 import { ipc } from '../ipc-mock'
 
 describe('logFrontend', () => {
@@ -30,5 +31,42 @@ describe('logFrontend', () => {
       expect(consoleError).toHaveBeenCalledWith('[app-log]', 'error', 'boom', expect.any(Error))
     })
     consoleError.mockRestore()
+  })
+})
+
+describe('toast action + persistent threading', () => {
+  afterEach(() => {
+    useToastStore.setState({ toasts: [] })
+  })
+
+  it('forwards persistent and action to the toast store', () => {
+    const onClick = vi.fn()
+    toast('info', 'Batch done', {
+      description: '10 of 12 games',
+      persistent: true,
+      action: { label: 'View details', onClick },
+    })
+
+    const toasts = useToastStore.getState().toasts
+    expect(toasts).toHaveLength(1)
+    expect(toasts[0]).toMatchObject({
+      tone: 'info',
+      title: 'Batch done',
+      description: '10 of 12 games',
+      persistent: true,
+      action: { label: 'View details' },
+    })
+    toasts[0].action?.onClick()
+    expect(onClick).toHaveBeenCalledTimes(1)
+  })
+
+  it('toastError threads action + persistent', () => {
+    toastError('Administrator access required', {
+      persistent: true,
+      action: { label: 'Relaunch', onClick: vi.fn() },
+    })
+    const toasts = useToastStore.getState().toasts
+    expect(toasts[0]).toMatchObject({ tone: 'error', persistent: true })
+    expect(toasts[0].action?.label).toBe('Relaunch')
   })
 })

@@ -4,6 +4,7 @@
 //! contain no Tauri command handlers — those live in `crate::commands` and are
 //! introduced in later phases.
 
+pub mod dlss;
 pub mod games;
 pub mod groups;
 pub mod logs;

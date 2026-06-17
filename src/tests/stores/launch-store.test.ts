@@ -3,7 +3,9 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import { isGameRunningPhase, isTickingPhase, useLaunchStore } from '@/stores/launch-store'
 import type { LaunchLifecycle } from '@/types/domain'
 
-function lifecycle(partial: Partial<LaunchLifecycle> & Pick<LaunchLifecycle, 'phase'>): LaunchLifecycle {
+function lifecycle(
+  partial: Partial<LaunchLifecycle> & Pick<LaunchLifecycle, 'phase'>
+): LaunchLifecycle {
   return { gameId: 1, failedCount: 0, ...partial }
 }
 

@@ -42,10 +42,7 @@ export function UpdatesSection(): React.JSX.Element {
     switch (status) {
       case 'checking':
         return (
-          <StatusPill
-            className="bg-secondary text-secondary-foreground"
-            icon="progress_activity"
-          >
+          <StatusPill className="bg-secondary text-secondary-foreground" icon="progress_activity">
             Checking for updates...
           </StatusPill>
         )

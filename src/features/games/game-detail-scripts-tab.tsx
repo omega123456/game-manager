@@ -1,10 +1,7 @@
 import { useState } from 'react'
 
 import { toastError } from '@/lib/app-log-commands'
-import {
-  useResolvedScriptsQuery,
-  useSetGameScriptsMutation,
-} from '@/lib/queries/use-games'
+import { useResolvedScriptsQuery, useSetGameScriptsMutation } from '@/lib/queries/use-games'
 import { useGroupsQuery } from '@/lib/queries/use-groups'
 import { useScriptsQuery } from '@/lib/queries/use-scripts'
 import type { Game, Group, Script } from '@/types/domain'
@@ -29,8 +26,9 @@ export function GameDetailScriptsTab({ game }: GameDetailScriptsTabProps): React
 
   const scripts = scriptsQuery.data ?? []
   const groups = groupsQuery.data ?? []
-  const [optimisticScriptIds, setOptimisticScriptIds] =
-    useState<OptimisticScriptIdsState | null>(null)
+  const [optimisticScriptIds, setOptimisticScriptIds] = useState<OptimisticScriptIdsState | null>(
+    null
+  )
   const directScriptIds =
     optimisticScriptIds?.gameId === game.id ? optimisticScriptIds.ids : game.scriptIds
   const inheritedScriptIds = resolveInheritedScriptIds(scripts, groups, game.groupIds)

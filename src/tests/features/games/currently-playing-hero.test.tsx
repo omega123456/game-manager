@@ -55,7 +55,9 @@ describe('CurrentlyPlayingHero', () => {
   })
 
   it('falls back to a gradient when the cover image fails to load', async () => {
-    ipc.override('get_play_now_game', () => makeGame({ imagePath: 'https://example.com/cover.png' }))
+    ipc.override('get_play_now_game', () =>
+      makeGame({ imagePath: 'https://example.com/cover.png' })
+    )
 
     renderWithProviders(<CurrentlyPlayingHero />)
 

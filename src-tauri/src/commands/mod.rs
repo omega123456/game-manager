@@ -7,6 +7,7 @@
 //! logging command; domain commands land in later phases.
 
 pub mod art;
+pub mod dlss;
 pub mod games;
 pub mod groups;
 pub mod launch;

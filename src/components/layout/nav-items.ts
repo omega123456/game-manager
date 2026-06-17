@@ -7,6 +7,7 @@ export interface NavItem {
 
 export const NAV_ITEMS: NavItem[] = [
   { to: '/library', label: 'Game Library', icon: 'sports_esports' },
+  { to: '/dlss', label: 'DLSS Management', icon: 'tune' },
   { to: '/scripts', label: 'Script Manager', icon: 'terminal' },
   { to: '/groups', label: 'Group Manager', icon: 'groups' },
   { to: '/settings', label: 'Settings', icon: 'settings' },

@@ -1,8 +1,10 @@
 import { useState } from 'react'
 
 import type { Game, Group } from '@/types/domain'
+import type { GameDlssState } from '@/types/dlss'
 import { Icon } from '@/components/ui/icon'
 import { cn } from '@/lib/utils'
+import { DlssPills } from '@/features/dlss/dlss-pills'
 import { GameCardGroups } from '@/features/games/game-card-groups'
 import { getLibraryMeta } from '@/features/games/library-format'
 import { formatElapsed } from '@/features/launch/launch-format'
@@ -16,6 +18,8 @@ export interface GameCardProps {
   isPlaying?: boolean
   /** Live elapsed seconds for the active session (only meaningful when playing). */
   elapsedSeconds?: number
+  /** Cached DLSS detection state, used to render version pills. */
+  dlssState?: GameDlssState
 }
 
 export function GameCard({
@@ -24,6 +28,7 @@ export function GameCard({
   onOpen,
   isPlaying = false,
   elapsedSeconds = 0,
+  dlssState,
 }: GameCardProps): React.JSX.Element {
   const meta = getLibraryMeta(game.totalPlaytimeSeconds, game.lastPlayedAt)
   const coverUrl = toCoverImageUrl(game.imagePath)
@@ -54,9 +59,11 @@ export function GameCard({
                 className="h-2 w-2 rounded-full bg-secondary motion-safe:animate-pulse"
                 aria-hidden
               />
-              Playing · <span className="font-mono tabular-nums">{formatElapsed(elapsedSeconds)}</span>
+              Playing ·{' '}
+              <span className="font-mono tabular-nums">{formatElapsed(elapsedSeconds)}</span>
             </span>
           ) : null}
+          <DlssPills state={dlssState} hasPlayingPip={isPlaying} />
           {coverUrl && !coverFailed ? (
             <img
               src={coverUrl}

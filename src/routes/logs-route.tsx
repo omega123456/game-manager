@@ -108,7 +108,10 @@ export function LogsRoute(): React.JSX.Element {
   const goTo = (next: number) => setPage(Math.min(Math.max(1, next), totalPages))
 
   return (
-    <div className="mx-auto h-full w-[min(1440px,92%)] overflow-y-auto p-8" data-testid="logs-route">
+    <div
+      className="mx-auto h-full w-[min(1440px,92%)] overflow-y-auto p-8"
+      data-testid="logs-route"
+    >
       <header className="mb-6">
         <h1 className="font-heading text-2xl font-bold text-foreground">Logs</h1>
         <p className="text-sm text-muted-foreground">System and application event stream.</p>
@@ -116,7 +119,10 @@ export function LogsRoute(): React.JSX.Element {
 
       <div className="mb-6 flex flex-col gap-4 rounded-xl border border-border bg-surface p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between">
         <div className="w-full sm:w-48">
-          <Select value={level} onValueChange={(value) => handleLevelChange(value as LogLevelFilter)}>
+          <Select
+            value={level}
+            onValueChange={(value) => handleLevelChange(value as LogLevelFilter)}
+          >
             <SelectTrigger aria-label="Filter logs by level" data-testid="logs-level-filter">
               <SelectValue placeholder="All Levels" />
             </SelectTrigger>

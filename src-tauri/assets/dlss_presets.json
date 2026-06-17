@@ -1,0 +1,14 @@
+[
+  { "value": 0, "name": "Default", "deprecated": false },
+  { "value": 1, "name": "Preset A", "deprecated": false },
+  { "value": 2, "name": "Preset B", "deprecated": false },
+  { "value": 3, "name": "Preset C", "deprecated": false },
+  { "value": 4, "name": "Preset D", "deprecated": false },
+  { "value": 5, "name": "Preset E", "deprecated": false },
+  { "value": 6, "name": "Preset F", "deprecated": false },
+  { "value": 10, "name": "Preset J", "deprecated": false },
+  { "value": 11, "name": "Preset K", "deprecated": false },
+  { "value": 12, "name": "Preset L", "deprecated": false },
+  { "value": 13, "name": "Preset M", "deprecated": false },
+  { "value": 16777215, "name": "NVIDIA recommended (Always latest)", "deprecated": false }
+]

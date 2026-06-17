@@ -25,6 +25,7 @@ import { getLibraryMeta } from '@/features/games/library-format'
 import { GameEditForm } from '@/features/games/game-edit-form'
 import { GameDetailGroupsTab } from '@/features/games/game-detail-groups-tab'
 import { GameDetailScriptsTab } from '@/features/games/game-detail-scripts-tab'
+import { GameDetailDlssTab } from '@/features/dlss/game-detail-dlss-tab'
 import { toCoverImageUrl } from '@/lib/asset-url'
 import { logFrontend } from '@/lib/app-log-commands'
 import { useDeleteGameMutation, useGameQuery } from '@/lib/queries/use-games'
@@ -33,7 +34,7 @@ import { useUiStore } from '@/stores/ui-store'
 import { useLaunchStore } from '@/stores/launch-store'
 import { launchGameById } from '@/features/launch/launch-controller'
 
-type GameDetailTab = 'overview' | 'edit' | 'groups' | 'scripts'
+type GameDetailTab = 'overview' | 'edit' | 'groups' | 'scripts' | 'dlss'
 
 const gameDetailTabTriggerClass = cn(
   'relative flex w-full justify-center rounded-md border-0 bg-transparent px-3 py-4 text-sm font-medium shadow-none transition-colors',
@@ -162,6 +163,9 @@ function GameDetailModalInner({ selectedGameId }: GameDetailModalInnerProps): Re
             </TabsTrigger>
             <TabsTrigger value="scripts" className={gameDetailTabTriggerClass}>
               Scripts
+            </TabsTrigger>
+            <TabsTrigger value="dlss" className={gameDetailTabTriggerClass}>
+              DLSS
             </TabsTrigger>
           </TabsList>
         </div>
@@ -306,12 +310,7 @@ function GameDetailModalInner({ selectedGameId }: GameDetailModalInnerProps): Re
           </TabsContent>
 
           <TabsContent value="edit" className="mt-0">
-            {game ? (
-              <GameEditForm
-                key={game.id}
-                game={game}
-              />
-            ) : null}
+            {game ? <GameEditForm key={game.id} game={game} /> : null}
           </TabsContent>
 
           <TabsContent value="groups" className="mt-0">
@@ -320,6 +319,10 @@ function GameDetailModalInner({ selectedGameId }: GameDetailModalInnerProps): Re
 
           <TabsContent value="scripts" className="mt-0">
             {game ? <GameDetailScriptsTab game={game} /> : null}
+          </TabsContent>
+
+          <TabsContent value="dlss" className="mt-0">
+            {game ? <GameDetailDlssTab gameId={game.id} /> : null}
           </TabsContent>
         </div>
       </Tabs>

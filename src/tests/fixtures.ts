@@ -84,6 +84,33 @@ export const IPC_FIXTURES: Record<string, IpcHandler> = {
 
   // --- Art + metadata. Phase B3 adds the backend used by the future Add Game
   //     wizard. Defaults stay deterministic and cheap. ---
+  // --- DLSS. Phase 4 frontend; defaults keep the harness quiet until tests
+  //     override specific flows. Catalog/state reads return empty/minimal. ---
+  dlss_get_support: () => ({ nvapiAvailable: false, isElevated: true }),
+  dlss_get_catalog: () => ({
+    superResolution: [],
+    frameGeneration: [],
+    rayReconstruction: [],
+    source: 'static',
+  }),
+  dlss_get_game_state: (args) => ({ gameId: Number(args?.gameId ?? 0), stale: true }),
+  dlss_list_game_states: () => [],
+  dlss_scan_game: (args) => ({ gameId: Number(args?.gameId ?? 0), stale: false }),
+  dlss_scan_library: () => [],
+  dlss_set_folder_override: (args) => ({ gameId: Number(args?.gameId ?? 0), stale: false }),
+  dlss_download_version: () => undefined,
+  dlss_cancel_download: () => undefined,
+  dlss_apply_to_game: (args) => ({ gameId: Number(args?.gameId ?? 0), stale: false }),
+  dlss_apply_to_all: () => ({ total: 0, succeeded: 0, failed: 0, results: [] }),
+  dlss_count_applicable: () => 0,
+  dlss_get_preset_options: () => [],
+  dlss_get_global_preset: () => 0,
+  dlss_set_global_preset: () => undefined,
+  dlss_get_game_preset: () => ({ available: false, value: 0 }),
+  dlss_set_game_preset: () => undefined,
+  dlss_save_game: (args) => ({ gameId: Number(args?.gameId ?? 0), stale: false }),
+  dlss_relaunch_elevated: () => undefined,
+
   search_art: () => [],
   fetch_metadata: (args) => ({
     canonicalName: String(args?.name ?? ''),

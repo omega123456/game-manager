@@ -174,6 +174,29 @@ describe('GameDetailModal', () => {
     })
   })
 
+  it('shows the DLSS tab with detected versions', async () => {
+    installGameMocks()
+    ipc.override('dlss_get_game_state', () => ({
+      gameId: 1,
+      superResolution: { version: '3.7.10', path: 'a' },
+      stale: false,
+    }))
+    const user = userEvent.setup()
+
+    renderWithProviders(<AppRoutes />, { route: '/library' })
+
+    await screen.findByText('Alan Wake 2')
+    await user.click(screen.getByRole('button', { name: 'Open Alan Wake 2' }))
+
+    const dialog = await screen.findByRole('dialog')
+    expect(within(dialog).getByRole('tab', { name: 'DLSS' })).toBeInTheDocument()
+    await user.click(within(dialog).getByRole('tab', { name: 'DLSS' }))
+
+    const tab = await screen.findByTestId('game-detail-dlss')
+    expect(tab).toHaveTextContent('v3.7.10')
+    expect(tab).toHaveTextContent('Not detected')
+  })
+
   it('disables the overview launch button while another launch is already active', async () => {
     installGameMocks()
     const user = userEvent.setup()
@@ -514,7 +537,9 @@ describe('GameDetailModal', () => {
       })
 
       expect(
-        await screen.findByText('Could not save the game right now. Check the fields and try again.')
+        await screen.findByText(
+          'Could not save the game right now. Check the fields and try again.'
+        )
       ).toBeInTheDocument()
       expect(ipc.calls('log_frontend').length).toBeGreaterThan(0)
     })

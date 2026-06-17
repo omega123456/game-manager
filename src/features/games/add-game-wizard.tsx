@@ -543,7 +543,10 @@ export function AddGameWizard(): React.JSX.Element {
                           {pillContent}
                         </button>
                       ) : (
-                        <div className={pillClassName} aria-current={isCurrent ? 'step' : undefined}>
+                        <div
+                          className={pillClassName}
+                          aria-current={isCurrent ? 'step' : undefined}
+                        >
                           {pillContent}
                         </div>
                       )}
@@ -555,266 +558,276 @@ export function AddGameWizard(): React.JSX.Element {
           </div>
 
           <div className="min-h-0 flex-1 overflow-y-auto px-6 py-6">
-          {step === 1 ? (
-            <section className="space-y-4" data-testid="add-game-step-1">
-              <div className="rounded-2xl border border-border bg-surface-low p-5">
-                <p className="text-sm text-muted-foreground">
-                  Pick the Windows executable that should launch when you press Play.
-                </p>
-                <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center">
-                  <Button
-                    type="button"
-                    onClick={() => void browseForExecutable()}
-                    ref={browseButtonRef}
-                  >
-                    <Icon name="folder_open" className="text-[18px]" />
-                    Browse for executable
-                  </Button>
-                  <div className="min-w-0 flex-1 rounded-xl border border-border bg-background px-4 py-3 text-sm text-foreground">
-                    {hasExecutable ? wizard.executablePath : 'No executable selected yet.'}
-                  </div>
-                </div>
-              </div>
-
-              {browseError ? (
-                <p className="rounded-xl border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive">
-                  {browseError}
-                </p>
-              ) : null}
-            </section>
-          ) : null}
-
-          {step === 2 ? (
-            <section className="space-y-5" data-testid="add-game-step-2">
-              <div className="flex flex-col gap-3 rounded-2xl border border-border bg-surface-low p-5">
-                <div className="flex flex-col gap-3 sm:flex-row">
-                  <div className="flex-1 space-y-2">
-                    <label
-                      htmlFor="cover-search"
-                      className="cursor-pointer text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground"
-                    >
-                      Search title
-                    </label>
-                    <Input
-                      id="cover-search"
-                      ref={artSearchInputRef}
-                      value={wizard.searchTerm}
-                      onChange={(event) =>
-                        setWizard((current) => ({ ...current, searchTerm: event.target.value }))
-                      }
-                    />
-                  </div>
-                  <div className="flex items-end gap-2">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={() => void runArtSearch()}
-                      disabled={isSearchingArt}
-                    >
-                      <Icon name="search" className="text-[18px]" />
-                      {isSearchingArt ? 'Searching…' : 'Search'}
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={() => void browseForLocalArt()}
-                    >
-                      <Icon name="image" className="text-[18px]" />
-                      Use Local File
-                    </Button>
-                  </div>
-                </div>
-
-                <p className="text-sm text-muted-foreground">
-                  Search started from{' '}
-                  <span className="font-medium text-foreground">{wizard.executablePath}</span>
-                </p>
-              </div>
-
-              {artError ? (
+            {step === 1 ? (
+              <section className="space-y-4" data-testid="add-game-step-1">
                 <div className="rounded-2xl border border-border bg-surface-low p-5">
-                  <div className="flex items-start gap-3">
-                    <span className="mt-0.5 flex h-10 w-10 items-center justify-center rounded-full bg-primary/10 text-primary">
-                      <Icon
-                        name={candidates.length === 0 && isSearchingArt ? 'sync' : 'wifi_off'}
-                        className="text-[22px]"
-                      />
-                    </span>
-                    <div className="space-y-2">
-                      <h3 className="font-heading text-lg font-semibold text-foreground">
-                        {candidates.length === 0
-                          ? 'Art search needs a fallback'
-                          : 'Art search updated'}
-                      </h3>
-                      <p className="text-sm text-muted-foreground">{artError}</p>
-                      <div className="flex flex-wrap gap-2">
-                        <Button type="button" variant="outline" onClick={() => void runArtSearch()}>
-                          Retry search
-                        </Button>
-                        <Button type="button" variant="ghost" onClick={() => setStep(3)}>
-                          Continue without cover
-                        </Button>
-                      </div>
+                  <p className="text-sm text-muted-foreground">
+                    Pick the Windows executable that should launch when you press Play.
+                  </p>
+                  <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center">
+                    <Button
+                      type="button"
+                      onClick={() => void browseForExecutable()}
+                      ref={browseButtonRef}
+                    >
+                      <Icon name="folder_open" className="text-[18px]" />
+                      Browse for executable
+                    </Button>
+                    <div className="min-w-0 flex-1 rounded-xl border border-border bg-background px-4 py-3 text-sm text-foreground">
+                      {hasExecutable ? wizard.executablePath : 'No executable selected yet.'}
                     </div>
                   </div>
                 </div>
-              ) : null}
 
-              {wizard.selectedImagePath && !wizard.selectedCandidate ? (
-                <div className="rounded-2xl border border-primary/40 bg-primary/10 px-4 py-3 text-sm text-foreground">
-                  Local cover selected: {wizard.selectedImageLabel}
-                </div>
-              ) : null}
-
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <h3 className="font-heading text-lg font-semibold">Cover candidates</h3>
-                  <span className="text-sm text-muted-foreground">
-                    {isSearchingArt
-                      ? 'Searching…'
-                      : `${candidates.length} result${candidates.length === 1 ? '' : 's'}`}
-                  </span>
-                </div>
-
-                {candidates.length > 0 ? (
-                  <div
-                    className="grid grid-cols-2 gap-3 md:grid-cols-4"
-                    role="listbox"
-                    aria-label="Cover art candidates"
-                    data-testid="art-candidate-grid"
-                  >
-                    {candidates.map((candidate, index) => {
-                      const selected = wizard.selectedCandidate?.id === candidate.id
-                      return (
-                        <button
-                          key={candidate.id}
-                          ref={(node) => {
-                            candidateRefs.current[index] = node
-                          }}
-                          type="button"
-                          role="option"
-                          aria-selected={selected}
-                          tabIndex={selected || index === 0 ? 0 : -1}
-                          className={cn(
-                            'group cursor-pointer overflow-hidden rounded-2xl border bg-card text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
-                            selected
-                              ? 'border-primary shadow-[0_0_0_1px_hsl(var(--primary))]'
-                              : 'border-border'
-                          )}
-                          onClick={() => moveCandidateFocus(index)}
-                          onKeyDown={(event) => handleCandidateKeyDown(event, index)}
-                        >
-                          <div className="aspect-3/4 overflow-hidden bg-surface-high">
-                            <img
-                              src={candidate.imageUrl}
-                              alt={`${wizard.gameName || wizard.searchTerm} cover option ${index + 1}`}
-                              className="h-full w-full object-cover transition-transform duration-200 group-hover:scale-[1.03]"
-                            />
-                          </div>
-                          <div className="space-y-1 p-3">
-                            <p className="text-sm font-semibold text-foreground">
-                              {candidate.providerName}
-                            </p>
-                            <p className="text-xs text-muted-foreground">
-                              {candidate.width} × {candidate.height}
-                            </p>
-                          </div>
-                        </button>
-                      )
-                    })}
-                  </div>
-                ) : !isSearchingArt ? (
-                  <div className="rounded-2xl border border-dashed border-border bg-surface-low px-5 py-8 text-center text-sm text-muted-foreground">
-                    Start a search or use a local file to continue.
-                  </div>
+                {browseError ? (
+                  <p className="rounded-xl border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+                    {browseError}
+                  </p>
                 ) : null}
-              </div>
-            </section>
-          ) : null}
+              </section>
+            ) : null}
 
-          {step === 3 ? (
-            <section className="space-y-5" data-testid="add-game-step-3">
-              <div className="grid gap-5 md:grid-cols-[12rem_1fr]">
-                <div className="rounded-2xl border border-border bg-surface-low p-4">
-                  <div className="flex aspect-3/4 items-center justify-center overflow-hidden rounded-xl bg-background">
-                    {toCoverImageUrl(wizard.selectedImagePreview) ? (
-                      <img
-                        src={toCoverImageUrl(wizard.selectedImagePreview) ?? undefined}
-                        alt={`${wizard.gameName || wizard.canonicalName || 'Selected'} cover preview`}
-                        className="h-full w-full object-cover"
+            {step === 2 ? (
+              <section className="space-y-5" data-testid="add-game-step-2">
+                <div className="flex flex-col gap-3 rounded-2xl border border-border bg-surface-low p-5">
+                  <div className="flex flex-col gap-3 sm:flex-row">
+                    <div className="flex-1 space-y-2">
+                      <label
+                        htmlFor="cover-search"
+                        className="cursor-pointer text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground"
+                      >
+                        Search title
+                      </label>
+                      <Input
+                        id="cover-search"
+                        ref={artSearchInputRef}
+                        value={wizard.searchTerm}
+                        onChange={(event) =>
+                          setWizard((current) => ({ ...current, searchTerm: event.target.value }))
+                        }
                       />
-                    ) : (
-                      <div className="space-y-2 px-4 text-center text-muted-foreground">
-                        <Icon name="photo" className="mx-auto text-[34px]" />
-                        <p className="text-sm">No cover selected</p>
-                      </div>
-                    )}
+                    </div>
+                    <div className="flex items-end gap-2">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => void runArtSearch()}
+                        disabled={isSearchingArt}
+                      >
+                        <Icon name="search" className="text-[18px]" />
+                        {isSearchingArt ? 'Searching…' : 'Search'}
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => void browseForLocalArt()}
+                      >
+                        <Icon name="image" className="text-[18px]" />
+                        Use Local File
+                      </Button>
+                    </div>
                   </div>
-                  <p className="mt-3 text-xs uppercase tracking-[0.18em] text-muted-foreground">
-                    {wizard.selectedImageLabel ?? 'No image source'}
+
+                  <p className="text-sm text-muted-foreground">
+                    Search started from{' '}
+                    <span className="font-medium text-foreground">{wizard.executablePath}</span>
                   </p>
                 </div>
 
-                <div className="space-y-4 rounded-2xl border border-border bg-surface-low p-5">
-                  <div className="space-y-2">
-                    <label
-                      htmlFor="game-name"
-                      className="cursor-pointer text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground"
-                    >
-                      Game name
-                    </label>
-                    <Input
-                      id="game-name"
-                      ref={nameInputRef}
-                      value={wizard.gameName}
-                      onChange={(event) =>
-                        setWizard((current) => ({ ...current, gameName: event.target.value }))
-                      }
-                    />
+                {artError ? (
+                  <div className="rounded-2xl border border-border bg-surface-low p-5">
+                    <div className="flex items-start gap-3">
+                      <span className="mt-0.5 flex h-10 w-10 items-center justify-center rounded-full bg-primary/10 text-primary">
+                        <Icon
+                          name={candidates.length === 0 && isSearchingArt ? 'sync' : 'wifi_off'}
+                          className="text-[22px]"
+                        />
+                      </span>
+                      <div className="space-y-2">
+                        <h3 className="font-heading text-lg font-semibold text-foreground">
+                          {candidates.length === 0
+                            ? 'Art search needs a fallback'
+                            : 'Art search updated'}
+                        </h3>
+                        <p className="text-sm text-muted-foreground">{artError}</p>
+                        <div className="flex flex-wrap gap-2">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            onClick={() => void runArtSearch()}
+                          >
+                            Retry search
+                          </Button>
+                          <Button type="button" variant="ghost" onClick={() => setStep(3)}>
+                            Continue without cover
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ) : null}
+
+                {wizard.selectedImagePath && !wizard.selectedCandidate ? (
+                  <div className="rounded-2xl border border-primary/40 bg-primary/10 px-4 py-3 text-sm text-foreground">
+                    Local cover selected: {wizard.selectedImageLabel}
+                  </div>
+                ) : null}
+
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <h3 className="font-heading text-lg font-semibold">Cover candidates</h3>
+                    <span className="text-sm text-muted-foreground">
+                      {isSearchingArt
+                        ? 'Searching…'
+                        : `${candidates.length} result${candidates.length === 1 ? '' : 's'}`}
+                    </span>
                   </div>
 
-                  <div className="space-y-2">
-                    <label
-                      htmlFor="launch-target"
-                      className="cursor-pointer text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground"
+                  {candidates.length > 0 ? (
+                    <div
+                      className="grid grid-cols-2 gap-3 md:grid-cols-4"
+                      role="listbox"
+                      aria-label="Cover art candidates"
+                      data-testid="art-candidate-grid"
                     >
-                      Launch target
-                    </label>
-                    <Input
-                      id="launch-target"
-                      value={wizard.executablePath}
-                      onChange={(event) =>
-                        setWizard((current) => ({ ...current, executablePath: event.target.value }))
-                      }
-                    />
+                      {candidates.map((candidate, index) => {
+                        const selected = wizard.selectedCandidate?.id === candidate.id
+                        return (
+                          <button
+                            key={candidate.id}
+                            ref={(node) => {
+                              candidateRefs.current[index] = node
+                            }}
+                            type="button"
+                            role="option"
+                            aria-selected={selected}
+                            tabIndex={selected || index === 0 ? 0 : -1}
+                            className={cn(
+                              'group cursor-pointer overflow-hidden rounded-2xl border bg-card text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
+                              selected
+                                ? 'border-primary shadow-[0_0_0_1px_hsl(var(--primary))]'
+                                : 'border-border'
+                            )}
+                            onClick={() => moveCandidateFocus(index)}
+                            onKeyDown={(event) => handleCandidateKeyDown(event, index)}
+                          >
+                            <div className="aspect-3/4 overflow-hidden bg-surface-high">
+                              <img
+                                src={candidate.imageUrl}
+                                alt={`${wizard.gameName || wizard.searchTerm} cover option ${index + 1}`}
+                                className="h-full w-full object-cover transition-transform duration-200 group-hover:scale-[1.03]"
+                              />
+                            </div>
+                            <div className="space-y-1 p-3">
+                              <p className="text-sm font-semibold text-foreground">
+                                {candidate.providerName}
+                              </p>
+                              <p className="text-xs text-muted-foreground">
+                                {candidate.width} × {candidate.height}
+                              </p>
+                            </div>
+                          </button>
+                        )
+                      })}
+                    </div>
+                  ) : !isSearchingArt ? (
+                    <div className="rounded-2xl border border-dashed border-border bg-surface-low px-5 py-8 text-center text-sm text-muted-foreground">
+                      Start a search or use a local file to continue.
+                    </div>
+                  ) : null}
+                </div>
+              </section>
+            ) : null}
+
+            {step === 3 ? (
+              <section className="space-y-5" data-testid="add-game-step-3">
+                <div className="grid gap-5 md:grid-cols-[12rem_1fr]">
+                  <div className="rounded-2xl border border-border bg-surface-low p-4">
+                    <div className="flex aspect-3/4 items-center justify-center overflow-hidden rounded-xl bg-background">
+                      {toCoverImageUrl(wizard.selectedImagePreview) ? (
+                        <img
+                          src={toCoverImageUrl(wizard.selectedImagePreview) ?? undefined}
+                          alt={`${wizard.gameName || wizard.canonicalName || 'Selected'} cover preview`}
+                          className="h-full w-full object-cover"
+                        />
+                      ) : (
+                        <div className="space-y-2 px-4 text-center text-muted-foreground">
+                          <Icon name="photo" className="mx-auto text-[34px]" />
+                          <p className="text-sm">No cover selected</p>
+                        </div>
+                      )}
+                    </div>
+                    <p className="mt-3 text-xs uppercase tracking-[0.18em] text-muted-foreground">
+                      {wizard.selectedImageLabel ?? 'No image source'}
+                    </p>
                   </div>
 
-                  <div className="space-y-2">
-                    <label
-                      htmlFor="launch-arguments"
-                      className="cursor-pointer text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground"
-                    >
-                      Launch arguments
-                    </label>
-                    <Input
-                      id="launch-arguments"
-                      placeholder="Optional command line arguments"
-                      value={wizard.argumentsValue}
-                      onChange={(event) =>
-                        setWizard((current) => ({ ...current, argumentsValue: event.target.value }))
-                      }
-                    />
+                  <div className="space-y-4 rounded-2xl border border-border bg-surface-low p-5">
+                    <div className="space-y-2">
+                      <label
+                        htmlFor="game-name"
+                        className="cursor-pointer text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground"
+                      >
+                        Game name
+                      </label>
+                      <Input
+                        id="game-name"
+                        ref={nameInputRef}
+                        value={wizard.gameName}
+                        onChange={(event) =>
+                          setWizard((current) => ({ ...current, gameName: event.target.value }))
+                        }
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <label
+                        htmlFor="launch-target"
+                        className="cursor-pointer text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground"
+                      >
+                        Launch target
+                      </label>
+                      <Input
+                        id="launch-target"
+                        value={wizard.executablePath}
+                        onChange={(event) =>
+                          setWizard((current) => ({
+                            ...current,
+                            executablePath: event.target.value,
+                          }))
+                        }
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <label
+                        htmlFor="launch-arguments"
+                        className="cursor-pointer text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground"
+                      >
+                        Launch arguments
+                      </label>
+                      <Input
+                        id="launch-arguments"
+                        placeholder="Optional command line arguments"
+                        value={wizard.argumentsValue}
+                        onChange={(event) =>
+                          setWizard((current) => ({
+                            ...current,
+                            argumentsValue: event.target.value,
+                          }))
+                        }
+                      />
+                    </div>
                   </div>
                 </div>
-              </div>
 
-              {saveError ? (
-                <p className="rounded-xl border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive">
-                  {saveError}
-                </p>
-              ) : null}
-            </section>
-          ) : null}
+                {saveError ? (
+                  <p className="rounded-xl border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+                    {saveError}
+                  </p>
+                ) : null}
+              </section>
+            ) : null}
           </div>
 
           <div className="shrink-0 border-t border-border bg-surface-low/80 px-6 py-4">

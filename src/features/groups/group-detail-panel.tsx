@@ -96,10 +96,7 @@ export function GroupDetailPanel({
 
   useEffect(() => {
     const groupGameIdsChanged = previousGroupGameIdsSignature.current !== groupGameIdsSignature
-    if (
-      optimisticGameIds &&
-      (groupGameIdsSignature === confirmedGameIds || groupGameIdsChanged)
-    ) {
+    if (optimisticGameIds && (groupGameIdsSignature === confirmedGameIds || groupGameIdsChanged)) {
       setOptimisticGameIds(null)
       setConfirmedGameIds(null)
     }

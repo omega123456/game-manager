@@ -153,7 +153,9 @@ describe('game mutations', () => {
     const { client, Wrapper } = createWrapper()
     client.setQueryData(GAMES_QUERY_KEY, [GAME_ROW])
     client.setQueryData(gameDetailQueryKey(1), GAME_ROW)
-    client.setQueryData(GROUPS_QUERY_KEY, [{ id: 9, name: 'HDR', description: null, scriptIds: [], gameIds: [1] }])
+    client.setQueryData(GROUPS_QUERY_KEY, [
+      { id: 9, name: 'HDR', description: null, scriptIds: [], gameIds: [1] },
+    ])
 
     const groupsQuery = renderHook(() => useGroupsQuery(), { wrapper: Wrapper })
     const mutation = renderHook(() => useSetGameGroupsMutation(), { wrapper: Wrapper })

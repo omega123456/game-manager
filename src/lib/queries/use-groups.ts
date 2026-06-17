@@ -63,7 +63,9 @@ export function useCreateGroupMutation() {
   return useMutation({
     mutationFn: (input: SaveGroupInput) => createGroup(input),
     onSuccess: (group: Group) => {
-      queryClient.setQueryData<Group[] | undefined>(GROUPS_QUERY_KEY, (current) => upsertGroup(current, group))
+      queryClient.setQueryData<Group[] | undefined>(GROUPS_QUERY_KEY, (current) =>
+        upsertGroup(current, group)
+      )
       queryClient.setQueryData(groupDetailQueryKey(group.id), group)
       invalidateGroups(queryClient, group.id)
     },
@@ -76,7 +78,9 @@ export function useUpdateGroupMutation() {
   return useMutation({
     mutationFn: ({ id, input }: { id: number; input: SaveGroupInput }) => updateGroup(id, input),
     onSuccess: (group: Group) => {
-      queryClient.setQueryData<Group[] | undefined>(GROUPS_QUERY_KEY, (current) => upsertGroup(current, group))
+      queryClient.setQueryData<Group[] | undefined>(GROUPS_QUERY_KEY, (current) =>
+        upsertGroup(current, group)
+      )
       queryClient.setQueryData(groupDetailQueryKey(group.id), group)
       invalidateGroups(queryClient, group.id)
       invalidateDependentGameQueries(queryClient)
@@ -90,8 +94,9 @@ export function useDeleteGroupMutation() {
   return useMutation({
     mutationFn: (id: number) => deleteGroup(id),
     onSuccess: (_value, id) => {
-      queryClient.setQueryData<Group[] | undefined>(GROUPS_QUERY_KEY, (current) =>
-        current?.filter((group) => group.id !== id) ?? []
+      queryClient.setQueryData<Group[] | undefined>(
+        GROUPS_QUERY_KEY,
+        (current) => current?.filter((group) => group.id !== id) ?? []
       )
       queryClient.removeQueries({ queryKey: groupDetailQueryKey(id) })
       invalidateGroups(queryClient, id)

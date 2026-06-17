@@ -1,10 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import {
-  formatElapsed,
-  formatLoggedPlaytime,
-  phaseLabel,
-} from '@/features/launch/launch-format'
+import { formatElapsed, formatLoggedPlaytime, phaseLabel } from '@/features/launch/launch-format'
 
 describe('formatElapsed', () => {
   it('formats sub-hour durations as mm:ss', () => {

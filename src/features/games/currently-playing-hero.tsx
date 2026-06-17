@@ -29,9 +29,7 @@ export function CurrentlyPlayingHero(): React.JSX.Element | null {
 
   const isActive = phase !== 'idle'
   const activeGame = gamesQuery.data?.find((g) => g.id === activeGameId)
-  const game: Game | null = isActive
-    ? (activeGame ?? null)
-    : (playNowQuery.data ?? null)
+  const game: Game | null = isActive ? (activeGame ?? null) : (playNowQuery.data ?? null)
 
   // Nothing to show: no active session and no game to continue.
   if (!isActive && game === null) {
@@ -122,28 +120,28 @@ function HeroCard({
             />
           ) : null}
           <div className="max-w-2xl space-y-3">
-          <span className="inline-flex items-center gap-2 rounded-full border border-primary/30 bg-primary/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.2em] text-primary backdrop-blur">
-            <Icon name="play_circle" className="text-[16px]" />
-            {isActive ? 'Currently Playing' : 'Continue Playing'}
-          </span>
-          <h1 className="font-heading text-3xl font-extrabold tracking-tight text-foreground drop-shadow-sm sm:text-4xl">
-            {displayName}
-          </h1>
-          <p className="flex items-center gap-2 text-sm text-muted-foreground sm:text-base">
-            <Icon name="schedule" className="text-[18px]" />
-            {isActive ? (
-              <span
-                className="font-mono font-semibold tabular-nums text-foreground"
-                data-testid="hero-session-timer"
-              >
-                {formatElapsed(elapsedSeconds)}
-              </span>
-            ) : (
-              <span data-testid="hero-session-timer">
-                {formatLoggedPlaytime(game?.totalPlaytimeSeconds ?? 0)} on record
-              </span>
-            )}
-          </p>
+            <span className="inline-flex items-center gap-2 rounded-full border border-primary/30 bg-primary/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.2em] text-primary backdrop-blur">
+              <Icon name="play_circle" className="text-[16px]" />
+              {isActive ? 'Currently Playing' : 'Continue Playing'}
+            </span>
+            <h1 className="font-heading text-3xl font-extrabold tracking-tight text-foreground drop-shadow-sm sm:text-4xl">
+              {displayName}
+            </h1>
+            <p className="flex items-center gap-2 text-sm text-muted-foreground sm:text-base">
+              <Icon name="schedule" className="text-[18px]" />
+              {isActive ? (
+                <span
+                  className="font-mono font-semibold tabular-nums text-foreground"
+                  data-testid="hero-session-timer"
+                >
+                  {formatElapsed(elapsedSeconds)}
+                </span>
+              ) : (
+                <span data-testid="hero-session-timer">
+                  {formatLoggedPlaytime(game?.totalPlaytimeSeconds ?? 0)} on record
+                </span>
+              )}
+            </p>
           </div>
         </div>
 

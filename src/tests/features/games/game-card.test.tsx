@@ -34,12 +34,7 @@ describe('GameCard', () => {
   })
 
   it('shows three groups and an overflow pill when membership exceeds four', () => {
-    render(
-      <GameCard
-        game={{ ...BASE_GAME, groupIds: [1, 2, 3, 4, 5] }}
-        groups={GROUPS}
-      />
-    )
+    render(<GameCard game={{ ...BASE_GAME, groupIds: [1, 2, 3, 4, 5] }} groups={GROUPS} />)
 
     expect(screen.getByText('HDR Games')).toBeInTheDocument()
     expect(screen.getByText('Deck Verified')).toBeInTheDocument()
@@ -73,6 +68,42 @@ describe('GameCard', () => {
     expect(screen.getByTestId('game-card')).toHaveClass('border-border')
   })
 
+  it('renders DLSS pills from cached state', () => {
+    render(
+      <GameCard
+        game={BASE_GAME}
+        groups={GROUPS}
+        dlssState={{
+          gameId: 1,
+          superResolution: { version: '3.7.10', path: 'a' },
+          stale: false,
+        }}
+      />
+    )
+    expect(screen.getByTestId('dlss-pills')).toHaveTextContent('SR 3.7')
+  })
+
+  it('offsets DLSS pills below the playing pip', () => {
+    render(
+      <GameCard
+        game={BASE_GAME}
+        groups={GROUPS}
+        isPlaying
+        dlssState={{
+          gameId: 1,
+          superResolution: { version: '3.7.10', path: 'a' },
+          stale: false,
+        }}
+      />
+    )
+    expect(screen.getByTestId('dlss-pills')).toHaveClass('top-12')
+  })
+
+  it('renders no pills when DLSS state is absent', () => {
+    render(<GameCard game={BASE_GAME} groups={GROUPS} />)
+    expect(screen.queryByTestId('dlss-pills')).not.toBeInTheDocument()
+  })
+
   it('removes a broken cover image instead of showing the browser fallback', async () => {
     render(
       <GameCard
@@ -93,10 +124,7 @@ describe('GameCard', () => {
     render(
       <GameCard
         game={{ ...BASE_GAME, groupIds: [1, 2, 3, 4, 5] }}
-        groups={[
-          { id: 1, name: longName, scriptIds: [], gameIds: [] },
-          ...GROUPS.slice(1),
-        ]}
+        groups={[{ id: 1, name: longName, scriptIds: [], gameIds: [] }, ...GROUPS.slice(1)]}
       />
     )
 

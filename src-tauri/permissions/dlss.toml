@@ -1,0 +1,98 @@
+# Permissions for the DLSS management command surface.
+
+"$schema" = "../gen/schemas/desktop-schema.json"
+
+[[permission]]
+identifier = "allow-dlss-get-support"
+description = "Allows the frontend to query DLSS support (NVAPI + elevation) via dlss_get_support."
+commands.allow = ["dlss_get_support"]
+
+[[permission]]
+identifier = "allow-dlss-get-catalog"
+description = "Allows the frontend to fetch the DLSS version catalog via dlss_get_catalog."
+commands.allow = ["dlss_get_catalog"]
+
+[[permission]]
+identifier = "allow-dlss-get-game-state"
+description = "Allows the frontend to read a game's cached DLSS state via dlss_get_game_state."
+commands.allow = ["dlss_get_game_state"]
+
+[[permission]]
+identifier = "allow-dlss-list-game-states"
+description = "Allows the frontend to list cached DLSS states via dlss_list_game_states."
+commands.allow = ["dlss_list_game_states"]
+
+[[permission]]
+identifier = "allow-dlss-scan-game"
+description = "Allows the frontend to re-scan one game via dlss_scan_game."
+commands.allow = ["dlss_scan_game"]
+
+[[permission]]
+identifier = "allow-dlss-scan-library"
+description = "Allows the frontend to re-scan the whole library via dlss_scan_library."
+commands.allow = ["dlss_scan_library"]
+
+[[permission]]
+identifier = "allow-dlss-set-folder-override"
+description = "Allows the frontend to set a game's folder override via dlss_set_folder_override."
+commands.allow = ["dlss_set_folder_override"]
+
+[[permission]]
+identifier = "allow-dlss-download-version"
+description = "Allows the frontend to download a DLL version via dlss_download_version."
+commands.allow = ["dlss_download_version"]
+
+[[permission]]
+identifier = "allow-dlss-cancel-download"
+description = "Allows the frontend to cancel a download via dlss_cancel_download."
+commands.allow = ["dlss_cancel_download"]
+
+[[permission]]
+identifier = "allow-dlss-apply-to-game"
+description = "Allows the frontend to apply a DLL to one game via dlss_apply_to_game."
+commands.allow = ["dlss_apply_to_game"]
+
+[[permission]]
+identifier = "allow-dlss-apply-to-all"
+description = "Allows the frontend to apply a DLL to all games via dlss_apply_to_all."
+commands.allow = ["dlss_apply_to_all"]
+
+[[permission]]
+identifier = "allow-dlss-count-applicable"
+description = "Allows the frontend to count applicable games via dlss_count_applicable."
+commands.allow = ["dlss_count_applicable"]
+
+[[permission]]
+identifier = "allow-dlss-get-preset-options"
+description = "Allows the frontend to fetch preset options via dlss_get_preset_options."
+commands.allow = ["dlss_get_preset_options"]
+
+[[permission]]
+identifier = "allow-dlss-get-global-preset"
+description = "Allows the frontend to read the global preset via dlss_get_global_preset."
+commands.allow = ["dlss_get_global_preset"]
+
+[[permission]]
+identifier = "allow-dlss-set-global-preset"
+description = "Allows the frontend to write the global preset via dlss_set_global_preset."
+commands.allow = ["dlss_set_global_preset"]
+
+[[permission]]
+identifier = "allow-dlss-get-game-preset"
+description = "Allows the frontend to read a game's preset via dlss_get_game_preset."
+commands.allow = ["dlss_get_game_preset"]
+
+[[permission]]
+identifier = "allow-dlss-set-game-preset"
+description = "Allows the frontend to write a game's preset via dlss_set_game_preset."
+commands.allow = ["dlss_set_game_preset"]
+
+[[permission]]
+identifier = "allow-dlss-save-game"
+description = "Allows the frontend to save all per-game DLSS changes via dlss_save_game."
+commands.allow = ["dlss_save_game"]
+
+[[permission]]
+identifier = "allow-dlss-relaunch-elevated"
+description = "Allows the frontend to relaunch the app as Administrator via dlss_relaunch_elevated."
+commands.allow = ["dlss_relaunch_elevated"]

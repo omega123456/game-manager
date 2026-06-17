@@ -12,7 +12,5 @@ export function GameRunningMotionConfig({
 }: GameRunningMotionConfigProps): React.JSX.Element {
   const isGameRunning = useLaunchStore((state) => isGameRunningPhase(state.phase))
 
-  return (
-    <MotionConfig reducedMotion={isGameRunning ? 'always' : 'user'}>{children}</MotionConfig>
-  )
+  return <MotionConfig reducedMotion={isGameRunning ? 'always' : 'user'}>{children}</MotionConfig>
 }

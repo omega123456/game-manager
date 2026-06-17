@@ -127,9 +127,7 @@ export const useLaunchStore = create<LaunchState>((set, get) => ({
 
   tick: () =>
     set((state) =>
-      isTickingPhase(state.phase)
-        ? { elapsedSeconds: state.elapsedSeconds + 1 }
-        : state
+      isTickingPhase(state.phase) ? { elapsedSeconds: state.elapsedSeconds + 1 } : state
     ),
 
   clearDone: () => set((state) => (state.phase === 'idle' ? { done: null } : state)),

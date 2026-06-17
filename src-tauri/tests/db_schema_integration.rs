@@ -73,7 +73,7 @@ fn migrations_are_idempotent() {
     // Running again must be a no-op and must not error on existing tables.
     run_migrations(&conn).expect("re-run migrations");
     run_migrations(&conn).expect("re-run migrations again");
-    assert_eq!(table_names(&conn).len(), 10);
+    assert_eq!(table_names(&conn).len(), 11);
 }
 
 #[test]

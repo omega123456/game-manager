@@ -78,7 +78,9 @@ export function GameGroupMembership({
                       >
                         <Icon name="groups" className="text-[16px]" />
                         <span className="flex-1">{group.name}</span>
-                        {assigned ? <Icon name="check" className="text-[16px] text-primary" /> : null}
+                        {assigned ? (
+                          <Icon name="check" className="text-[16px] text-primary" />
+                        ) : null}
                       </CommandItem>
                     )
                   })}

@@ -26,11 +26,17 @@ export interface ResolvedScriptPreviewProps {
 
 export function ResolvedScriptPreview({ scripts }: ResolvedScriptPreviewProps): React.JSX.Element {
   return (
-    <section className="space-y-4 rounded-[1.5rem] border border-border bg-surface-low p-5" data-testid="resolved-script-preview">
+    <section
+      className="space-y-4 rounded-[1.5rem] border border-border bg-surface-low p-5"
+      data-testid="resolved-script-preview"
+    >
       <div>
-        <h3 className="font-heading text-base font-semibold text-foreground">Resolved execution order</h3>
+        <h3 className="font-heading text-base font-semibold text-foreground">
+          Resolved execution order
+        </h3>
         <p className="text-sm text-muted-foreground">
-          Direct assignments outrank group inheritance, which outranks global scripts. Utilities stay nested inside entries.
+          Direct assignments outrank group inheritance, which outranks global scripts. Utilities
+          stay nested inside entries.
         </p>
       </div>
 
@@ -55,10 +61,15 @@ export function ResolvedScriptPreview({ scripts }: ResolvedScriptPreviewProps): 
               ) : (
                 <div className="space-y-3">
                   {phaseScripts.map((script) => (
-                    <article key={`${phase}-${script.scriptId}`} className="rounded-xl border border-border bg-card p-3">
+                    <article
+                      key={`${phase}-${script.scriptId}`}
+                      className="rounded-xl border border-border bg-card p-3"
+                    >
                       <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0">
-                          <p className="truncate text-sm font-semibold text-foreground">{script.name}</p>
+                          <p className="truncate text-sm font-semibold text-foreground">
+                            {script.name}
+                          </p>
                           <p className="mt-1 text-xs uppercase tracking-[0.14em] text-muted-foreground">
                             Priority {script.priority}
                           </p>

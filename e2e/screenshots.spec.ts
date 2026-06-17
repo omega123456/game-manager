@@ -238,4 +238,152 @@ for (const theme of THEMES) {
     await page.getByTestId('group-detail-panel').waitFor({ state: 'visible' })
     await expect(page).toHaveScreenshot(`group-manager-detail-${theme}.png`)
   })
+
+  // ── DLSS Management ──────────────────────────────────────────────────────
+
+  test(`dlss page populated — ${theme}`, async ({ page }) => {
+    await gotoAppState(page, '#/dlss')
+    await setTheme(page, theme)
+    await page.getByRole('heading', { name: 'DLSS Management' }).waitFor({ state: 'visible' })
+    await page.getByRole('heading', { name: 'Global Overrides' }).waitFor({ state: 'visible' })
+    await page.getByRole('heading', { name: 'Global Presets' }).waitFor({ state: 'visible' })
+    await scrollRouteOutletToTop(page)
+    await expect(page).toHaveScreenshot(`dlss-page-populated-${theme}.png`)
+  })
+
+  test(`dlss version combobox open — ${theme}`, async ({ page }) => {
+    await gotoAppState(page, '#/dlss')
+    await setTheme(page, theme)
+    await page.getByRole('heading', { name: 'Global Overrides' }).waitFor({ state: 'visible' })
+    await page.getByRole('combobox', { name: 'DLSS Super Resolution' }).click()
+    // Downloaded + Available group headings confirm the grouped list is open.
+    await page.getByRole('option', { name: /v3\.7\.10/ }).waitFor({ state: 'visible' })
+    await page.getByRole('option', { name: /v3\.8\.0/ }).waitFor({ state: 'visible' })
+    await expect(page).toHaveScreenshot(`dlss-version-combobox-open-${theme}.png`)
+  })
+
+  test(`dlss download in progress — ${theme}`, async ({ page }) => {
+    await gotoAppState(page, '#/dlss?dlssFixture=mid-download')
+    await setTheme(page, theme)
+    await page.getByRole('heading', { name: 'Global Overrides' }).waitFor({ state: 'visible' })
+    await page.getByRole('combobox', { name: 'DLSS Super Resolution' }).click()
+    // v3.8.0 is the not-downloaded version → selecting it starts a download.
+    await page.getByRole('option', { name: /v3\.8\.0/ }).click()
+    await page.getByText(/Downloading 3\.8\.0/).waitFor({ state: 'visible' })
+    await scrollRouteOutletToTop(page)
+    await expect(page).toHaveScreenshot(`dlss-download-in-progress-${theme}.png`)
+  })
+
+  test(`dlss apply to all confirm — ${theme}`, async ({ page }) => {
+    await gotoAppState(page, '#/dlss')
+    await setTheme(page, theme)
+    await page.getByRole('heading', { name: 'Global Overrides' }).waitFor({ state: 'visible' })
+    await page.getByRole('combobox', { name: 'DLSS Super Resolution' }).click()
+    await page.getByRole('option', { name: /v3\.7\.10/ }).click()
+    await page.getByRole('button', { name: /Apply to All/ }).first().click()
+    await page
+      .getByRole('alertdialog')
+      .getByText(/Apply DLSS Super Resolution/)
+      .waitFor({ state: 'visible' })
+    await expect(page).toHaveScreenshot(`dlss-apply-to-all-confirm-${theme}.png`)
+  })
+
+  test(`dlss apply to all result — ${theme}`, async ({ page }) => {
+    await gotoAppState(page, '#/dlss?dlssFixture=batch-failures')
+    await setTheme(page, theme)
+    await page.getByRole('heading', { name: 'Global Overrides' }).waitFor({ state: 'visible' })
+    await page.getByRole('combobox', { name: 'DLSS Super Resolution' }).click()
+    await page.getByRole('option', { name: /v3\.7\.10/ }).click()
+    await page.getByRole('button', { name: /Apply to All/ }).first().click()
+    await page.getByRole('button', { name: /Apply to/ }).click()
+    // Persistent toast with "View details" → open the result dialog.
+    await page.getByRole('button', { name: 'View details' }).click()
+    await page.getByTestId('apply-result-list').waitFor({ state: 'visible' })
+    await page.getByText('City Skyline X').waitFor({ state: 'visible' })
+    await expect(page).toHaveScreenshot(`dlss-apply-to-all-result-${theme}.png`)
+  })
+
+  test(`dlss global presets unsupported — ${theme}`, async ({ page }) => {
+    await gotoAppState(page, '#/dlss?dlssFixture=no-nvidia')
+    await setTheme(page, theme)
+    await page.getByRole('heading', { name: 'Global Presets' }).waitFor({ state: 'visible' })
+    await page.getByText(/NVIDIA/).first().waitFor({ state: 'visible' })
+    await scrollRouteOutletToTop(page)
+    await expect(page).toHaveScreenshot(`dlss-global-presets-unsupported-${theme}.png`)
+  })
+
+  test(`dlss empty state — ${theme}`, async ({ page }) => {
+    await gotoAppState(page, '#/dlss?dlssFixture=empty')
+    await setTheme(page, theme)
+    await page
+      .getByText('No DLSS-compatible games detected')
+      .waitFor({ state: 'visible' })
+    await scrollRouteOutletToTop(page)
+    await expect(page).toHaveScreenshot(`dlss-empty-state-${theme}.png`)
+  })
+
+  test(`dlss elevation banner — ${theme}`, async ({ page }) => {
+    await gotoAppState(page, '#/dlss?dlssFixture=not-elevated')
+    await setTheme(page, theme)
+    await page.getByRole('heading', { name: 'DLSS Management' }).waitFor({ state: 'visible' })
+    await page.getByRole('heading', { name: 'Global Overrides' }).waitFor({ state: 'visible' })
+    await scrollRouteOutletToTop(page)
+    await expect(page).toHaveScreenshot(`dlss-elevation-banner-${theme}.png`)
+  })
+
+  test(`dlss elevation toast — ${theme}`, async ({ page }) => {
+    await gotoAppState(page, '#/dlss?dlssFixture=elevation-toast')
+    await setTheme(page, theme)
+    await page.getByRole('heading', { name: 'Global Overrides' }).waitFor({ state: 'visible' })
+    await page.getByRole('combobox', { name: 'DLSS Super Resolution' }).click()
+    await page.getByRole('option', { name: /v3\.7\.10/ }).click()
+    await page.getByRole('button', { name: /Apply to All/ }).first().click()
+    await page.getByRole('button', { name: /Apply to/ }).click()
+    await page.getByText('Administrator access required').waitFor({ state: 'visible' })
+    await page
+      .getByRole('button', { name: 'Relaunch as Administrator' })
+      .waitFor({ state: 'visible' })
+    await expect(page).toHaveScreenshot(`dlss-elevation-toast-${theme}.png`)
+  })
+
+  test(`dlss loading skeleton — ${theme}`, async ({ page }) => {
+    await gotoAppState(page, '#/dlss?dlssFixture=loading')
+    await setTheme(page, theme)
+    await page.getByTestId('dlss-loading').waitFor({ state: 'visible' })
+    await scrollRouteOutletToTop(page)
+    await expect(page).toHaveScreenshot(`dlss-loading-skeleton-${theme}.png`)
+  })
+
+  // ── Per-game DLSS tab + library card pills ───────────────────────────────
+
+  test(`game detail dlss tab with presets — ${theme}`, async ({ page }) => {
+    await gotoApp(page)
+    await setTheme(page, theme)
+    await page.getByRole('button', { name: 'Open Alan Wake 2' }).click()
+    await page.getByRole('tab', { name: 'DLSS' }).click()
+    await page.getByTestId('game-detail-dlss').waitFor({ state: 'visible' })
+    await page.getByText('Detected versions').waitFor({ state: 'visible' })
+    await expect(page).toHaveScreenshot(`game-detail-dlss-with-presets-${theme}.png`)
+  })
+
+  test(`game detail dlss tab without presets — ${theme}`, async ({ page }) => {
+    await gotoApp(page)
+    await setTheme(page, theme)
+    await page.getByRole('button', { name: 'Open Balatro' }).click()
+    await page.getByRole('tab', { name: 'DLSS' }).click()
+    await page.getByTestId('game-detail-dlss').waitFor({ state: 'visible' })
+    await page.getByText('Presets unavailable').waitFor({ state: 'visible' })
+    await expect(page).toHaveScreenshot(`game-detail-dlss-without-presets-${theme}.png`)
+  })
+
+  test(`library cards with dlss pills — ${theme}`, async ({ page }) => {
+    await gotoApp(page)
+    await setTheme(page, theme)
+    await page.getByRole('heading', { name: 'Your collection' }).waitFor({ state: 'visible' })
+    await page.getByTestId('library-grid').waitFor({ state: 'visible' })
+    await page.getByTestId('dlss-pills').first().waitFor({ state: 'visible' })
+    await waitForLibraryGridImagesSettled(page)
+    await scrollRouteOutletToTop(page)
+    await expect(page).toHaveScreenshot(`library-cards-dlss-pills-${theme}.png`)
+  })
 }

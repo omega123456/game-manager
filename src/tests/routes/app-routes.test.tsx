@@ -29,6 +29,21 @@ describe('AppRoutes', () => {
     expect(await screen.findByRole('heading', { name: 'Settings' })).toBeInTheDocument()
   })
 
+  it('renders the DLSS Management route (2nd nav item) and highlights it', async () => {
+    const user = userEvent.setup()
+    renderWithProviders(<AppRoutes />, { route: '/library' })
+
+    const links = screen.getAllByRole('link')
+    expect(links[1]).toHaveTextContent('DLSS Management')
+
+    const dlssLink = screen.getByRole('link', { name: /DLSS Management/ })
+    await user.click(dlssLink)
+    expect(
+      await screen.findByRole('heading', { name: 'DLSS Management', level: 1 })
+    ).toBeInTheDocument()
+    expect(dlssLink).toHaveClass('text-primary')
+  })
+
   it('redirects unknown paths to the library', async () => {
     renderWithProviders(<AppRoutes />, { route: '/does-not-exist' })
     await waitFor(() =>

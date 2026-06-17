@@ -1,6 +1,6 @@
 import { invoke } from '@tauri-apps/api/core'
 
-import { useToastStore, type ToastTone } from '@/stores/toast-store'
+import { useToastStore, type ToastAction, type ToastTone } from '@/stores/toast-store'
 
 /**
  * Frontend logging entrypoint (Phase A1 stub).
@@ -47,6 +47,13 @@ export interface ToastOptions {
   category?: string
   /** Extra log details (e.g. the underlying error string). */
   details?: string
+  /**
+   * Keep the toast on screen until the user dismisses it (no auto-dismiss timer).
+   * Used for batch results and recoverable failures (e.g. elevation required).
+   */
+  persistent?: boolean
+  /** Optional action button (e.g. "View details", "Relaunch as Administrator"). */
+  action?: ToastAction
 }
 
 const TONE_LEVEL: Record<ToastTone, FrontendLogLevel> = {
@@ -69,6 +76,8 @@ export function toast(tone: ToastTone, title: string, options?: ToastOptions): v
     tone,
     title,
     description: options?.description,
+    persistent: options?.persistent,
+    action: options?.action,
   })
 }
 

@@ -24,7 +24,9 @@ const GAMES = [
   },
 ]
 
-function event(partial: Partial<LaunchLifecycle> & Pick<LaunchLifecycle, 'phase'>): LaunchLifecycle {
+function event(
+  partial: Partial<LaunchLifecycle> & Pick<LaunchLifecycle, 'phase'>
+): LaunchLifecycle {
   return { gameId: 1, failedCount: 0, ...partial }
 }
 
@@ -132,9 +134,7 @@ describe('LaunchBanner (event-driven)', () => {
     await act(async () => {
       await vi.advanceTimersByTimeAsync(3200)
     })
-    await waitFor(() =>
-      expect(screen.queryByTestId('launch-banner')).not.toBeInTheDocument()
-    )
+    await waitFor(() => expect(screen.queryByTestId('launch-banner')).not.toBeInTheDocument())
   })
 
   it('cancels via the banner Cancel button', async () => {

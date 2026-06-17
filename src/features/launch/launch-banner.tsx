@@ -35,9 +35,7 @@ export function LaunchBanner(): React.JSX.Element {
 
   const gamesQuery = useGamesQuery()
   const resolvedName =
-    gameName ??
-    gamesQuery.data?.find((g) => g.id === (gameId ?? done?.gameId))?.name ??
-    'your game'
+    gameName ?? gamesQuery.data?.find((g) => g.id === (gameId ?? done?.gameId))?.name ?? 'your game'
 
   const isActive = phase !== 'idle'
   const visible = isActive || done !== null

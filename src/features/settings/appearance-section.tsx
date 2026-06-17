@@ -47,17 +47,12 @@ export function AppearanceSection(): React.JSX.Element {
                   onClick={() => setTheme(option.value)}
                   className={cn(
                     'flex cursor-pointer flex-col items-center gap-4 rounded-lg border p-4 transition-colors',
-                    active
-                      ? 'border-primary bg-primary/10'
-                      : 'border-border hover:bg-surface-high'
+                    active ? 'border-primary bg-primary/10' : 'border-border hover:bg-surface-high'
                   )}
                 >
                   <Icon
                     name={option.icon}
-                    className={cn(
-                      'text-[32px]',
-                      active ? 'text-primary' : 'text-muted-foreground'
-                    )}
+                    className={cn('text-[32px]', active ? 'text-primary' : 'text-muted-foreground')}
                   />
                   <span className="text-sm font-medium text-foreground">{option.label}</span>
                 </button>

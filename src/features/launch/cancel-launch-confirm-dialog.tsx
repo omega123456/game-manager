@@ -33,8 +33,7 @@ const COPY: Record<
 > = {
   'cancel-launch': {
     title: (name) => `Cancel launch for ${name}?`,
-    description:
-      'The launch sequence will stop and any running setup scripts will be terminated.',
+    description: 'The launch sequence will stop and any running setup scripts will be terminated.',
     dismiss: 'Keep launching',
     confirm: 'Cancel launch',
     confirmPending: 'Cancelling…',

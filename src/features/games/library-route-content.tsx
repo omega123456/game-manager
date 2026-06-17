@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 
 import { useGamesQuery } from '@/lib/queries/use-games'
 import { useGroupsQuery } from '@/lib/queries/use-groups'
+import { useDlssGameStatesQuery } from '@/lib/queries/use-dlss'
 import { useUiStore } from '@/stores/ui-store'
 import { useLaunchStore } from '@/stores/launch-store'
 import { AddGameWizard } from '@/features/games/add-game-wizard'
@@ -12,6 +13,7 @@ import { LibraryToolbar } from '@/features/games/library-toolbar'
 import { LibraryEmptyState, LibraryLoadingState } from '@/features/games/library-states'
 import type { LibrarySortKey } from '@/features/games/library-types'
 import type { Game } from '@/types/domain'
+import type { GameDlssState } from '@/types/dlss'
 
 function compareByRecent(a: Game, b: Game): number {
   const left = a.lastPlayedAt ? new Date(a.lastPlayedAt).getTime() : 0
@@ -43,6 +45,7 @@ export function LibraryRouteContent(): React.JSX.Element {
 
   const gamesQuery = useGamesQuery()
   const groupsQuery = useGroupsQuery()
+  const dlssStatesQuery = useDlssGameStatesQuery()
   const activeLaunchGameId = useLaunchStore((s) => (s.phase === 'idle' ? null : s.gameId))
   const activeLaunchElapsed = useLaunchStore((s) => s.elapsedSeconds)
   const normalizedSearch = searchQuery.trim().toLocaleLowerCase()
@@ -78,6 +81,14 @@ export function LibraryRouteContent(): React.JSX.Element {
   }, [gamesQuery.data, groupFilter, normalizedSearch, sortKey])
 
   const totalGameCount = gamesQuery.data?.length ?? 0
+
+  const dlssStateByGameId = useMemo(() => {
+    const map = new Map<number, GameDlssState>()
+    for (const state of dlssStatesQuery.data ?? []) {
+      map.set(state.gameId, state)
+    }
+    return map
+  }, [dlssStatesQuery.data])
 
   const openAddGame = () => setActiveOverlay('wizard')
   const openGame = (gameId: number) => {
@@ -120,6 +131,7 @@ export function LibraryRouteContent(): React.JSX.Element {
                   onOpen={openGame}
                   isPlaying={activeLaunchGameId === game.id}
                   elapsedSeconds={activeLaunchGameId === game.id ? activeLaunchElapsed : 0}
+                  dlssState={dlssStateByGameId.get(game.id)}
                 />
               ))}
             </div>

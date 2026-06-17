@@ -7,6 +7,7 @@
 pub mod art;
 pub mod commands;
 pub mod db;
+pub mod dlss;
 pub mod domain;
 pub mod error;
 pub mod keep_awake;
@@ -203,6 +204,25 @@ pub fn run() {
             commands::settings::set_setting,
             commands::launch::launch_game,
             commands::launch::cancel_launch,
+            commands::dlss::dlss_get_support,
+            commands::dlss::dlss_get_catalog,
+            commands::dlss::dlss_get_game_state,
+            commands::dlss::dlss_list_game_states,
+            commands::dlss::dlss_scan_game,
+            commands::dlss::dlss_scan_library,
+            commands::dlss::dlss_set_folder_override,
+            commands::dlss::dlss_download_version,
+            commands::dlss::dlss_cancel_download,
+            commands::dlss::dlss_apply_to_game,
+            commands::dlss::dlss_apply_to_all,
+            commands::dlss::dlss_count_applicable,
+            commands::dlss::dlss_get_preset_options,
+            commands::dlss::dlss_get_global_preset,
+            commands::dlss::dlss_set_global_preset,
+            commands::dlss::dlss_get_game_preset,
+            commands::dlss::dlss_set_game_preset,
+            commands::dlss::dlss_save_game,
+            commands::dlss::dlss_relaunch_elevated,
         ])
         .run(tauri::generate_context!())
         .expect("error while running the Game Manager application");

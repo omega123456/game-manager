@@ -69,9 +69,7 @@ describe('Sidebar', () => {
 
   it('hides the continue-playing card when no history exists', async () => {
     renderWithProviders(<Sidebar />)
-    await waitFor(() =>
-      expect(screen.queryByTestId('launch-game-button')).not.toBeInTheDocument()
-    )
+    await waitFor(() => expect(screen.queryByTestId('launch-game-button')).not.toBeInTheDocument())
   })
 
   it('disables the card while a launch is already active', async () => {

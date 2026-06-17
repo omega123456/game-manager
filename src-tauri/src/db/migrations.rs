@@ -27,6 +27,10 @@ pub const MIGRATIONS: &[Migration] = &[
         version: 2,
         sql: include_str!("../../migrations/002_allow_powershell7.sql"),
     },
+    Migration {
+        version: 3,
+        sql: include_str!("../../migrations/003_dlss.sql"),
+    },
 ];
 
 /// Read the current schema version from `PRAGMA user_version`.

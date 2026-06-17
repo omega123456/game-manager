@@ -26,8 +26,8 @@ export function GroupManagerContent(): React.JSX.Element {
 
   const selectedGroup: Group | null =
     selection.mode === 'edit'
-      ? groups.find((group) => group.id === selection.id) ??
-        (pendingSelectedGroup?.id === selection.id ? pendingSelectedGroup : null)
+      ? (groups.find((group) => group.id === selection.id) ??
+        (pendingSelectedGroup?.id === selection.id ? pendingSelectedGroup : null))
       : null
 
   const selectedId = selection.mode === 'edit' ? selection.id : null

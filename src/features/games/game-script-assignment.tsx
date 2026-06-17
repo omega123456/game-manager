@@ -40,7 +40,10 @@ export function GameScriptAssignment({
   const [open, setOpen] = useState(false)
 
   const selectableScripts = useMemo(
-    () => scripts.filter((script) => script.kind === 'normal').sort((a, b) => a.name.localeCompare(b.name)),
+    () =>
+      scripts
+        .filter((script) => script.kind === 'normal')
+        .sort((a, b) => a.name.localeCompare(b.name)),
     [scripts]
   )
 
@@ -86,7 +89,9 @@ export function GameScriptAssignment({
                         >
                           <Icon name="code" className="text-[16px]" />
                           <span className="flex-1">{script.name}</span>
-                          {assigned ? <Icon name="check" className="text-[16px] text-primary" /> : null}
+                          {assigned ? (
+                            <Icon name="check" className="text-[16px] text-primary" />
+                          ) : null}
                         </CommandItem>
                       )
                     })}

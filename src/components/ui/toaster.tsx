@@ -102,12 +102,7 @@ function ToastItem({
         <p className="text-sm font-medium">{title}</p>
         {description ? <p className="mt-1 text-sm text-muted-foreground">{description}</p> : null}
         {action ? (
-          <Button
-            type="button"
-            size="sm"
-            className="mt-3"
-            onClick={action.onClick}
-          >
+          <Button type="button" size="sm" className="mt-3" onClick={action.onClick}>
             {action.label}
           </Button>
         ) : null}

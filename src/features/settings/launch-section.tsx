@@ -21,11 +21,7 @@ export function LaunchSection(): React.JSX.Element {
   }
 
   return (
-    <SettingsSection
-      icon="speed"
-      title="Launch"
-      description="How games are run while they play."
-    >
+    <SettingsSection icon="speed" title="Launch" description="How games are run while they play.">
       <div className="flex items-center justify-between gap-4">
         <div className="space-y-0.5">
           <label htmlFor="raise-game-priority" className="text-sm font-medium text-foreground">
