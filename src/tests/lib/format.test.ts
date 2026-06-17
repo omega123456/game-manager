@@ -3,10 +3,10 @@ import { describe, expect, it } from 'vitest'
 import { clamp, formatPlaytime } from '../../lib/format'
 
 describe('formatPlaytime', () => {
-  it('returns "never played" for zero/invalid input', () => {
-    expect(formatPlaytime(0)).toBe('never played')
-    expect(formatPlaytime(-5)).toBe('never played')
-    expect(formatPlaytime(Number.NaN)).toBe('never played')
+  it('returns "Never played" for zero/invalid input', () => {
+    expect(formatPlaytime(0)).toBe('Never played')
+    expect(formatPlaytime(-5)).toBe('Never played')
+    expect(formatPlaytime(Number.NaN)).toBe('Never played')
   })
 
   it('formats hours with one decimal', () => {

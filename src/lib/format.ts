@@ -6,7 +6,7 @@
 /** Format a number of seconds as a compact human-readable playtime label. */
 export function formatPlaytime(totalSeconds: number): string {
   if (!Number.isFinite(totalSeconds) || totalSeconds <= 0) {
-    return 'never played'
+    return 'Never played'
   }
   const hours = totalSeconds / 3600
   if (hours >= 1) {
