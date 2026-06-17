@@ -27,11 +27,17 @@ jobs:
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
 
+      # Restore the cache warmed on main (see ci.yml). Tag-scoped caches are not
+      # reused across releases, so releases only restore and do not save.
       - name: Rust cache
         uses: swatinem/rust-cache@v2
         with:
           workspaces: ./src-tauri -> target
           cache-on-failure: true
+          prefix-key: v0-rust-game-manager-windows
+          add-job-id-key: false
+          cache-all-crates: true
+          save-if: false
 
       - name: Install frontend dependencies
         run: pnpm install --frozen-lockfile
