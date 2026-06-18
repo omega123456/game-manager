@@ -36,6 +36,72 @@ pub const EVENT_APPLY_PROGRESS: &str = "dlss://apply-progress";
 /// can refetch the (session-only) detection that drives the library pills.
 pub const EVENT_LIBRARY_SCANNED: &str = "dlss://library-scanned";
 
+#[cfg(not(coverage))]
+static LIBRARY_SCAN_RUNNING: std::sync::atomic::AtomicBool =
+    std::sync::atomic::AtomicBool::new(false);
+
+#[cfg(not(coverage))]
+fn emit_library_scanned(app: &tauri::AppHandle) {
+    use tauri::Emitter;
+
+    if let Err(err) = app.emit(EVENT_LIBRARY_SCANNED, ()) {
+        tracing::warn!(
+            category = "dlss",
+            "emit dlss library-scanned event failed: {err}"
+        );
+    }
+}
+
+/// Run the blocking filesystem/hash scan away from Tauri's command executor.
+#[cfg(not(coverage))]
+async fn scan_library_blocking(app: tauri::AppHandle) -> AppResult<Vec<GameDlssState>> {
+    use std::sync::atomic::Ordering;
+
+    if LIBRARY_SCAN_RUNNING
+        .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
+        .is_err()
+    {
+        use tauri::Manager;
+
+        tracing::debug!(
+            category = "dlss",
+            "dlss library scan already running; returning cached state"
+        );
+        let state = app.state::<AppState>();
+        return list_game_states_impl(&state);
+    }
+
+    let scan_app = app.clone();
+    let result = tauri::async_runtime::spawn_blocking(move || {
+        use tauri::Manager;
+
+        let state = scan_app.state::<AppState>();
+        detect::scan_library_impl(&state).map_err(crate::error::AppError::from)
+    })
+    .await;
+
+    LIBRARY_SCAN_RUNNING.store(false, Ordering::Release);
+    let result = result.map_err(|err| {
+        crate::error::AppError::other(format!("dlss library scan task failed: {err}"))
+    })?;
+    emit_library_scanned(&app);
+    result
+}
+
+/// Start a full library scan without waiting for it. Used during startup so
+/// slow recursive DLL reads never delay the main window becoming interactive.
+#[cfg(not(coverage))]
+pub fn spawn_library_scan(app: tauri::AppHandle) {
+    tauri::async_runtime::spawn(async move {
+        if let Err(err) = scan_library_blocking(app).await {
+            tracing::warn!(
+                category = "dlss",
+                "background DLSS library scan failed: {err}"
+            );
+        }
+    });
+}
+
 // ---------------------------------------------------------------------------
 // Testable impls (Phase 1 fully-implemented surface).
 // ---------------------------------------------------------------------------
@@ -210,15 +276,22 @@ pub fn dlss_list_game_states(state: tauri::State<'_, AppState>) -> AppResult<Vec
 /// Force a re-scan of one game (Phase 2 logic).
 #[cfg(not(coverage))]
 #[tauri::command]
-pub fn dlss_scan_game(state: tauri::State<'_, AppState>, game_id: i64) -> AppResult<GameDlssState> {
-    Ok(detect::scan_game_impl(&state, game_id)?)
+pub async fn dlss_scan_game(app: tauri::AppHandle, game_id: i64) -> AppResult<GameDlssState> {
+    tauri::async_runtime::spawn_blocking(move || {
+        use tauri::Manager;
+
+        let state = app.state::<AppState>();
+        detect::scan_game_impl(&state, game_id).map_err(crate::error::AppError::from)
+    })
+    .await
+    .map_err(|err| crate::error::AppError::other(format!("dlss game scan task failed: {err}")))?
 }
 
 /// Re-scan all applicable games (Phase 2 logic).
 #[cfg(not(coverage))]
 #[tauri::command]
-pub fn dlss_scan_library(state: tauri::State<'_, AppState>) -> AppResult<Vec<GameDlssState>> {
-    Ok(detect::scan_library_impl(&state)?)
+pub async fn dlss_scan_library(app: tauri::AppHandle) -> AppResult<Vec<GameDlssState>> {
+    scan_library_blocking(app).await
 }
 
 /// Set (or clear) a game's folder override.

@@ -147,28 +147,8 @@ pub fn run() {
 
             // DLSS detection is session-only: scan every game's install folder on
             // launch to populate the in-memory cache (never persisted). Runs on a
-            // background thread so a slow scan (large NGX DLLs) never blocks startup.
-            {
-                let handle = app.handle().clone();
-                std::thread::spawn(move || {
-                    use tauri::{Emitter, Manager};
-                    let state = handle.state::<AppState>();
-                    if let Err(err) = dlss::detect::scan_library_impl(&state) {
-                        tracing::warn!(
-                            category = "dlss",
-                            "startup DLSS library scan failed: {err}"
-                        );
-                    }
-                    // Notify the frontend so it can refetch the now-populated
-                    // session detection cache (drives the library DLSS pills).
-                    if let Err(err) = handle.emit(commands::dlss::EVENT_LIBRARY_SCANNED, ()) {
-                        tracing::warn!(
-                            category = "dlss",
-                            "emit dlss library-scanned event failed: {err}"
-                        );
-                    }
-                });
-            }
+            // blocking worker so slow recursive DLL reads never delay startup.
+            commands::dlss::spawn_library_scan(app.handle().clone());
 
             // Daily retention loop on its own connection (the AppState connection
             // is mutex-guarded and owned by command handlers).

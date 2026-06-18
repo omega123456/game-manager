@@ -36,13 +36,19 @@ pnpm test:e2e --update-snapshots
 # Code quality
 pnpm lint               # ESLint on src/
 pnpm lint:fix           # ESLint auto-fix
-pnpm format             # Prettier on src/
+pnpm format             # Prettier on all of src/ (CI / manual full-tree only — see Format rule)
+pnpm format -- <paths>  # Prettier on specific files only (use this in agent sessions)
 pnpm typecheck          # tsc --noEmit
+
+# Rust formatting (changed .rs files only in agent sessions)
+cargo fmt --manifest-path src-tauri/Cargo.toml -- path/to/file.rs
 ```
 
 **Lint rule (always apply):** `pnpm lint` must exit with **zero warnings and zero errors** before finishing — for the **entire** `src/` tree, not only files you touched. Pre-existing violations are in scope: fix them rather than leaving them. **Do not suppress lint findings** to get a clean run. Forbidden: `eslint-disable` / `eslint-disable-next-line` comments, weakening or disabling rules in `eslint.config.js`, renaming exports to dodge `react-refresh/only-export-components`, or any other ignore/exclude mechanism. Fix the underlying issue instead — e.g. split non-component exports (constants, hooks, CVA helpers) into separate modules; replace Radix `export const Foo = Primitive.Root` aliases with thin component wrappers; move shared helpers out of component files.
 
-**Agent rule (always apply):** Before finishing a session where any code was changed, run the targeted tests that cover the changed functionality and ensure they pass.
+**Format rule (always apply):** Format **only files you changed in the current session** — do **not** run bare `pnpm format` (that rewrites all of `src/`). Pass explicit paths after `--`: `pnpm format -- src/features/foo.ts src/tests/features/foo.test.ts`. For Rust, run `cargo fmt --manifest-path src-tauri/Cargo.toml --` with the changed `.rs` paths. Skip paths covered by `.prettierignore`. If you did not touch any formattable files, skip formatting.
+
+**Agent rule (always apply):** Before finishing a session where any code was changed, run the targeted tests that cover the changed functionality and ensure they pass. Format only the files you changed (see **Format rule**).
 
 ---
 
@@ -122,7 +128,7 @@ src-tauri/
 
 ### TypeScript / React
 
-- **Formatter:** Prettier — `semi: false`, `singleQuote: true`, `tabWidth: 2`, `trailingComma: "es5"`, `printWidth: 100`. Run `pnpm format` before committing.
+- **Formatter:** Prettier — `semi: false`, `singleQuote: true`, `tabWidth: 2`, `trailingComma: "es5"`, `printWidth: 100`. In agent sessions, run `pnpm format -- <changed-paths>` (see **Format rule**); use bare `pnpm format` only when intentionally formatting all of `src/`.
 - **TypeScript:** strict mode (`strict`, `noUnusedLocals`, `noUnusedParameters`, `noFallthroughCasesInSwitch`). Prefer explicit return types on public functions; infer where obvious. Avoid `any`.
 - **Imports:** Named imports preferred. Use `import type` for type-only imports. The `@/` alias maps to `src/`.
 - **Components:** Functional only. Props type named `<ComponentName>Props`. Components/types `PascalCase`; hooks `useCamelCase`; files/utilities `kebab-case`; constants `UPPER_SNAKE_CASE`.
@@ -136,6 +142,7 @@ Silent error swallowing is **forbidden** without a log line. Frontend logging mu
 
 ### Rust
 
+- **Formatter:** `rustfmt` via `cargo fmt --manifest-path src-tauri/Cargo.toml -- <changed-paths>` — format only files you changed in the session (see **Format rule**).
 - Use `tracing` macros (`warn!`, `error!`, `info!`) with context for all non-trivial error paths. Do not swallow errors without a log line.
 - `#[serde(rename_all = "camelCase")]` on all structs serialized over IPC.
 - Command handlers are thin wrappers; business logic lives in `*_impl` functions taking `&AppState` (testable without the Tauri runtime).
