@@ -1,7 +1,9 @@
 //! Logging facade + 7-day retention + `log_frontend` command integration tests.
 
 use chrono::{Duration, Utc};
-use game_manager_lib::commands::logging::log_frontend_impl;
+use game_manager_lib::commands::logging::{
+    include_verbose_logs, log_frontend_impl, log_frontend_impl_with_minimum_level,
+};
 use game_manager_lib::db::connection::open_in_memory;
 use game_manager_lib::db::repo::logs;
 use game_manager_lib::domain::LogLevel;
@@ -138,6 +140,33 @@ fn log_frontend_persists_row_readable_via_repo() {
             );
             // Default category applied.
             assert_eq!(logs::get(conn, id2).unwrap().unwrap().category, "frontend");
+            Ok(())
+        })
+        .unwrap();
+}
+
+#[test]
+fn log_frontend_suppresses_debug_and_trace_when_verbose_logs_are_disabled() {
+    let state = AppState::in_memory().unwrap();
+
+    let debug_id =
+        log_frontend_impl_with_minimum_level(&state, "debug", None, "debug", None, false).unwrap();
+    let trace_id =
+        log_frontend_impl_with_minimum_level(&state, "trace", None, "trace", None, false).unwrap();
+    let info_id =
+        log_frontend_impl_with_minimum_level(&state, "info", None, "info", None, false).unwrap();
+
+    assert_eq!(debug_id, 0);
+    assert_eq!(trace_id, 0);
+    assert!(info_id > 0);
+    assert!(!include_verbose_logs(false));
+    assert!(include_verbose_logs(true));
+
+    state
+        .with_db(|conn| {
+            assert_eq!(logs::count(conn).unwrap(), 1);
+            let row = logs::get(conn, info_id).unwrap().expect("info row");
+            assert_eq!(row.level, LogLevel::Info);
             Ok(())
         })
         .unwrap();

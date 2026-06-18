@@ -29,42 +29,41 @@ describe('GlobalScriptsSection', () => {
     useToastStore.setState({ toasts: [] })
   })
 
-  it('renders the placeholder when there are no non-utility scripts', async () => {
+  it('renders the placeholder when there are no global scripts', async () => {
     overrideIpcCommands({ list_scripts: () => [script(3, 'SaveLib', 'utility')] })
     renderWithProviders(<GlobalScriptsSection />)
 
     expect(await screen.findByTestId('global-scripts-placeholder')).toBeInTheDocument()
-    // Utilities are excluded from the toggle list entirely.
     expect(screen.queryByText('SaveLib')).not.toBeInTheDocument()
   })
 
-  it('lists non-utility scripts with a switch reflecting global state', async () => {
+  it('shows only scripts whose kind is global', async () => {
     overrideIpcCommands({
       list_scripts: () => [script(1, 'Overlay', 'normal'), script(2, 'Presence', 'global')],
     })
     renderWithProviders(<GlobalScriptsSection />)
 
     expect(await screen.findByTestId('global-scripts-list')).toBeInTheDocument()
-    expect(screen.getByRole('switch', { name: 'Run Overlay globally' })).not.toBeChecked()
     expect(screen.getByRole('switch', { name: 'Run Presence globally' })).toBeChecked()
+    expect(screen.queryByRole('switch', { name: 'Run Overlay globally' })).not.toBeInTheDocument()
   })
 
-  it('toggles a script to global via set_script_kind', async () => {
+  it('toggles a global script back to normal via set_script_kind', async () => {
     overrideIpcCommands({
-      list_scripts: () => [script(1, 'Overlay', 'normal')],
-      set_script_kind: (args) => ({ ...script(1, 'Overlay', 'normal'), kind: args?.kind }),
+      list_scripts: () => [script(1, 'Overlay', 'global')],
+      set_script_kind: (args) => ({ ...script(1, 'Overlay', 'global'), kind: args?.kind }),
     })
     const user = userEvent.setup()
     renderWithProviders(<GlobalScriptsSection />)
 
     await user.click(await screen.findByRole('switch', { name: 'Run Overlay globally' }))
     await waitFor(() => expect(ipc.calls('set_script_kind')).toHaveLength(1))
-    expect(ipc.calls('set_script_kind')[0]).toEqual({ id: 1, kind: 'global' })
+    expect(ipc.calls('set_script_kind')[0]).toEqual({ id: 1, kind: 'normal' })
   })
 
   it('toasts when the kind update fails', async () => {
     overrideIpcCommands({
-      list_scripts: () => [script(1, 'Overlay', 'normal')],
+      list_scripts: () => [script(1, 'Overlay', 'global')],
       set_script_kind: () => {
         throw new Error('db locked')
       },

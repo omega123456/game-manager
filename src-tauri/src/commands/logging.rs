@@ -35,9 +35,33 @@ fn parse_level(level: &str) -> LogLevel {
     }
 }
 
+/// Whether rows below `info` should be persisted or returned by the Log Viewer.
+pub fn include_verbose_logs(is_debug_build: bool) -> bool {
+    is_debug_build
+}
+
 /// Persist a frontend log line to the `logs` table (mirrored to `tracing`).
 ///
-/// Returns the new row's id. `category` defaults to `frontend` when absent.
+/// Returns the new row's id, or `0` when the row is intentionally suppressed.
+/// `category` defaults to `frontend` when absent.
+pub fn log_frontend_impl_with_minimum_level(
+    state: &AppState,
+    level: &str,
+    category: Option<&str>,
+    message: &str,
+    details: Option<&str>,
+    include_verbose: bool,
+) -> AppResult<i64> {
+    let level = parse_level(level);
+    if level == LogLevel::Debug && !include_verbose {
+        return Ok(0);
+    }
+
+    let category = category.unwrap_or("frontend");
+    state.with_db(|conn| write_log(conn, level, category, message, None, None, details))
+}
+
+/// Persist a frontend log line using the current build's verbose-log visibility.
 pub fn log_frontend_impl(
     state: &AppState,
     level: &str,
@@ -45,9 +69,14 @@ pub fn log_frontend_impl(
     message: &str,
     details: Option<&str>,
 ) -> AppResult<i64> {
-    let level = parse_level(level);
-    let category = category.unwrap_or("frontend");
-    state.with_db(|conn| write_log(conn, level, category, message, None, None, details))
+    log_frontend_impl_with_minimum_level(
+        state,
+        level,
+        category,
+        message,
+        details,
+        include_verbose_logs(cfg!(debug_assertions)),
+    )
 }
 
 /// Fetch one page of log rows (newest first) for the Log Viewer.
@@ -59,16 +88,21 @@ pub fn log_frontend_impl(
 /// rows, so the viewer always exposes at least [`LOG_MIN_PAGES`] pages, or a full
 /// day of logs when that is larger. The returned [`LogPage::total`] reflects that
 /// bounded window. Pages beyond the window resolve to an empty `entries` list.
-pub fn list_logs_impl(
+pub fn list_logs_impl_with_minimum_level(
     state: &AppState,
     page: i64,
     page_size: i64,
     level: Option<&str>,
     search: Option<&str>,
+    include_verbose: bool,
 ) -> AppResult<LogPage> {
     let page = page.max(1);
     let page_size = page_size.max(1);
-    let filter = LogFilter { level, search };
+    let filter = LogFilter {
+        level,
+        search,
+        include_verbose,
+    };
     let day_cutoff = (Utc::now() - Duration::days(1)).to_rfc3339();
     state.with_db(|conn| {
         let actual_total = logs::count_filtered(conn, &filter, None)?;
@@ -90,6 +124,24 @@ pub fn list_logs_impl(
             page_size,
         })
     })
+}
+
+/// Fetch one page of log rows using the current build's verbose-log visibility.
+pub fn list_logs_impl(
+    state: &AppState,
+    page: i64,
+    page_size: i64,
+    level: Option<&str>,
+    search: Option<&str>,
+) -> AppResult<LogPage> {
+    list_logs_impl_with_minimum_level(
+        state,
+        page,
+        page_size,
+        level,
+        search,
+        include_verbose_logs(cfg!(debug_assertions)),
+    )
 }
 
 /// Thin `#[tauri::command]` wrapper delegating to [`log_frontend_impl`].

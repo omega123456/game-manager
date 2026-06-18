@@ -1,7 +1,9 @@
 //! Pagination for the Log Viewer (`list_logs_impl`) integration tests.
 
 use chrono::{Duration, Utc};
-use game_manager_lib::commands::logging::{list_logs_impl, LOG_MIN_PAGES, LOG_PAGE_SIZE};
+use game_manager_lib::commands::logging::{
+    list_logs_impl, list_logs_impl_with_minimum_level, LOG_MIN_PAGES, LOG_PAGE_SIZE,
+};
 use game_manager_lib::db::repo::logs::{self, NewLog};
 use game_manager_lib::domain::LogLevel;
 use game_manager_lib::state::AppState;
@@ -117,6 +119,38 @@ fn filters_by_level() {
     let none = list_logs_impl(&state, 1, LOG_PAGE_SIZE, Some("warn"), None).unwrap();
     assert_eq!(none.total, 0);
     assert!(none.entries.is_empty());
+}
+
+#[test]
+fn info_minimum_excludes_verbose_rows_from_all_filters() {
+    let state = AppState::in_memory().unwrap();
+    let now = Utc::now().to_rfc3339();
+    seed_with(&state, 3, &now, LogLevel::Debug, "dlss");
+    seed_with(&state, 2, &now, LogLevel::Info, "dlss");
+    seed_with(&state, 1, &now, LogLevel::Warn, "dlss");
+
+    let all =
+        list_logs_impl_with_minimum_level(&state, 1, LOG_PAGE_SIZE, None, None, false).unwrap();
+    assert_eq!(all.total, 3);
+    assert!(all
+        .entries
+        .iter()
+        .all(|entry| entry.level != LogLevel::Debug));
+
+    let debug =
+        list_logs_impl_with_minimum_level(&state, 1, LOG_PAGE_SIZE, Some("debug"), None, false)
+            .unwrap();
+    assert_eq!(debug.total, 0);
+    assert!(debug.entries.is_empty());
+
+    let debug_visible =
+        list_logs_impl_with_minimum_level(&state, 1, LOG_PAGE_SIZE, Some("debug"), None, true)
+            .unwrap();
+    assert_eq!(debug_visible.total, 3);
+    assert!(debug_visible
+        .entries
+        .iter()
+        .all(|entry| entry.level == LogLevel::Debug));
 }
 
 #[test]

@@ -106,6 +106,8 @@ pub struct LogFilter<'a> {
     pub level: Option<&'a str>,
     /// Substring matched against `message` or `category`; `None`/empty matches all.
     pub search: Option<&'a str>,
+    /// Whether verbose rows below `info` are eligible for results.
+    pub include_verbose: bool,
 }
 
 /// Build the dynamic `WHERE` clause and its positional params for a filter.
@@ -118,6 +120,10 @@ fn build_where(filter: &LogFilter<'_>, since: Option<&str>) -> (String, Vec<Valu
     if let Some(level) = filter.level.filter(|s| !s.is_empty()) {
         clauses.push("level = ?");
         params.push(Value::Text(level.to_string()));
+    }
+    if !filter.include_verbose {
+        clauses.push("level <> ?");
+        params.push(Value::Text(LogLevel::Debug.as_db_str().to_string()));
     }
     if let Some(term) = filter.search.map(str::trim).filter(|s| !s.is_empty()) {
         clauses.push("(message LIKE ? OR category LIKE ?)");

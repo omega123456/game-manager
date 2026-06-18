@@ -7,16 +7,15 @@ import type { Script } from '@/types/domain'
 import { SettingsSection } from './settings-section'
 
 /**
- * Global Scripts section. Lists every non-utility script with a Switch that
- * toggles its `kind` between `global` and `normal` via `set_script_kind`.
- * Utility scripts are excluded — they are phase-less snippets, never global
- * execution entries.
+ * Global Scripts section. Lists only scripts whose persisted `kind` is
+ * `global`, with a Switch that can demote them back to `normal` via
+ * `set_script_kind`.
  */
 export function GlobalScriptsSection(): React.JSX.Element {
   const scriptsQuery = useScriptsQuery()
   const setKindMutation = useSetScriptKindMutation()
 
-  const toggleable = (scriptsQuery.data ?? []).filter((script) => script.kind !== 'utility')
+  const globalScripts = (scriptsQuery.data ?? []).filter((script) => script.kind === 'global')
 
   async function handleToggle(script: Script, makeGlobal: boolean): Promise<void> {
     try {
@@ -40,19 +39,19 @@ export function GlobalScriptsSection(): React.JSX.Element {
       title="Global Scripts"
       description="Scripts that run for every game, without per-game assignment."
     >
-      {toggleable.length === 0 ? (
+      {globalScripts.length === 0 ? (
         <div
           className="flex flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-border py-10 text-center"
           data-testid="global-scripts-placeholder"
         >
           <Icon name="code_off" className="text-[32px] text-muted-foreground" />
           <p className="text-sm text-muted-foreground">
-            Global script toggles appear here once you create scripts.
+            Scripts marked global will appear here.
           </p>
         </div>
       ) : (
         <ul className="divide-y divide-border" data-testid="global-scripts-list">
-          {toggleable.map((script) => {
+          {globalScripts.map((script) => {
             const isGlobal = script.kind === 'global'
             return (
               <li key={script.id} className="flex items-center justify-between gap-4 py-3">
