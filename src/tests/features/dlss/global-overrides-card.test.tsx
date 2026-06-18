@@ -3,8 +3,9 @@ import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { GlobalOverridesCard } from '@/features/dlss/global-overrides-card'
+import { DLSS_EVENTS } from '@/lib/ipc/dlss-commands'
 import { useToastStore } from '@/stores/toast-store'
-import type { DllCatalog, DllVersion } from '@/types/dlss'
+import type { BatchApplyResult, DllCatalog, DllVersion } from '@/types/dlss'
 import { renderWithProviders } from '../../helpers/render-app'
 import { ipc } from '../../ipc-mock'
 
@@ -31,6 +32,13 @@ const CATALOG: DllCatalog = {
   source: 'static',
 }
 
+async function selectSrVersion(user: ReturnType<typeof userEvent.setup>): Promise<void> {
+  const srLabel = await screen.findByText('DLSS Super Resolution')
+  const row = srLabel.parentElement as HTMLElement
+  await user.click(within(row).getByRole('combobox', { name: 'DLSS Super Resolution' }))
+  await user.click(await screen.findByText('v3.7'))
+}
+
 describe('GlobalOverridesCard', () => {
   afterEach(() => useToastStore.setState({ toasts: [] }))
 
@@ -55,11 +63,7 @@ describe('GlobalOverridesCard', () => {
     }))
     renderWithProviders(<GlobalOverridesCard catalog={CATALOG} />)
 
-    // Select a downloaded SR version.
-    const srLabel = await screen.findByText('DLSS Super Resolution')
-    const row = srLabel.parentElement as HTMLElement
-    await user.click(within(row).getByRole('combobox', { name: 'DLSS Super Resolution' }))
-    await user.click(await screen.findByText('v3.7'))
+    await selectSrVersion(user)
 
     const applyButtons = await screen.findAllByRole('button', { name: 'Apply to All (2)' })
     await waitFor(() => expect(applyButtons[0]).toBeEnabled())
@@ -81,10 +85,7 @@ describe('GlobalOverridesCard', () => {
     })
     renderWithProviders(<GlobalOverridesCard catalog={CATALOG} />)
 
-    const srLabel = await screen.findByText('DLSS Super Resolution')
-    const row = srLabel.parentElement as HTMLElement
-    await user.click(within(row).getByRole('combobox', { name: 'DLSS Super Resolution' }))
-    await user.click(await screen.findByText('v3.7'))
+    await selectSrVersion(user)
     const applyButtons = await screen.findAllByRole('button', { name: 'Apply to All (2)' })
     await waitFor(() => expect(applyButtons[0]).toBeEnabled())
     await user.click(applyButtons[0])
@@ -103,10 +104,7 @@ describe('GlobalOverridesCard', () => {
     })
     renderWithProviders(<GlobalOverridesCard catalog={CATALOG} />)
 
-    const srLabel = await screen.findByText('DLSS Super Resolution')
-    const row = srLabel.parentElement as HTMLElement
-    await user.click(within(row).getByRole('combobox', { name: 'DLSS Super Resolution' }))
-    await user.click(await screen.findByText('v3.7'))
+    await selectSrVersion(user)
     const applyButtons = await screen.findAllByRole('button', { name: 'Apply to All (2)' })
     await waitFor(() => expect(applyButtons[0]).toBeEnabled())
     await user.click(applyButtons[0])
@@ -133,10 +131,7 @@ describe('GlobalOverridesCard', () => {
     }))
     renderWithProviders(<GlobalOverridesCard catalog={CATALOG} />)
 
-    const srLabel = await screen.findByText('DLSS Super Resolution')
-    const row = srLabel.parentElement as HTMLElement
-    await user.click(within(row).getByRole('combobox', { name: 'DLSS Super Resolution' }))
-    await user.click(await screen.findByText('v3.7'))
+    await selectSrVersion(user)
     const applyButtons = await screen.findAllByRole('button', { name: 'Apply to All (2)' })
     await waitFor(() => expect(applyButtons[0]).toBeEnabled())
     await user.click(applyButtons[0])
@@ -163,10 +158,7 @@ describe('GlobalOverridesCard', () => {
     }))
     renderWithProviders(<GlobalOverridesCard catalog={CATALOG} />)
 
-    const srLabel = await screen.findByText('DLSS Super Resolution')
-    const row = srLabel.parentElement as HTMLElement
-    await user.click(within(row).getByRole('combobox', { name: 'DLSS Super Resolution' }))
-    await user.click(await screen.findByText('v3.7'))
+    await selectSrVersion(user)
     const applyButtons = await screen.findAllByRole('button', { name: 'Apply to All (2)' })
     await waitFor(() => expect(applyButtons[0]).toBeEnabled())
     await user.click(applyButtons[0])
@@ -182,6 +174,55 @@ describe('GlobalOverridesCard', () => {
     act(() => toast.action?.onClick())
     expect(await screen.findByText('Apply to All — results')).toBeInTheDocument()
     expect(screen.getByText('City Skyline X')).toBeInTheDocument()
+  })
+
+  it('shows live inline progress while a batch is running', async () => {
+    const user = userEvent.setup()
+    let resolveBatch: ((result: BatchApplyResult) => void) | null = null
+    ipc.override('dlss_count_applicable', () => 2)
+    ipc.override(
+      'dlss_apply_to_all',
+      () =>
+        new Promise<BatchApplyResult>((resolve) => {
+          resolveBatch = resolve
+        })
+    )
+    renderWithProviders(<GlobalOverridesCard catalog={CATALOG} />)
+
+    await selectSrVersion(user)
+    const applyButtons = await screen.findAllByRole('button', { name: 'Apply to All (2)' })
+    await waitFor(() => expect(applyButtons[0]).toBeEnabled())
+    await user.click(applyButtons[0])
+    await user.click(await screen.findByRole('button', { name: 'Apply to 2' }))
+
+    expect(await screen.findByTestId('apply-progress-panel')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Applying…' })).toBeDisabled()
+    expect(screen.getByText('0 of 2 complete')).toBeInTheDocument()
+    expect(screen.getByText('Preparing first game…')).toBeInTheDocument()
+
+    await act(async () => {
+      await ipc.emit(DLSS_EVENTS.applyProgress, { gameId: 1, name: 'Elden Ring', ok: true })
+    })
+
+    expect(screen.getByText('1 of 2 complete')).toBeInTheDocument()
+    expect(screen.getByText('1 updated')).toBeInTheDocument()
+    expect(screen.getByText('Latest: Elden Ring')).toBeInTheDocument()
+
+    await act(async () => {
+      resolveBatch?.({
+        total: 2,
+        succeeded: 2,
+        failed: 0,
+        results: [
+          { gameId: 1, name: 'Elden Ring', ok: true },
+          { gameId: 2, name: 'Cyber Nova', ok: true },
+        ],
+      })
+    })
+
+    await waitFor(() => {
+      expect(screen.queryByTestId('apply-progress-panel')).not.toBeInTheDocument()
+    })
   })
 
   it('shows a disabled Apply to All with tooltip wrapper when count is 0', async () => {

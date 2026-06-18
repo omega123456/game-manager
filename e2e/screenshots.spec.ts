@@ -280,7 +280,10 @@ for (const theme of THEMES) {
     await page.getByRole('heading', { name: 'Global Overrides' }).waitFor({ state: 'visible' })
     await page.getByRole('combobox', { name: 'DLSS Super Resolution' }).click()
     await page.getByRole('option', { name: /v3\.7\.10/ }).click()
-    await page.getByRole('button', { name: /Apply to All/ }).first().click()
+    await page
+      .getByRole('button', { name: /Apply to All/ })
+      .first()
+      .click()
     await page
       .getByRole('alertdialog')
       .getByText(/Apply DLSS Super Resolution/)
@@ -294,7 +297,10 @@ for (const theme of THEMES) {
     await page.getByRole('heading', { name: 'Global Overrides' }).waitFor({ state: 'visible' })
     await page.getByRole('combobox', { name: 'DLSS Super Resolution' }).click()
     await page.getByRole('option', { name: /v3\.7\.10/ }).click()
-    await page.getByRole('button', { name: /Apply to All/ }).first().click()
+    await page
+      .getByRole('button', { name: /Apply to All/ })
+      .first()
+      .click()
     await page.getByRole('button', { name: /Apply to/ }).click()
     // Persistent toast with "View details" → open the result dialog.
     await page.getByRole('button', { name: 'View details' }).click()
@@ -303,11 +309,30 @@ for (const theme of THEMES) {
     await expect(page).toHaveScreenshot(`dlss-apply-to-all-result-${theme}.png`)
   })
 
+  test(`dlss apply to all in progress — ${theme}`, async ({ page }) => {
+    await gotoAppState(page, '#/dlss?dlssFixture=mid-apply')
+    await setTheme(page, theme)
+    await page.getByRole('heading', { name: 'Global Overrides' }).waitFor({ state: 'visible' })
+    await page.getByRole('combobox', { name: 'DLSS Super Resolution' }).click()
+    await page.getByRole('option', { name: /v3\.7\.10/ }).click()
+    await page
+      .getByRole('button', { name: /Apply to All/ })
+      .first()
+      .click()
+    await page.getByRole('button', { name: /Apply to/ }).click()
+    await page.getByTestId('apply-progress-panel').waitFor({ state: 'visible' })
+    await page.getByText('0 of 2 complete').waitFor({ state: 'visible' })
+    await expect(page).toHaveScreenshot(`dlss-apply-to-all-in-progress-${theme}.png`)
+  })
+
   test(`dlss global presets unsupported — ${theme}`, async ({ page }) => {
     await gotoAppState(page, '#/dlss?dlssFixture=no-nvidia')
     await setTheme(page, theme)
     await page.getByRole('heading', { name: 'Global Presets' }).waitFor({ state: 'visible' })
-    await page.getByText(/NVIDIA/).first().waitFor({ state: 'visible' })
+    await page
+      .getByText(/NVIDIA/)
+      .first()
+      .waitFor({ state: 'visible' })
     await scrollRouteOutletToTop(page)
     await expect(page).toHaveScreenshot(`dlss-global-presets-unsupported-${theme}.png`)
   })
@@ -315,9 +340,7 @@ for (const theme of THEMES) {
   test(`dlss empty state — ${theme}`, async ({ page }) => {
     await gotoAppState(page, '#/dlss?dlssFixture=empty')
     await setTheme(page, theme)
-    await page
-      .getByText('No DLSS-compatible games detected')
-      .waitFor({ state: 'visible' })
+    await page.getByText('No DLSS-compatible games detected').waitFor({ state: 'visible' })
     await scrollRouteOutletToTop(page)
     await expect(page).toHaveScreenshot(`dlss-empty-state-${theme}.png`)
   })
@@ -337,7 +360,10 @@ for (const theme of THEMES) {
     await page.getByRole('heading', { name: 'Global Overrides' }).waitFor({ state: 'visible' })
     await page.getByRole('combobox', { name: 'DLSS Super Resolution' }).click()
     await page.getByRole('option', { name: /v3\.7\.10/ }).click()
-    await page.getByRole('button', { name: /Apply to All/ }).first().click()
+    await page
+      .getByRole('button', { name: /Apply to All/ })
+      .first()
+      .click()
     await page.getByRole('button', { name: /Apply to/ }).click()
     await page.getByText('Administrator access required').waitFor({ state: 'visible' })
     await page

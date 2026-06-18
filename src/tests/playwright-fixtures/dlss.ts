@@ -158,6 +158,7 @@ type DlssScenario =
   | 'not-elevated'
   | 'empty'
   | 'mid-download'
+  | 'mid-apply'
   | 'batch-failures'
   | 'elevation-toast'
   | 'loading'
@@ -173,6 +174,7 @@ function getDlssScenario(): DlssScenario {
     case 'not-elevated':
     case 'empty':
     case 'mid-download':
+    case 'mid-apply':
     case 'batch-failures':
     case 'elevation-toast':
     case 'loading':
@@ -234,6 +236,8 @@ export const dlssFixtures: Record<string, PlaywrightFixtureHandler> = {
     },
   dlss_apply_to_all: () => {
     switch (getDlssScenario()) {
+      case 'mid-apply':
+        return pending<BatchApplyResult>()
       case 'batch-failures':
         return BATCH_RESULT_WITH_FAILURES
       case 'elevation-toast':
