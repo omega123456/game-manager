@@ -83,7 +83,9 @@ fn apply_pending(conn: &Connection, start_version: i64) -> AppResult<()> {
 /// Fail if any foreign-key reference is left dangling after a rebuild.
 fn verify_foreign_keys(conn: &Connection) -> AppResult<()> {
     let violations: i64 =
-        conn.query_row("SELECT COUNT(*) FROM pragma_foreign_key_check", [], |row| row.get(0))?;
+        conn.query_row("SELECT COUNT(*) FROM pragma_foreign_key_check", [], |row| {
+            row.get(0)
+        })?;
     if violations > 0 {
         return Err(AppError::database(format!(
             "migration left {violations} dangling foreign-key reference(s)"

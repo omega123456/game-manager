@@ -70,11 +70,7 @@ pub trait NamedProcessLauncher: Send + Sync {
 pub fn normalize_process_name(raw: &str) -> String {
     let trimmed = raw.trim().trim_matches('"');
     // Take the final path component (handle both separators defensively).
-    let base = trimmed
-        .rsplit(['\\', '/'])
-        .next()
-        .unwrap_or(trimmed)
-        .trim();
+    let base = trimmed.rsplit(['\\', '/']).next().unwrap_or(trimmed).trim();
     let lowered = base.to_ascii_lowercase();
     if lowered.is_empty() {
         return lowered;
@@ -105,8 +101,10 @@ enum ConfirmOutcome {
 }
 
 /// Mode B monitor: times a named (store/launcher) game process.
-pub struct NamedProcessMonitor<T: ProcessTable, L: NamedProcessLauncher = WindowsNamedProcessLauncher>
-{
+pub struct NamedProcessMonitor<
+    T: ProcessTable,
+    L: NamedProcessLauncher = WindowsNamedProcessLauncher,
+> {
     table: T,
     launcher: L,
     confirm_delay: Duration,
@@ -270,7 +268,9 @@ impl NamedProcessLauncher for WindowsNamedProcessLauncher {
                 command.arg(arg);
             }
             command.spawn().map_err(|err| {
-                AppError::Io(format!("spawn 'cmd.exe /c start {launch_target}' failed: {err}"))
+                AppError::Io(format!(
+                    "spawn 'cmd.exe /c start {launch_target}' failed: {err}"
+                ))
             })?;
             return Ok(());
         }
@@ -317,7 +317,8 @@ impl ProcessTable for WindowsProcessTable {
     async fn wait_for_exit(&self, pid: u32, cancel: &CancelToken) -> AppResult<bool> {
         // Run the blocking wait on a dedicated thread, racing cancellation.
         let pid_copy = pid;
-        let handle = tokio::task::spawn_blocking(move || windows_impl::wait_for_exit_blocking(pid_copy));
+        let handle =
+            tokio::task::spawn_blocking(move || windows_impl::wait_for_exit_blocking(pid_copy));
         tokio::select! {
             joined = handle => joined
                 .map_err(|err| AppError::other(format!("wait_for_exit task panicked: {err}")))?,

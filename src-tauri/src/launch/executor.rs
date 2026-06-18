@@ -100,7 +100,9 @@ fn classify_phase(config: &PhaseConfig) -> Option<(RunKind, Option<Interpreter>)
     match config.mode {
         PhaseMode::None => None,
         PhaseMode::Inline => match config.interpreter {
-            Some(Interpreter::Powershell) => Some((RunKind::PowerShell, Some(Interpreter::Powershell))),
+            Some(Interpreter::Powershell) => {
+                Some((RunKind::PowerShell, Some(Interpreter::Powershell)))
+            }
             Some(Interpreter::Powershell7) => {
                 Some((RunKind::PowerShell, Some(Interpreter::Powershell7)))
             }

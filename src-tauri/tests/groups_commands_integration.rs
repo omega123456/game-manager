@@ -134,9 +134,12 @@ fn set_group_scripts_persists_sorted_ids_and_dedupes() {
     let script_a = create_script_impl(&state, normal_script_input("Auto HDR")).unwrap();
     let script_b = create_script_impl(&state, normal_script_input("DLSS Toggle")).unwrap();
 
-    let saved =
-        set_group_scripts_impl(&state, group.id, vec![script_b.id, script_a.id, script_b.id])
-            .unwrap();
+    let saved = set_group_scripts_impl(
+        &state,
+        group.id,
+        vec![script_b.id, script_a.id, script_b.id],
+    )
+    .unwrap();
     assert_eq!(saved, vec![script_a.id, script_b.id]);
 
     let hydrated = get_group_impl(&state, group.id).unwrap();

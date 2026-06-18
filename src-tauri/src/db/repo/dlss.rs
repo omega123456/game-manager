@@ -35,11 +35,7 @@ pub fn list_folder_overrides(conn: &Connection) -> AppResult<Vec<(i64, String)>>
 
 /// Set (or clear, with `None`) the folder override for a game. Inserts a row when
 /// none exists yet.
-pub fn set_folder_override(
-    conn: &Connection,
-    game_id: i64,
-    folder: Option<&str>,
-) -> AppResult<()> {
+pub fn set_folder_override(conn: &Connection, game_id: i64, folder: Option<&str>) -> AppResult<()> {
     conn.execute(
         "INSERT INTO game_dlss_state (game_id, folder_override)
          VALUES (?1, ?2)

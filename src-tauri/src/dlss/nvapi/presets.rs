@@ -16,13 +16,13 @@
 
 use serde::Deserialize;
 
-use crate::domain::{GamePresetState, PresetKind, PresetOption};
 use crate::dlss::nvapi::drs::{real_nvapi_drs, NvapiDrs};
 use crate::dlss::nvapi::ffi::{
     SettingValue, PRESET_DEFAULT, SETTING_ID_DLSS_RR, SETTING_ID_DLSS_RR_OVERRIDE,
     SETTING_ID_DLSS_SR, SETTING_ID_DLSS_SR_OVERRIDE,
 };
 use crate::dlss::{DlssError, DlssResult};
+use crate::domain::{GamePresetState, PresetKind, PresetOption};
 use crate::state::AppState;
 
 /// Bundled DLSS SR preset options.

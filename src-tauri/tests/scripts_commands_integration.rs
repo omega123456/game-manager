@@ -76,11 +76,20 @@ fn create_normal_script_persists_phases_and_interpreter() {
     assert_eq!(created.priority, 7);
 
     assert_eq!(created.before_launch.mode, PhaseMode::Inline);
-    assert_eq!(created.before_launch.inline.as_deref(), Some("Write-Host before"));
-    assert_eq!(created.before_launch.interpreter, Some(Interpreter::Powershell));
+    assert_eq!(
+        created.before_launch.inline.as_deref(),
+        Some("Write-Host before")
+    );
+    assert_eq!(
+        created.before_launch.interpreter,
+        Some(Interpreter::Powershell)
+    );
 
     assert_eq!(created.after_launch.mode, PhaseMode::Path);
-    assert_eq!(created.after_launch.path.as_deref(), Some("C:/Commands/after.ps1"));
+    assert_eq!(
+        created.after_launch.path.as_deref(),
+        Some("C:/Commands/after.ps1")
+    );
 
     assert_eq!(created.on_exit.mode, PhaseMode::None);
     // Snippet is cleared for normal/global.
@@ -98,7 +107,10 @@ fn create_utility_script_persists_snippet_and_clears_phases() {
 
     assert_eq!(created.kind, ScriptKind::Utility);
     assert_eq!(created.snippet.mode, PhaseMode::Inline);
-    assert_eq!(created.snippet.inline.as_deref(), Some("function Helper {}"));
+    assert_eq!(
+        created.snippet.inline.as_deref(),
+        Some("function Helper {}")
+    );
     assert_eq!(created.snippet.interpreter, Some(Interpreter::Powershell));
     assert_eq!(created.before_launch.mode, PhaseMode::None);
     assert_eq!(created.after_launch.mode, PhaseMode::None);
@@ -197,7 +209,9 @@ fn inline_mode_with_code_requires_interpreter() {
         interpreter: None,
     };
     let err = create_script_impl(&state, missing_interp).expect_err("interp");
-    assert!(err.to_string().contains("interpreter is required for inline mode"));
+    assert!(err
+        .to_string()
+        .contains("interpreter is required for inline mode"));
 }
 
 #[test]
@@ -359,12 +373,9 @@ fn dependencies_persist_and_dedupe() {
     let util_a = create_script_impl(&state, utility_input("A")).unwrap();
     let util_b = create_script_impl(&state, utility_input("B")).unwrap();
 
-    let saved = set_script_dependencies_impl(
-        &state,
-        requirer.id,
-        vec![util_a.id, util_b.id, util_a.id],
-    )
-    .unwrap();
+    let saved =
+        set_script_dependencies_impl(&state, requirer.id, vec![util_a.id, util_b.id, util_a.id])
+            .unwrap();
     assert_eq!(saved.len(), 2);
     assert!(saved.contains(&util_a.id));
     assert!(saved.contains(&util_b.id));
@@ -377,8 +388,7 @@ fn dependencies_persist_and_dedupe() {
 fn direct_self_cycle_is_rejected() {
     let state = state();
     let util = create_script_impl(&state, utility_input("SelfRef")).unwrap();
-    let err = set_script_dependencies_impl(&state, util.id, vec![util.id])
-        .expect_err("self cycle");
+    let err = set_script_dependencies_impl(&state, util.id, vec![util.id]).expect_err("self cycle");
     assert!(err.to_string().contains("circular reference"));
 }
 
@@ -393,8 +403,7 @@ fn transitive_cycle_is_rejected() {
     set_script_dependencies_impl(&state, a.id, vec![b.id]).unwrap();
     set_script_dependencies_impl(&state, b.id, vec![c.id]).unwrap();
 
-    let err =
-        set_script_dependencies_impl(&state, c.id, vec![a.id]).expect_err("transitive cycle");
+    let err = set_script_dependencies_impl(&state, c.id, vec![a.id]).expect_err("transitive cycle");
     assert!(err.to_string().contains("circular reference"));
 
     // The valid chain (no closing edge) is accepted.

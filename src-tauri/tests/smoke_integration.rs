@@ -48,7 +48,8 @@ fn app_state_with_db_runs_repository_callback() {
     let state = AppState::in_memory().expect("in-memory state");
     let count = state
         .with_db(|conn| {
-            let count: i64 = conn.query_row("SELECT COUNT(*) FROM settings", [], |row| row.get(0))?;
+            let count: i64 =
+                conn.query_row("SELECT COUNT(*) FROM settings", [], |row| row.get(0))?;
             Ok(count)
         })
         .expect("with_db callback");

@@ -31,14 +31,20 @@ fn seed(state: &AppState, mode: MonitorMode, process_name: Option<&str>) -> i64 
 fn selects_tree_mode_for_tree_game() {
     let state = AppState::in_memory().unwrap();
     let game_id = seed(&state, MonitorMode::Tree, None);
-    assert_eq!(monitor_mode_for_game(&state, game_id).unwrap(), MonitorMode::Tree);
+    assert_eq!(
+        monitor_mode_for_game(&state, game_id).unwrap(),
+        MonitorMode::Tree
+    );
 }
 
 #[test]
 fn selects_named_mode_for_named_game() {
     let state = AppState::in_memory().unwrap();
     let game_id = seed(&state, MonitorMode::Named, Some("Real.exe"));
-    assert_eq!(monitor_mode_for_game(&state, game_id).unwrap(), MonitorMode::Named);
+    assert_eq!(
+        monitor_mode_for_game(&state, game_id).unwrap(),
+        MonitorMode::Named
+    );
 }
 
 #[test]
@@ -80,10 +86,17 @@ async fn windows_constructs_a_monitor_for_each_mode() {
     let _ = monitor.wait_for_start(&state, tree_id, &cancel).await;
 
     // Named mode → a named-process monitor; cancel before detection.
-    let named_id = seed(&state, MonitorMode::Named, Some("definitely-not-running.exe"));
+    let named_id = seed(
+        &state,
+        MonitorMode::Named,
+        Some("definitely-not-running.exe"),
+    );
     let monitor = select_monitor(&state, named_id).unwrap();
     let cancel = CancelToken::new();
     cancel.cancel();
-    let outcome = monitor.wait_for_start(&state, named_id, &cancel).await.unwrap();
+    let outcome = monitor
+        .wait_for_start(&state, named_id, &cancel)
+        .await
+        .unwrap();
     assert_eq!(outcome, StartOutcome::Cancelled);
 }

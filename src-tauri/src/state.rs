@@ -12,10 +12,17 @@ use std::sync::Mutex;
 use rusqlite::Connection;
 
 use crate::db::connection;
+use crate::domain::DllCatalog;
 use crate::error::{AppError, AppResult};
 use crate::keep_awake::{self, KeepAwake, NoopSleepBlocker, SleepBlocker};
 use crate::launch::cancel::CancelToken;
 use crate::priority::{self, NoopProcessPrioritizer, ProcessPrioritizer};
+
+#[derive(Clone)]
+struct DlssCatalogSessionCache {
+    catalog: DllCatalog,
+    refresh_attempted: bool,
+}
 
 /// Application state container injected into command implementations.
 pub struct AppState {
@@ -36,6 +43,10 @@ pub struct AppState {
     /// recomputed on every launch and **never** persisted to the DB; this map is
     /// its sole store for the lifetime of the process.
     dlss_detection: Mutex<HashMap<i64, crate::dlss::detect::DetectionResult>>,
+    /// Session-only DLSS manifest/catalog cache. The first catalog resolved in a
+    /// session is kept in memory, and the remote manifest refresh is attempted
+    /// at most once per process lifetime.
+    dlss_catalog: Mutex<Option<DlssCatalogSessionCache>>,
 }
 
 impl AppState {
@@ -71,6 +82,7 @@ impl AppState {
             keep_awake: KeepAwake::new(blocker),
             prioritizer,
             dlss_detection: Mutex::new(HashMap::new()),
+            dlss_catalog: Mutex::new(None),
         }
     }
 
@@ -120,7 +132,9 @@ impl AppState {
             .lock()
             .map_err(|_| AppError::other("launch registry mutex poisoned"))?;
         if launches.contains_key(&game_id) {
-            return Err(AppError::other(format!("game {game_id} is already launching")));
+            return Err(AppError::other(format!(
+                "game {game_id} is already launching"
+            )));
         }
         if let Some(active_game_id) = launches.keys().next().copied() {
             return Err(AppError::other(format!(
@@ -186,11 +200,7 @@ impl AppState {
     }
 
     /// Store a game's session-only DLSS detection result, replacing any prior one.
-    pub fn dlss_detection_set(
-        &self,
-        game_id: i64,
-        result: crate::dlss::detect::DetectionResult,
-    ) {
+    pub fn dlss_detection_set(&self, game_id: i64, result: crate::dlss::detect::DetectionResult) {
         match self.dlss_detection.lock() {
             Ok(mut map) => {
                 map.insert(game_id, result);
@@ -207,10 +217,7 @@ impl AppState {
 
     /// Read a game's cached DLSS detection, or `None` if it has not been scanned
     /// this session.
-    pub fn dlss_detection_get(
-        &self,
-        game_id: i64,
-    ) -> Option<crate::dlss::detect::DetectionResult> {
+    pub fn dlss_detection_get(&self, game_id: i64) -> Option<crate::dlss::detect::DetectionResult> {
         self.dlss_detection
             .lock()
             .ok()
@@ -237,8 +244,41 @@ impl AppState {
     pub fn dlss_detection_snapshot(&self) -> Vec<(i64, crate::dlss::detect::DetectionResult)> {
         self.dlss_detection
             .lock()
-            .map(|map| map.iter().map(|(id, result)| (*id, result.clone())).collect())
+            .map(|map| {
+                map.iter()
+                    .map(|(id, result)| (*id, result.clone()))
+                    .collect()
+            })
             .unwrap_or_default()
+    }
+
+    /// Read the session-cached DLSS catalog, if present, plus whether this
+    /// process has already attempted a remote refresh.
+    pub fn dlss_catalog_get(&self) -> Option<(DllCatalog, bool)> {
+        self.dlss_catalog.lock().ok().and_then(|entry| {
+            entry
+                .as_ref()
+                .map(|cache| (cache.catalog.clone(), cache.refresh_attempted))
+        })
+    }
+
+    /// Store the session-cached DLSS catalog and whether the one-time remote
+    /// refresh has already been attempted for this process.
+    pub fn dlss_catalog_set(&self, catalog: DllCatalog, refresh_attempted: bool) {
+        match self.dlss_catalog.lock() {
+            Ok(mut cache) => {
+                *cache = Some(DlssCatalogSessionCache {
+                    catalog,
+                    refresh_attempted,
+                });
+            }
+            Err(_) => {
+                tracing::warn!(
+                    category = "dlss",
+                    "dlss catalog cache mutex poisoned; catalog not cached"
+                );
+            }
+        }
     }
 }
 
@@ -257,9 +297,7 @@ impl AppState {
 
     /// Construct an in-memory `AppState` over a caller-supplied process
     /// prioritizer so tests can assert that launches raise the game's priority.
-    pub fn in_memory_with_prioritizer(
-        prioritizer: Box<dyn ProcessPrioritizer>,
-    ) -> AppResult<Self> {
+    pub fn in_memory_with_prioritizer(prioritizer: Box<dyn ProcessPrioritizer>) -> AppResult<Self> {
         Ok(AppState::with_seams(
             connection::open_in_memory()?,
             std::env::temp_dir().join("game-manager"),
@@ -288,6 +326,18 @@ impl AppState {
                 .lock()
                 .expect("dlss detection mutex should be available");
             panic!("poison dlss detection mutex for test");
+        }));
+        assert!(poisoned.is_err(), "mutex poison helper must panic");
+    }
+
+    /// Poison the DLSS catalog-cache mutex so error paths can be exercised in tests.
+    pub fn poison_dlss_catalog_mutex_for_test(&self) {
+        let poisoned = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let _guard = self
+                .dlss_catalog
+                .lock()
+                .expect("dlss catalog mutex should be available");
+            panic!("poison dlss catalog mutex for test");
         }));
         assert!(poisoned.is_err(), "mutex poison helper must panic");
     }

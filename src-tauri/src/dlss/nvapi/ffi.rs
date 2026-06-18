@@ -249,12 +249,19 @@ mod windows_impl {
     type GetGlobalProfileFn = unsafe extern "C" fn(*mut c_void, *mut *mut c_void) -> i32;
     type GetBaseProfileFn = unsafe extern "C" fn(*mut c_void, *mut *mut c_void) -> i32;
     type EnumProfilesFn = unsafe extern "C" fn(*mut c_void, u32, *mut *mut c_void) -> i32;
-    type GetProfileInfoFn = unsafe extern "C" fn(*mut c_void, *mut c_void, *mut NvdrsProfileV1) -> i32;
-    type EnumApplicationsFn =
-        unsafe extern "C" fn(*mut c_void, *mut c_void, u32, *mut u32, *mut NvdrsApplicationV1) -> i32;
+    type GetProfileInfoFn =
+        unsafe extern "C" fn(*mut c_void, *mut c_void, *mut NvdrsProfileV1) -> i32;
+    type EnumApplicationsFn = unsafe extern "C" fn(
+        *mut c_void,
+        *mut c_void,
+        u32,
+        *mut u32,
+        *mut NvdrsApplicationV1,
+    ) -> i32;
     type GetSettingFn =
         unsafe extern "C" fn(*mut c_void, *mut c_void, u32, *mut NvdrsSettingV1) -> i32;
-    type SetSettingFn = unsafe extern "C" fn(*mut c_void, *mut c_void, *const NvdrsSettingV1) -> i32;
+    type SetSettingFn =
+        unsafe extern "C" fn(*mut c_void, *mut c_void, *const NvdrsSettingV1) -> i32;
     type SaveSettingsFn = unsafe extern "C" fn(*mut c_void) -> i32;
     type DestroySessionFn = unsafe extern "C" fn(*mut c_void) -> i32;
 
@@ -367,9 +374,8 @@ mod windows_impl {
             }
 
             // SAFETY: the single ANSI export resolving all other functions.
-            let query = unsafe {
-                GetProcAddress(module, PCSTR(b"nvapi_QueryInterface\0".as_ptr()))
-            };
+            let query =
+                unsafe { GetProcAddress(module, PCSTR(b"nvapi_QueryInterface\0".as_ptr())) };
             let Some(query) = query else {
                 // SAFETY: module was successfully loaded above.
                 unsafe {
@@ -405,13 +411,20 @@ mod windows_impl {
                 }};
             }
 
-            let initialize: InitializeFn = resolve_fn!("NvAPI_Initialize", InitializeFn, qid::INITIALIZE);
-            let create_session: CreateSessionFn =
-                resolve_fn!("DRS_CreateSession", CreateSessionFn, qid::DRS_CREATE_SESSION);
+            let initialize: InitializeFn =
+                resolve_fn!("NvAPI_Initialize", InitializeFn, qid::INITIALIZE);
+            let create_session: CreateSessionFn = resolve_fn!(
+                "DRS_CreateSession",
+                CreateSessionFn,
+                qid::DRS_CREATE_SESSION
+            );
             let load_settings: LoadSettingsFn =
                 resolve_fn!("DRS_LoadSettings", LoadSettingsFn, qid::DRS_LOAD_SETTINGS);
-            let get_base_profile: GetBaseProfileFn =
-                resolve_fn!("DRS_GetBaseProfile", GetBaseProfileFn, qid::DRS_GET_BASE_PROFILE);
+            let get_base_profile: GetBaseProfileFn = resolve_fn!(
+                "DRS_GetBaseProfile",
+                GetBaseProfileFn,
+                qid::DRS_GET_BASE_PROFILE
+            );
             // Current-global profile is optional: fall back to the base profile if
             // the driver does not export it (logged at use site).
             let get_global_profile: Option<GetGlobalProfileFn> = {
@@ -425,18 +438,27 @@ mod windows_impl {
             };
             let enum_profiles: EnumProfilesFn =
                 resolve_fn!("DRS_EnumProfiles", EnumProfilesFn, qid::DRS_ENUM_PROFILES);
-            let get_profile_info: GetProfileInfoFn =
-                resolve_fn!("DRS_GetProfileInfo", GetProfileInfoFn, qid::DRS_GET_PROFILE_INFO);
-            let enum_applications: EnumApplicationsFn =
-                resolve_fn!("DRS_EnumApplications", EnumApplicationsFn, qid::DRS_ENUM_APPLICATIONS);
+            let get_profile_info: GetProfileInfoFn = resolve_fn!(
+                "DRS_GetProfileInfo",
+                GetProfileInfoFn,
+                qid::DRS_GET_PROFILE_INFO
+            );
+            let enum_applications: EnumApplicationsFn = resolve_fn!(
+                "DRS_EnumApplications",
+                EnumApplicationsFn,
+                qid::DRS_ENUM_APPLICATIONS
+            );
             let get_setting: GetSettingFn =
                 resolve_fn!("DRS_GetSetting", GetSettingFn, qid::DRS_GET_SETTING);
             let set_setting: SetSettingFn =
                 resolve_fn!("DRS_SetSetting", SetSettingFn, qid::DRS_SET_SETTING);
             let save_settings: SaveSettingsFn =
                 resolve_fn!("DRS_SaveSettings", SaveSettingsFn, qid::DRS_SAVE_SETTINGS);
-            let destroy_session: DestroySessionFn =
-                resolve_fn!("DRS_DestroySession", DestroySessionFn, qid::DRS_DESTROY_SESSION);
+            let destroy_session: DestroySessionFn = resolve_fn!(
+                "DRS_DestroySession",
+                DestroySessionFn,
+                qid::DRS_DESTROY_SESSION
+            );
 
             // SAFETY: initialise NVAPI before any DRS call.
             let code = unsafe { initialize() };
@@ -629,9 +651,8 @@ mod windows_impl {
             setting.setting_location = NVDRS_CURRENT_PROFILE_LOCATION;
             setting.current_value.u32_value = value;
             // SAFETY: valid session + profile handle + populated setting struct.
-            let code = unsafe {
-                (self.set_setting)(self.session, profile as *mut c_void, &setting)
-            };
+            let code =
+                unsafe { (self.set_setting)(self.session, profile as *mut c_void, &setting) };
             if code != status::OK {
                 return Err(classify(code, "set_setting"));
             }

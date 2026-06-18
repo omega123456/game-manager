@@ -10,8 +10,8 @@
 
 use std::path::{Path, PathBuf};
 
-use crate::domain::DllType;
 use crate::dlss::DlssResult;
+use crate::domain::DllType;
 
 /// Root subfolder name for all DLSS state under the app-data directory.
 const DLSS_ROOT: &str = "dlss";
@@ -39,7 +39,9 @@ pub fn temp_dir(app_data_dir: &Path) -> PathBuf {
 
 /// The per-type folder holding downloaded DLLs for `dll_type`.
 pub fn dll_type_dir(app_data_dir: &Path, dll_type: DllType) -> PathBuf {
-    root(app_data_dir).join(DLLS_DIR).join(dll_type.storage_slug())
+    root(app_data_dir)
+        .join(DLLS_DIR)
+        .join(dll_type.storage_slug())
 }
 
 /// Sanitize a version + hash into a filesystem-safe key (`<version>_<md5>`).
@@ -57,12 +59,7 @@ pub fn version_key(version: &str, md5: &str) -> String {
 }
 
 /// The expected local path of a downloaded DLL for `dll_type` / `version` / `md5`.
-pub fn local_dll_path(
-    app_data_dir: &Path,
-    dll_type: DllType,
-    version: &str,
-    md5: &str,
-) -> PathBuf {
+pub fn local_dll_path(app_data_dir: &Path, dll_type: DllType, version: &str, md5: &str) -> PathBuf {
     dll_type_dir(app_data_dir, dll_type)
         .join(version_key(version, md5))
         .join(dll_type.dll_filename())

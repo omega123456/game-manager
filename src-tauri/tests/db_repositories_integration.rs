@@ -3,8 +3,8 @@
 use game_manager_lib::db::connection::open_in_memory;
 use game_manager_lib::db::repo::{games, groups, scripts, sessions, settings};
 use game_manager_lib::domain::{
-    Interpreter, LogLevel, MonitorMode, PhaseConfig, PhaseMode, Provenance, ScriptPhase,
-    ResolvedScript, ScriptKind,
+    Interpreter, LogLevel, MonitorMode, PhaseConfig, PhaseMode, Provenance, ResolvedScript,
+    ScriptKind, ScriptPhase,
 };
 
 fn sample_game(name: &str) -> games::NewGame {
@@ -341,7 +341,9 @@ fn games_get_play_now_ignores_unparseable_cached_setting() {
     settings::set(&conn, "last_played_game_id", "not-a-number").unwrap();
     let session_id = sessions::start(&conn, id).unwrap();
     sessions::end(&conn, session_id).unwrap();
-    let play_now = games::get_play_now(&conn).unwrap().expect("session fallback");
+    let play_now = games::get_play_now(&conn)
+        .unwrap()
+        .expect("session fallback");
     assert_eq!(play_now.id, id);
 }
 
@@ -352,7 +354,9 @@ fn games_get_play_now_skips_stale_cached_game_id() {
     settings::set(&conn, "last_played_game_id", "9999").unwrap();
     let session_id = sessions::start(&conn, id).unwrap();
     sessions::end(&conn, session_id).unwrap();
-    let play_now = games::get_play_now(&conn).unwrap().expect("session fallback");
+    let play_now = games::get_play_now(&conn)
+        .unwrap()
+        .expect("session fallback");
     assert_eq!(play_now.id, id);
 }
 
@@ -394,7 +398,13 @@ fn scripts_kind_of_and_dependent_ids() {
     .unwrap();
     scripts::set_dependencies(&conn, runner, &[utility]).unwrap();
 
-    assert_eq!(scripts::kind_of(&conn, utility).unwrap(), Some(ScriptKind::Utility));
-    assert_eq!(scripts::dependent_ids(&conn, utility).unwrap(), vec![runner]);
+    assert_eq!(
+        scripts::kind_of(&conn, utility).unwrap(),
+        Some(ScriptKind::Utility)
+    );
+    assert_eq!(
+        scripts::dependent_ids(&conn, utility).unwrap(),
+        vec![runner]
+    );
     assert!(scripts::kind_of(&conn, 404).unwrap().is_none());
 }

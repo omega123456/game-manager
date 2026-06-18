@@ -139,7 +139,10 @@ fn powershell7_interpreter_is_accepted() {
          VALUES ('Ps7', 'normal', 'inline', 'Write-Output 1', 'powershell7', '2026-01-01T00:00:00Z')",
         [],
     );
-    assert!(inserted.is_ok(), "powershell7 must pass the interpreter CHECK: {inserted:?}");
+    assert!(
+        inserted.is_ok(),
+        "powershell7 must pass the interpreter CHECK: {inserted:?}"
+    );
 
     // An unknown interpreter still fails.
     let bad = conn.execute(

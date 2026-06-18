@@ -119,7 +119,10 @@ fn detection_round_trips_in_the_session_cache_only() {
         read.ray_reconstruction.unwrap().path,
         "D:/Games/Cyberpunk/nvngx_dlssd.dll"
     );
-    assert_eq!(read.last_scanned_at.as_deref(), Some("2026-06-17T12:00:00Z"));
+    assert_eq!(
+        read.last_scanned_at.as_deref(),
+        Some("2026-06-17T12:00:00Z")
+    );
 
     // …but nothing is persisted to the DB.
     assert!(state
@@ -206,9 +209,18 @@ fn count_applicable_counts_detected_per_type() {
         None,
     );
 
-    assert_eq!(count_applicable_impl(&state, DllType::SuperResolution).unwrap(), 2);
-    assert_eq!(count_applicable_impl(&state, DllType::FrameGeneration).unwrap(), 1);
-    assert_eq!(count_applicable_impl(&state, DllType::RayReconstruction).unwrap(), 0);
+    assert_eq!(
+        count_applicable_impl(&state, DllType::SuperResolution).unwrap(),
+        2
+    );
+    assert_eq!(
+        count_applicable_impl(&state, DllType::FrameGeneration).unwrap(),
+        1
+    );
+    assert_eq!(
+        count_applicable_impl(&state, DllType::RayReconstruction).unwrap(),
+        0
+    );
 }
 
 #[test]
@@ -380,27 +392,9 @@ fn dlss_detection_cache_retain_remove_and_snapshot() {
     let drop_id = seed_game(&state, "Drop");
     let remove_id = seed_game(&state, "Remove");
 
-    cache_detection(
-        &state,
-        keep_id,
-        Some(dll("3.7", "a")),
-        None,
-        None,
-    );
-    cache_detection(
-        &state,
-        drop_id,
-        Some(dll("3.7", "b")),
-        None,
-        None,
-    );
-    cache_detection(
-        &state,
-        remove_id,
-        Some(dll("3.7", "c")),
-        None,
-        None,
-    );
+    cache_detection(&state, keep_id, Some(dll("3.7", "a")), None, None);
+    cache_detection(&state, drop_id, Some(dll("3.7", "b")), None, None);
+    cache_detection(&state, remove_id, Some(dll("3.7", "c")), None, None);
 
     state.dlss_detection_remove(remove_id);
     assert!(state.dlss_detection_get(remove_id).is_none());
@@ -418,23 +412,11 @@ fn dlss_detection_cache_retain_remove_and_snapshot() {
 fn dlss_detection_set_tolerates_poisoned_cache_mutex() {
     let state = state();
     let game_id = seed_game(&state, "Poisoned");
-    cache_detection(
-        &state,
-        game_id,
-        Some(dll("3.7", "x")),
-        None,
-        None,
-    );
+    cache_detection(&state, game_id, Some(dll("3.7", "x")), None, None);
     assert!(state.dlss_detection_get(game_id).is_some());
 
     state.poison_dlss_detection_mutex_for_test();
-    cache_detection(
-        &state,
-        game_id,
-        Some(dll("3.8", "y")),
-        None,
-        None,
-    );
+    cache_detection(&state, game_id, Some(dll("3.8", "y")), None, None);
     assert!(state.dlss_detection_get(game_id).is_none());
 }
 
@@ -442,13 +424,7 @@ fn dlss_detection_set_tolerates_poisoned_cache_mutex() {
 fn dlss_detection_retain_noops_when_cache_mutex_is_poisoned() {
     let state = state();
     let game_id = seed_game(&state, "Retain");
-    cache_detection(
-        &state,
-        game_id,
-        Some(dll("3.7", "x")),
-        None,
-        None,
-    );
+    cache_detection(&state, game_id, Some(dll("3.7", "x")), None, None);
     state.poison_dlss_detection_mutex_for_test();
     state.dlss_detection_retain(&HashSet::from([game_id]));
     assert!(state.dlss_detection_get(game_id).is_none());

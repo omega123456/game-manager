@@ -30,9 +30,9 @@ fn host_is_allowed(host: &str) -> bool {
     if is_test_localhost_host(&host) {
         return true;
     }
-    ALLOWED_ART_HOST_SUFFIXES.iter().any(|suffix| {
-        host == *suffix || host.ends_with(&format!(".{suffix}"))
-    })
+    ALLOWED_ART_HOST_SUFFIXES
+        .iter()
+        .any(|suffix| host == *suffix || host.ends_with(&format!(".{suffix}")))
 }
 
 /// Validate that a remote art URL is an https URL on an allowlisted provider host.
@@ -41,8 +41,8 @@ fn host_is_allowed(host: &str) -> bool {
 /// arbitrary strings, so we reject anything that is not https or not served by a
 /// known art provider before issuing an outbound request.
 pub fn validate_remote_art_url(url: &str) -> AppResult<()> {
-    let parsed = Url::parse(url.trim())
-        .map_err(|err| AppError::other(format!("invalid art url: {err}")))?;
+    let parsed =
+        Url::parse(url.trim()).map_err(|err| AppError::other(format!("invalid art url: {err}")))?;
 
     let host = parsed
         .host_str()

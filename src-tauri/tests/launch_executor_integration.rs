@@ -5,7 +5,9 @@
 
 use std::collections::HashMap;
 
-use game_manager_lib::domain::{Interpreter, PhaseConfig, PhaseMode, Script, ScriptKind, ScriptPhase};
+use game_manager_lib::domain::{
+    Interpreter, PhaseConfig, PhaseMode, Script, ScriptKind, ScriptPhase,
+};
 use game_manager_lib::launch::executor::{classify_external_path, execute_phase};
 
 fn none() -> PhaseConfig {
@@ -143,7 +145,11 @@ async fn runs_inline_powershell7_via_pwsh() {
     let result = execute_phase(&entry, ScriptPhase::Before, &by_id).await;
     assert!(result.ran, "phase should run");
     assert!(result.success, "stderr: {}", result.stderr);
-    assert!(result.stdout.contains("hello-from-pwsh7"), "stdout: {}", result.stdout);
+    assert!(
+        result.stdout.contains("hello-from-pwsh7"),
+        "stdout: {}",
+        result.stdout
+    );
 }
 
 #[tokio::test]
@@ -151,7 +157,10 @@ async fn sources_powershell_utility_into_powershell7_entry() {
     // A PowerShell 5.1 utility is sourced into a PowerShell 7 entry: the two are
     // the same shell family, so it must NOT be skipped.
     let mut util = script(2, "SharedLib", ScriptKind::Utility);
-    util.snippet = inline("function Get-Shared { 'shared-across-ps' }", Interpreter::Powershell);
+    util.snippet = inline(
+        "function Get-Shared { 'shared-across-ps' }",
+        Interpreter::Powershell,
+    );
 
     let mut entry = script(1, "Pwsh7User", ScriptKind::Normal);
     entry.requires = vec![2];
@@ -160,7 +169,11 @@ async fn sources_powershell_utility_into_powershell7_entry() {
     let by_id = index(&[entry.clone(), util]);
     let result = execute_phase(&entry, ScriptPhase::Before, &by_id).await;
     assert!(result.success, "stderr: {}", result.stderr);
-    assert!(result.stdout.contains("shared-across-ps"), "stdout: {}", result.stdout);
+    assert!(
+        result.stdout.contains("shared-across-ps"),
+        "stdout: {}",
+        result.stdout
+    );
     assert!(result.skipped_utilities.is_empty());
 }
 
@@ -173,7 +186,11 @@ async fn runs_inline_batch_via_temp_file() {
     let result = execute_phase(&entry, ScriptPhase::After, &by_id).await;
     assert!(result.ran);
     assert!(result.success, "stderr: {}", result.stderr);
-    assert!(result.stdout.contains("batch-output"), "stdout: {}", result.stdout);
+    assert!(
+        result.stdout.contains("batch-output"),
+        "stdout: {}",
+        result.stdout
+    );
 }
 
 fn path_phase(path: &str) -> PhaseConfig {
@@ -229,7 +246,11 @@ async fn external_powershell_path_entry_is_dot_sourced() {
     let result = execute_phase(&entry, ScriptPhase::Before, &by_id).await;
     let _ = std::fs::remove_file(&script_path);
     assert!(result.success, "stderr: {}", result.stderr);
-    assert!(result.stdout.contains("from-external-ps1"), "stdout: {}", result.stdout);
+    assert!(
+        result.stdout.contains("from-external-ps1"),
+        "stdout: {}",
+        result.stdout
+    );
 }
 
 #[tokio::test]
@@ -245,7 +266,11 @@ async fn external_batch_path_entry_is_called() {
     let result = execute_phase(&entry, ScriptPhase::OnExit, &by_id).await;
     let _ = std::fs::remove_file(&script_path);
     assert!(result.success, "stderr: {}", result.stderr);
-    assert!(result.stdout.contains("from-external-bat"), "stdout: {}", result.stdout);
+    assert!(
+        result.stdout.contains("from-external-bat"),
+        "stdout: {}",
+        result.stdout
+    );
 }
 
 #[tokio::test]
@@ -266,7 +291,11 @@ async fn sources_external_path_utility_snippet() {
     let result = execute_phase(&entry, ScriptPhase::Before, &by_id).await;
     let _ = std::fs::remove_file(&util_path);
     assert!(result.success, "stderr: {}", result.stderr);
-    assert!(result.stdout.contains("helper-output"), "stdout: {}", result.stdout);
+    assert!(
+        result.stdout.contains("helper-output"),
+        "stdout: {}",
+        result.stdout
+    );
     assert!(result.skipped_utilities.is_empty());
 }
 

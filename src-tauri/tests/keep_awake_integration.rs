@@ -70,11 +70,19 @@ fn registering_a_launch_engages_keep_awake_until_unregister() {
     let state = AppState::in_memory_with_blocker(Box::new(recorder.clone())).unwrap();
 
     let _token = state.register_launch(7).unwrap();
-    assert_eq!(recorder.engaged(), 1, "registering a launch keeps the system awake");
+    assert_eq!(
+        recorder.engaged(),
+        1,
+        "registering a launch keeps the system awake"
+    );
     assert_eq!(recorder.released(), 0);
 
     state.unregister_launch(7);
-    assert_eq!(recorder.released(), 1, "sleep restored once the launch ends");
+    assert_eq!(
+        recorder.released(),
+        1,
+        "sleep restored once the launch ends"
+    );
 
     // Unregistering again must not release a second time.
     state.unregister_launch(7);

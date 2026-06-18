@@ -33,9 +33,9 @@ use game_manager_lib::commands::art::{
     cache_art_candidate_impl, fetch_metadata_impl, fetch_metadata_with_provider, search_art_impl,
     search_art_with_providers,
 };
-use game_manager_lib::domain::{ArtSource, MetadataResult};
 use game_manager_lib::commands::settings::set_setting_impl;
 use game_manager_lib::db::repo::logs;
+use game_manager_lib::domain::{ArtSource, MetadataResult};
 use game_manager_lib::state::AppState;
 use tempfile::TempDir;
 
@@ -344,12 +344,7 @@ fn steamgriddb_parse_errors_and_filters_invalid_grids() {
     assert!(steamgriddb::parse_grid_candidates("{bad json").is_err());
 
     let client = reqwest::blocking::Client::new();
-    assert!(steamgriddb::search_grids(
-        &client,
-        "bad\nkey",
-        "x",
-    )
-    .is_err());
+    assert!(steamgriddb::search_grids(&client, "bad\nkey", "x",).is_err());
 
     let filtered = steamgriddb::parse_grid_candidates(
         r#"{"data":[{"id":1,"url":"https://cdn.example.test/x.png","width":0,"height":900}]}"#,
@@ -405,7 +400,10 @@ fn steam_provider_surfaces_response_read_failures() {
             )
             .unwrap();
     });
-    let _steam = EnvGuard::set("GM_TEST_STEAM_APP_LIST_URL", format!("http://{addr}/app-list"));
+    let _steam = EnvGuard::set(
+        "GM_TEST_STEAM_APP_LIST_URL",
+        format!("http://{addr}/app-list"),
+    );
     let client = reqwest::blocking::Client::builder()
         .timeout(std::time::Duration::from_millis(250))
         .build()
@@ -436,8 +434,10 @@ fn steam_parse_app_matches_respects_limit_and_partial_matches() {
 
 #[test]
 fn steamgriddb_search_surfaces_connect_failure_before_parsing() {
-    let _search =
-        EnvGuard::set("GM_TEST_STEAMGRIDDB_SEARCH_BASE", "http://127.0.0.1:1/search");
+    let _search = EnvGuard::set(
+        "GM_TEST_STEAMGRIDDB_SEARCH_BASE",
+        "http://127.0.0.1:1/search",
+    );
     let _grid = EnvGuard::set("GM_TEST_STEAMGRIDDB_GRID_BASE", "http://127.0.0.1:1/grids");
     let client = reqwest::blocking::Client::builder()
         .timeout(std::time::Duration::from_millis(250))
@@ -550,7 +550,8 @@ fn cache_art_candidate_impl_rejects_empty_url() {
 fn cache_write_bytes_and_non_success_download_fail() {
     let (_state, dir) = temp_state();
     let url = "https://cdn.akamai.steamstatic.com/steam/apps/1/library_600x900.jpg";
-    let path = cache::write_bytes(dir.path(), url, b"\x89PNG\r\n\x1a\n", Some("image/png")).unwrap();
+    let path =
+        cache::write_bytes(dir.path(), url, b"\x89PNG\r\n\x1a\n", Some("image/png")).unwrap();
     assert!(path.contains("art-cache"));
 
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
@@ -579,11 +580,20 @@ fn search_art_impl_uses_default_provider_chain_with_mock_servers() {
         ],
         2,
     );
-    let (steam_base, steam_handle) = spawn_fixture_server(&[("/app-list", fixture("steam-app-list"))], 2);
-    let _sgdb_search =
-        EnvGuard::set("GM_TEST_STEAMGRIDDB_SEARCH_BASE", format!("{sgdb_base}/search"));
-    let _sgdb_grid = EnvGuard::set("GM_TEST_STEAMGRIDDB_GRID_BASE", format!("{sgdb_base}/grids"));
-    let _steam = EnvGuard::set("GM_TEST_STEAM_APP_LIST_URL", format!("{steam_base}/app-list"));
+    let (steam_base, steam_handle) =
+        spawn_fixture_server(&[("/app-list", fixture("steam-app-list"))], 2);
+    let _sgdb_search = EnvGuard::set(
+        "GM_TEST_STEAMGRIDDB_SEARCH_BASE",
+        format!("{sgdb_base}/search"),
+    );
+    let _sgdb_grid = EnvGuard::set(
+        "GM_TEST_STEAMGRIDDB_GRID_BASE",
+        format!("{sgdb_base}/grids"),
+    );
+    let _steam = EnvGuard::set(
+        "GM_TEST_STEAM_APP_LIST_URL",
+        format!("{steam_base}/app-list"),
+    );
 
     let (state, _dir) = temp_state();
     set_setting_impl(&state, "steamgriddb_api_key", "sgdb-key").unwrap();
@@ -650,7 +660,10 @@ fn build_cache_path_uses_content_type_when_url_has_no_extension() {
         "https://cdn.akamai.steamstatic.com/steam/apps/1/library",
         Some("image/gif"),
     );
-    assert_eq!(fallback.extension().and_then(|ext| ext.to_str()), Some("img"));
+    assert_eq!(
+        fallback.extension().and_then(|ext| ext.to_str()),
+        Some("img")
+    );
 }
 
 #[test]
@@ -738,8 +751,10 @@ fn cache_art_candidate_impl_surfaces_download_failure() {
 
 #[test]
 fn validate_remote_art_url_allows_steam_subdomains() {
-    cache::validate_remote_art_url("https://cdn.akamai.steamstatic.com/steam/apps/730/library_600x900.jpg")
-        .unwrap();
+    cache::validate_remote_art_url(
+        "https://cdn.akamai.steamstatic.com/steam/apps/730/library_600x900.jpg",
+    )
+    .unwrap();
 }
 
 #[test]
@@ -793,7 +808,10 @@ fn fetch_metadata_impl_logs_when_default_provider_fails() {
             )
             .unwrap();
     });
-    let _steam = EnvGuard::set("GM_TEST_STEAM_APP_LIST_URL", format!("http://{addr}/app-list"));
+    let _steam = EnvGuard::set(
+        "GM_TEST_STEAM_APP_LIST_URL",
+        format!("http://{addr}/app-list"),
+    );
 
     let metadata = fetch_metadata_impl(&state, "Hades").unwrap();
     handle.join().unwrap();
@@ -807,12 +825,9 @@ fn fetch_metadata_impl_logs_when_default_provider_fails() {
 #[test]
 fn search_art_with_providers_logs_missing_api_keys() {
     let (state, _dir) = temp_state();
-    let art = search_art_with_providers(
-        &state,
-        "Hades",
-        &|_, _, _| Ok(vec![]),
-        &|_, _, _| Ok(vec![]),
-    )
+    let art = search_art_with_providers(&state, "Hades", &|_, _, _| Ok(vec![]), &|_, _, _| {
+        Ok(vec![])
+    })
     .unwrap();
     assert!(art.is_empty());
 

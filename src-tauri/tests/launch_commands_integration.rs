@@ -3,7 +3,9 @@
 
 use std::sync::Arc;
 
-use game_manager_lib::commands::launch::{cancel_launch_impl, prepare_launch_impl, run_launch_impl};
+use game_manager_lib::commands::launch::{
+    cancel_launch_impl, prepare_launch_impl, run_launch_impl,
+};
 use game_manager_lib::db::repo::games;
 use game_manager_lib::domain::MonitorMode;
 use game_manager_lib::launch::cancel::CancelToken;
@@ -52,15 +54,19 @@ fn register_then_cancel_targets_the_running_launch() {
 #[tokio::test]
 async fn cancel_launch_command_aborts_an_in_flight_run() {
     let state = AppState::in_memory().unwrap();
-    let game_id = state.with_db(|conn| games::create(conn, &new_game("CmdCancel"))).unwrap();
+    let game_id = state
+        .with_db(|conn| games::create(conn, &new_game("CmdCancel")))
+        .unwrap();
 
     // Register the token the orchestrator will observe, mirroring the wrapper.
     let token = state.register_launch(game_id).unwrap();
     // Cancel before start so the run ends immediately without a session.
     assert!(cancel_launch_impl(&state, game_id).unwrap());
 
-    let monitor: Arc<dyn Monitor> =
-        Arc::new(StubMonitor::with_delays(std::time::Duration::from_secs(30), std::time::Duration::ZERO));
+    let monitor: Arc<dyn Monitor> = Arc::new(StubMonitor::with_delays(
+        std::time::Duration::from_secs(30),
+        std::time::Duration::ZERO,
+    ));
     let failed = run_launch_impl(&state, game_id, monitor, &NoopSink, token)
         .await
         .unwrap();
@@ -89,7 +95,10 @@ fn prepare_launch_cleans_up_registry_when_monitor_selection_fails() {
     assert!(err.contains("game 9999 not found"));
 
     let token = state.register_launch(7).unwrap();
-    assert!(!token.is_cancelled(), "registry should be clear after failed prepare");
+    assert!(
+        !token.is_cancelled(),
+        "registry should be clear after failed prepare"
+    );
 }
 
 #[tokio::test]
@@ -129,7 +138,10 @@ async fn stub_monitor_respects_cancellation_during_start_delay() {
         tokio::time::sleep(std::time::Duration::from_millis(10)).await;
         cancel_handle.cancel();
     });
-    let outcome = monitor.wait_for_start(&state, game_id, &cancel).await.unwrap();
+    let outcome = monitor
+        .wait_for_start(&state, game_id, &cancel)
+        .await
+        .unwrap();
     assert_eq!(outcome, StartOutcome::Cancelled);
 }
 
@@ -144,11 +156,17 @@ async fn stub_monitor_records_session_after_end_delay() {
         std::time::Duration::from_millis(15),
     ));
     let cancel = CancelToken::new();
-    let StartOutcome::Started(session_id) = monitor.wait_for_start(&state, game_id, &cancel).await.unwrap()
+    let StartOutcome::Started(session_id) = monitor
+        .wait_for_start(&state, game_id, &cancel)
+        .await
+        .unwrap()
     else {
         panic!("expected a started session");
     };
-    let elapsed = monitor.wait_for_end(&state, session_id, &cancel).await.unwrap();
+    let elapsed = monitor
+        .wait_for_end(&state, session_id, &cancel)
+        .await
+        .unwrap();
     assert!(elapsed >= 0);
 }
 
@@ -184,7 +202,10 @@ fn unregister_launch_noops_when_launch_registry_mutex_poisoned() {
 #[test]
 fn elapsed_seconds_handles_missing_and_unparseable_timestamps() {
     assert_eq!(elapsed_seconds("2026-01-01T00:00:00Z", None), 0);
-    assert_eq!(elapsed_seconds("not-a-time", Some("2026-01-01T00:00:05Z")), 0);
+    assert_eq!(
+        elapsed_seconds("not-a-time", Some("2026-01-01T00:00:05Z")),
+        0
+    );
     assert_eq!(
         elapsed_seconds("2026-01-01T00:00:00Z", Some("2026-01-01T00:00:05Z")),
         5

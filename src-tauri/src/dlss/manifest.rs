@@ -11,8 +11,9 @@ use std::path::Path;
 
 use serde::Deserialize;
 
-use crate::domain::{CatalogSource, DllCatalog, DllType, DllVersion};
 use crate::dlss::{display_version, storage, DlssError, DlssResult};
+use crate::domain::{CatalogSource, DllCatalog, DllType, DllVersion};
+use crate::state::AppState;
 
 /// The public upstream manifest URL.
 pub const MANIFEST_URL: &str = "https://beeradmoore.github.io/dlss-swapper/manifest.json";
@@ -131,6 +132,19 @@ fn convert(records: Vec<RawRecord>, dll_type: DllType) -> Vec<DllVersion> {
         .map(|record| to_version(record, dll_type))
         .collect();
     versions.sort_by(|a, b| b.version_number.cmp(&a.version_number));
+    let mut seen_versions = std::collections::HashSet::new();
+    versions.retain(|version| {
+        let inserted = seen_versions.insert(version.version.clone());
+        if !inserted {
+            tracing::warn!(
+                category = "dlss",
+                dll_type = ?dll_type,
+                version = %version.version,
+                "dropping duplicate DLL version from manifest"
+            );
+        }
+        inserted
+    });
     // Tag the newest as "Latest" when no explicit additional label already
     // distinguishes it.
     if let Some(first) = versions.first_mut() {
@@ -179,7 +193,10 @@ pub async fn build_catalog(app_data_dir: &Path, refresh: bool) -> DlssResult<Dll
         match fetch_remote(app_data_dir).await {
             Ok(catalog) => catalog,
             Err(err) => {
-                tracing::warn!(category = "dlss", "manifest refresh failed: {err}; falling back");
+                tracing::warn!(
+                    category = "dlss",
+                    "manifest refresh failed: {err}; falling back"
+                );
                 load_cache(app_data_dir)?.unwrap_or(load_static()?)
             }
         }
@@ -201,6 +218,30 @@ pub async fn build_catalog(app_data_dir: &Path, refresh: bool) -> DlssResult<Dll
     Ok(catalog)
 }
 
+/// Resolve the session catalog, attempting at most one remote refresh per app
+/// run and serving subsequent requests from memory.
+pub async fn resolve_catalog(state: &AppState, refresh: bool) -> DlssResult<DllCatalog> {
+    let app_data_dir = state.app_data_dir().to_path_buf();
+
+    if let Some((catalog, refresh_attempted)) = state.dlss_catalog_get() {
+        if refresh && !refresh_attempted {
+            let mut refreshed = build_catalog(&app_data_dir, true).await?;
+            state.dlss_catalog_set(refreshed.clone(), true);
+            apply_downloaded_flags(&app_data_dir, &mut refreshed);
+            return Ok(refreshed);
+        }
+
+        let mut cached = catalog;
+        apply_downloaded_flags(&app_data_dir, &mut cached);
+        return Ok(cached);
+    }
+
+    let mut catalog = build_catalog(&app_data_dir, refresh).await?;
+    state.dlss_catalog_set(catalog.clone(), refresh);
+    apply_downloaded_flags(&app_data_dir, &mut catalog);
+    Ok(catalog)
+}
+
 /// Mark each version `is_downloaded` based on local storage presence.
 pub fn apply_downloaded_flags(app_data_dir: &Path, catalog: &mut DllCatalog) {
     for version in catalog
@@ -209,8 +250,12 @@ pub fn apply_downloaded_flags(app_data_dir: &Path, catalog: &mut DllCatalog) {
         .chain(catalog.frame_generation.iter_mut())
         .chain(catalog.ray_reconstruction.iter_mut())
     {
-        version.is_downloaded =
-            storage::is_downloaded(app_data_dir, version.dll_type, &version.version, &version.md5);
+        version.is_downloaded = storage::is_downloaded(
+            app_data_dir,
+            version.dll_type,
+            &version.version,
+            &version.md5,
+        );
     }
 }
 

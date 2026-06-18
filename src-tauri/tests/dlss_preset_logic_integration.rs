@@ -11,15 +11,15 @@ use std::sync::{Arc, Mutex};
 
 use game_manager_lib::db::connection::open_in_memory;
 use game_manager_lib::db::repo::games::{self, NewGame};
-use game_manager_lib::domain::{MonitorMode, PresetKind};
 use game_manager_lib::dlss::nvapi::drs::{find_app_profile, levenshtein, DrsOrchestrator};
 use game_manager_lib::dlss::nvapi::ffi::{
-    make_nvapi_version, NvapiDriver, ProfileInfo, SettingLocation, SettingValue, PRESET_RECOMMENDED,
-    SETTING_ID_DLSS_RR, SETTING_ID_DLSS_RR_OVERRIDE, SETTING_ID_DLSS_SR,
+    make_nvapi_version, NvapiDriver, ProfileInfo, SettingLocation, SettingValue,
+    PRESET_RECOMMENDED, SETTING_ID_DLSS_RR, SETTING_ID_DLSS_RR_OVERRIDE, SETTING_ID_DLSS_SR,
     SETTING_ID_DLSS_SR_OVERRIDE,
 };
 use game_manager_lib::dlss::nvapi::presets::{self, game_identity, setting_id};
 use game_manager_lib::dlss::DlssError;
+use game_manager_lib::domain::{MonitorMode, PresetKind};
 use game_manager_lib::state::AppState;
 
 // ---------------------------------------------------------------------------
@@ -211,7 +211,10 @@ fn make_nvapi_version_packs_size_and_interface_version() {
 #[test]
 fn setting_id_maps_each_kind_to_the_appendix_id() {
     assert_eq!(setting_id(PresetKind::Dlss), SETTING_ID_DLSS_SR);
-    assert_eq!(setting_id(PresetKind::RayReconstruction), SETTING_ID_DLSS_RR);
+    assert_eq!(
+        setting_id(PresetKind::RayReconstruction),
+        SETTING_ID_DLSS_RR
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -236,7 +239,10 @@ fn find_app_profile_picks_closest_name_with_matching_exe() {
     ];
     let exes = vec!["Cyberpunk2077.exe".to_string()];
     // Closest by name is the exact "Cyberpunk 2077" (distance 0) and its exe matches.
-    assert_eq!(find_app_profile(&profiles, "Cyberpunk 2077", &exes), Some(20));
+    assert_eq!(
+        find_app_profile(&profiles, "Cyberpunk 2077", &exes),
+        Some(20)
+    );
 }
 
 #[test]
@@ -247,7 +253,10 @@ fn find_app_profile_skips_closest_name_without_exe_match() {
     ];
     let exes = vec!["cyberpunk2077.exe".to_string()];
     // Closest name (20) has no exe match; the next confirmed candidate wins.
-    assert_eq!(find_app_profile(&profiles, "Cyberpunk 2077", &exes), Some(30));
+    assert_eq!(
+        find_app_profile(&profiles, "Cyberpunk 2077", &exes),
+        Some(30)
+    );
 }
 
 #[test]
@@ -575,12 +584,8 @@ fn game_set_impl_is_unsupported_or_ok_without_gpu() {
 fn inherited_global_selection_reads_as_default_not_the_dword() {
     // The global profile carries an inherited Preset D (4) but nothing local:
     // the effective global preset must be Default, not Preset D.
-    let driver = FakeDriver::new(1, vec![]).with_setting_at(
-        1,
-        SETTING_ID_DLSS_SR,
-        4,
-        SettingLocation::Base,
-    );
+    let driver =
+        FakeDriver::new(1, vec![]).with_setting_at(1, SETTING_ID_DLSS_SR, 4, SettingLocation::Base);
     let drs = orchestrator(driver);
     assert_eq!(
         presets::get_global_preset_with(&drs, PresetKind::Dlss).unwrap(),
@@ -633,13 +638,9 @@ fn per_game_local_override_off_reads_default() {
         .with_setting(20, SETTING_ID_DLSS_RR, 4);
     let drs = orchestrator(driver);
     let exes = vec!["mygame.exe".to_string()];
-    let preset = presets::get_game_preset_with(
-        &drs,
-        "My Game",
-        &exes,
-        PresetKind::RayReconstruction,
-    )
-    .unwrap();
+    let preset =
+        presets::get_game_preset_with(&drs, "My Game", &exes, PresetKind::RayReconstruction)
+            .unwrap();
     assert_eq!(preset.value, 0);
 }
 

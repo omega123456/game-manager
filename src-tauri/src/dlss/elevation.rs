@@ -14,7 +14,9 @@ use crate::dlss::DlssResult;
 #[cfg(windows)]
 pub fn is_elevated() -> bool {
     use windows::Win32::Foundation::{CloseHandle, HANDLE};
-    use windows::Win32::Security::{GetTokenInformation, TokenElevation, TOKEN_ELEVATION, TOKEN_QUERY};
+    use windows::Win32::Security::{
+        GetTokenInformation, TokenElevation, TOKEN_ELEVATION, TOKEN_QUERY,
+    };
     use windows::Win32::System::Threading::{GetCurrentProcess, OpenProcessToken};
 
     // SAFETY: standard token-elevation probe. The token handle is closed on every
@@ -59,7 +61,11 @@ pub fn relaunch_as_admin() -> DlssResult<()> {
 
     let exe = std::env::current_exe()
         .map_err(|err| crate::dlss::DlssError::Io(format!("current exe: {err}")))?;
-    let exe_wide: Vec<u16> = exe.as_os_str().encode_wide().chain(std::iter::once(0)).collect();
+    let exe_wide: Vec<u16> = exe
+        .as_os_str()
+        .encode_wide()
+        .chain(std::iter::once(0))
+        .collect();
     let verb_wide: Vec<u16> = "runas".encode_utf16().chain(std::iter::once(0)).collect();
 
     // SAFETY: all pointers reference null-terminated buffers that outlive the call.

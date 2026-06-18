@@ -43,9 +43,9 @@ fn collect_required_utility_names(
             return Ok(());
         }
 
-        let script = scripts_by_id
-            .get(&script_id)
-            .ok_or_else(|| AppError::database(format!("script {script_id} not found during resolve")))?;
+        let script = scripts_by_id.get(&script_id).ok_or_else(|| {
+            AppError::database(format!("script {script_id} not found during resolve"))
+        })?;
 
         if script.kind != ScriptKind::Utility {
             return Err(AppError::database(format!(
@@ -83,7 +83,12 @@ fn sorted_phase_entries(
             .script
             .priority
             .cmp(&left.script.priority)
-            .then_with(|| left.script.name.to_lowercase().cmp(&right.script.name.to_lowercase()))
+            .then_with(|| {
+                left.script
+                    .name
+                    .to_lowercase()
+                    .cmp(&right.script.name.to_lowercase())
+            })
             .then_with(|| left.script.name.cmp(&right.script.name))
     });
 
@@ -99,7 +104,10 @@ fn sorted_phase_entries(
                 provenance: entry.provenance,
                 group_name: entry.group_name,
                 order: (index + 1) as i64,
-                required_utility_names: collect_required_utility_names(&entry.script, scripts_by_id)?,
+                required_utility_names: collect_required_utility_names(
+                    &entry.script,
+                    scripts_by_id,
+                )?,
             })
         })
         .collect()
@@ -122,9 +130,9 @@ pub fn resolve_for_game(conn: &Connection, game_id: i64) -> AppResult<Vec<Resolv
     let mut by_script_id: HashMap<i64, CandidateEntry> = HashMap::new();
 
     for script_id in games::script_ids(conn, game_id)? {
-        let script = scripts_by_id
-            .get(&script_id)
-            .ok_or_else(|| AppError::database(format!("script {script_id} not found during resolve")))?;
+        let script = scripts_by_id.get(&script_id).ok_or_else(|| {
+            AppError::database(format!("script {script_id} not found during resolve"))
+        })?;
         if script.kind == ScriptKind::Normal {
             by_script_id.insert(
                 script_id,
@@ -139,9 +147,9 @@ pub fn resolve_for_game(conn: &Connection, game_id: i64) -> AppResult<Vec<Resolv
 
     for group in &groups_for_game {
         for script_id in &group.script_ids {
-            let script = scripts_by_id
-                .get(script_id)
-                .ok_or_else(|| AppError::database(format!("script {script_id} not found during resolve")))?;
+            let script = scripts_by_id.get(script_id).ok_or_else(|| {
+                AppError::database(format!("script {script_id} not found during resolve"))
+            })?;
             if script.kind != ScriptKind::Normal {
                 continue;
             }
@@ -151,7 +159,8 @@ pub fn resolve_for_game(conn: &Connection, game_id: i64) -> AppResult<Vec<Resolv
                 group_name: Some(group.name.clone()),
             };
             match by_script_id.get(script_id) {
-                Some(existing) if precedence(existing.provenance) >= precedence(next.provenance) => {}
+                Some(existing)
+                    if precedence(existing.provenance) >= precedence(next.provenance) => {}
                 _ => {
                     by_script_id.insert(*script_id, next);
                 }
@@ -159,7 +168,10 @@ pub fn resolve_for_game(conn: &Connection, game_id: i64) -> AppResult<Vec<Resolv
         }
     }
 
-    for script in all_scripts.iter().filter(|script| script.kind == ScriptKind::Global) {
+    for script in all_scripts
+        .iter()
+        .filter(|script| script.kind == ScriptKind::Global)
+    {
         let next = CandidateEntry {
             script: script.clone(),
             provenance: Provenance::Global,
@@ -175,8 +187,20 @@ pub fn resolve_for_game(conn: &Connection, game_id: i64) -> AppResult<Vec<Resolv
 
     let entries = by_script_id.into_values().collect::<Vec<_>>();
     let mut resolved = Vec::new();
-    resolved.extend(sorted_phase_entries(entries.clone(), ScriptPhase::Before, &scripts_by_id)?);
-    resolved.extend(sorted_phase_entries(entries.clone(), ScriptPhase::After, &scripts_by_id)?);
-    resolved.extend(sorted_phase_entries(entries, ScriptPhase::OnExit, &scripts_by_id)?);
+    resolved.extend(sorted_phase_entries(
+        entries.clone(),
+        ScriptPhase::Before,
+        &scripts_by_id,
+    )?);
+    resolved.extend(sorted_phase_entries(
+        entries.clone(),
+        ScriptPhase::After,
+        &scripts_by_id,
+    )?);
+    resolved.extend(sorted_phase_entries(
+        entries,
+        ScriptPhase::OnExit,
+        &scripts_by_id,
+    )?);
     Ok(resolved)
 }

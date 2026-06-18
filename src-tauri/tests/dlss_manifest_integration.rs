@@ -5,8 +5,9 @@
 //! trimming, the storage path layout, and `is_downloaded` flagging — all against
 //! tempdirs with no network access.
 
-use game_manager_lib::domain::{CatalogSource, DllType};
 use game_manager_lib::dlss::{display_version, manifest, storage};
+use game_manager_lib::domain::{CatalogSource, DllType};
+use game_manager_lib::state::AppState;
 use std::sync::{Mutex, OnceLock};
 
 struct EnvGuard {
@@ -92,8 +93,12 @@ fn find_by_version_resolves_display_version() {
 fn find_by_md5_matches_frame_generation_case_insensitively() {
     let catalog = manifest::load_static().unwrap();
     let target = &catalog.frame_generation[0];
-    let found = manifest::find_by_md5(&catalog, DllType::FrameGeneration, &target.md5.to_uppercase())
-        .expect("frame-generation md5 must resolve case-insensitively");
+    let found = manifest::find_by_md5(
+        &catalog,
+        DllType::FrameGeneration,
+        &target.md5.to_uppercase(),
+    )
+    .expect("frame-generation md5 must resolve case-insensitively");
     assert_eq!(found.version, target.version);
 }
 
@@ -228,8 +233,12 @@ fn parse_remote_records_with_additional_label() {
           "download_url": "http://x", "file_size": 10, "zip_file_size": 5,
           "is_signature_valid": false } ],
         "dlss_g": [], "dlss_d": [] }"#;
-    let catalog =
-        manifest::parse(body, CatalogSource::Remote, Some("2026-06-17T00:00:00Z".into())).unwrap();
+    let catalog = manifest::parse(
+        body,
+        CatalogSource::Remote,
+        Some("2026-06-17T00:00:00Z".into()),
+    )
+    .unwrap();
     let sr = &catalog.super_resolution[0];
     assert_eq!(sr.label, "v3.8 (New)");
     // Hashes are lowercased.
@@ -237,6 +246,73 @@ fn parse_remote_records_with_additional_label() {
     assert_eq!(sr.zip_md5, "ccdd");
     assert!(!sr.is_signature_valid);
     assert_eq!(catalog.fetched_at.as_deref(), Some("2026-06-17T00:00:00Z"));
+}
+
+#[test]
+fn parse_deduplicates_duplicate_display_versions_per_dll_type() {
+    let body = r#"{ "dlss": [
+        { "version": "3.8.0.0", "version_number": 3008000000, "md5_hash": "aaaa",
+          "zip_md5_hash": "bbbb", "download_url": "http://one", "file_size": 10,
+          "zip_file_size": 5, "is_signature_valid": true },
+        { "version": "3.8.0.0", "version_number": 3008000000, "md5_hash": "cccc",
+          "zip_md5_hash": "dddd", "download_url": "http://two", "file_size": 11,
+          "zip_file_size": 6, "is_signature_valid": true } ],
+        "dlss_g": [], "dlss_d": [] }"#;
+
+    let catalog = manifest::parse(body, CatalogSource::Remote, None).unwrap();
+
+    assert_eq!(catalog.super_resolution.len(), 1);
+    assert_eq!(catalog.super_resolution[0].version, "3.8");
+    assert_eq!(catalog.super_resolution[0].md5, "aaaa");
+}
+
+#[tokio::test]
+async fn resolve_catalog_attempts_remote_refresh_only_once_per_session() {
+    let _lock = proxy_env_lock();
+    let _http_proxy = EnvGuard::set("HTTP_PROXY", "http://127.0.0.1:1");
+    let _https_proxy = EnvGuard::set("HTTPS_PROXY", "http://127.0.0.1:1");
+    let _http_proxy_lower = EnvGuard::set("http_proxy", "http://127.0.0.1:1");
+    let _https_proxy_lower = EnvGuard::set("https_proxy", "http://127.0.0.1:1");
+    let _no_proxy = EnvGuard::set("NO_PROXY", "");
+    let _no_proxy_lower = EnvGuard::set("no_proxy", "");
+
+    let dir = tempfile::tempdir().unwrap();
+    let state = AppState::new_with_app_data_dir(
+        game_manager_lib::db::connection::open_in_memory().unwrap(),
+        dir.path().to_path_buf(),
+    );
+
+    let cache_v1 = r#"{ "dlss": [
+        { "version": "1.2.3.0", "version_number": 1002003000, "md5_hash": "aaa",
+          "zip_md5_hash": "bbb", "download_url": "http://x", "file_size": 1,
+          "zip_file_size": 1, "is_signature_valid": true } ],
+        "dlss_g": [], "dlss_d": [] }"#;
+    std::fs::create_dir_all(storage::root(dir.path())).unwrap();
+    std::fs::write(storage::manifest_path(dir.path()), cache_v1).unwrap();
+
+    let startup_catalog = manifest::resolve_catalog(&state, false).await.unwrap();
+    assert_eq!(startup_catalog.super_resolution[0].version, "1.2.3");
+
+    let cache_v2 = r#"{ "dlss": [
+        { "version": "2.3.4.0", "version_number": 2003004000, "md5_hash": "ccc",
+          "zip_md5_hash": "ddd", "download_url": "http://y", "file_size": 1,
+          "zip_file_size": 1, "is_signature_valid": true } ],
+        "dlss_g": [], "dlss_d": [] }"#;
+    std::fs::write(storage::manifest_path(dir.path()), cache_v2).unwrap();
+
+    let refreshed_catalog = manifest::resolve_catalog(&state, true).await.unwrap();
+    assert_eq!(refreshed_catalog.source, CatalogSource::Cache);
+    assert_eq!(refreshed_catalog.super_resolution[0].version, "2.3.4");
+
+    let cache_v3 = r#"{ "dlss": [
+        { "version": "3.4.5.0", "version_number": 3004005000, "md5_hash": "eee",
+          "zip_md5_hash": "fff", "download_url": "http://z", "file_size": 1,
+          "zip_file_size": 1, "is_signature_valid": true } ],
+        "dlss_g": [], "dlss_d": [] }"#;
+    std::fs::write(storage::manifest_path(dir.path()), cache_v3).unwrap();
+
+    let second_refresh = manifest::resolve_catalog(&state, true).await.unwrap();
+    assert_eq!(second_refresh.super_resolution[0].version, "2.3.4");
 }
 
 #[tokio::test]
@@ -335,8 +411,8 @@ fn nvapi_probe_does_not_panic() {
 
 #[test]
 fn preset_options_load_for_both_kinds() {
-    use game_manager_lib::domain::PresetKind;
     use game_manager_lib::dlss::nvapi::presets::preset_options;
+    use game_manager_lib::domain::PresetKind;
 
     let sr = preset_options(PresetKind::Dlss).unwrap();
     assert!(sr.iter().any(|p| p.name == "Default" && p.value == 0));

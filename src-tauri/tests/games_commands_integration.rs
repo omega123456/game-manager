@@ -228,23 +228,39 @@ fn get_play_now_game_prefers_cached_setting_and_falls_back_to_recent_session() {
         })
         .unwrap();
 
-    let fallback = get_play_now_game_impl(&state).unwrap().expect("fallback game");
+    let fallback = get_play_now_game_impl(&state)
+        .unwrap()
+        .expect("fallback game");
     assert_eq!(fallback.id, balatro.id);
 
     state
-        .with_db(|conn| game_manager_lib::db::repo::settings::set(conn, "last_played_game_id", &alan.id.to_string()))
+        .with_db(|conn| {
+            game_manager_lib::db::repo::settings::set(
+                conn,
+                "last_played_game_id",
+                &alan.id.to_string(),
+            )
+        })
         .unwrap();
-    let cached = get_play_now_game_impl(&state).unwrap().expect("cached game");
+    let cached = get_play_now_game_impl(&state)
+        .unwrap()
+        .expect("cached game");
     assert_eq!(cached.id, alan.id);
 
     state
-        .with_db(|conn| game_manager_lib::db::repo::settings::set(conn, "last_played_game_id", "999999"))
+        .with_db(|conn| {
+            game_manager_lib::db::repo::settings::set(conn, "last_played_game_id", "999999")
+        })
         .unwrap();
-    let stale = get_play_now_game_impl(&state).unwrap().expect("stale fallback");
+    let stale = get_play_now_game_impl(&state)
+        .unwrap()
+        .expect("stale fallback");
     assert_eq!(stale.id, balatro.id);
 
     delete_game_impl(&state, balatro.id).unwrap();
-    let deleted_fallback = get_play_now_game_impl(&state).unwrap().expect("deleted fallback");
+    let deleted_fallback = get_play_now_game_impl(&state)
+        .unwrap()
+        .expect("deleted fallback");
     assert_eq!(deleted_fallback.id, alan.id);
 }
 
@@ -273,7 +289,9 @@ fn get_play_now_game_skips_orphaned_play_session_rows() {
         })
         .unwrap();
 
-    let play_now = get_play_now_game_impl(&state).unwrap().expect("live fallback");
+    let play_now = get_play_now_game_impl(&state)
+        .unwrap()
+        .expect("live fallback");
     assert_eq!(play_now.id, live.id);
 }
 

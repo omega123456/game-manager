@@ -130,7 +130,10 @@ fn filters_by_search_term_across_message_and_category() {
     // Match on category substring.
     let by_category = list_logs_impl(&state, 1, LOG_PAGE_SIZE, None, Some("steam")).unwrap();
     assert_eq!(by_category.total, 2);
-    assert!(by_category.entries.iter().all(|e| e.category == "steam-script"));
+    assert!(by_category
+        .entries
+        .iter()
+        .all(|e| e.category == "steam-script"));
 
     // Match on message substring (msg-3 in both categories => 2 rows).
     let by_message = list_logs_impl(&state, 1, LOG_PAGE_SIZE, None, Some("msg-3")).unwrap();

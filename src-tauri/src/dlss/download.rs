@@ -14,8 +14,8 @@ use std::sync::{Mutex, OnceLock};
 use futures_util::StreamExt;
 use md5::{Digest, Md5};
 
-use crate::domain::{DllType, DownloadProgress};
 use crate::dlss::{manifest, storage, DlssError, DlssResult};
+use crate::domain::{DllType, DownloadProgress};
 use crate::state::AppState;
 
 /// A sink for download-progress updates. The command layer implements this over
@@ -122,8 +122,10 @@ async fn run_download(
 ) -> DlssResult<()> {
     clear_cancelled(dll_type, &entry.version);
     storage::ensure_temp_dir(app_data_dir)?;
-    let temp_path = storage::temp_dir(app_data_dir)
-        .join(format!("{}.zip", storage::version_key(&entry.version, &entry.md5)));
+    let temp_path = storage::temp_dir(app_data_dir).join(format!(
+        "{}.zip",
+        storage::version_key(&entry.version, &entry.md5)
+    ));
 
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(600))
@@ -154,11 +156,20 @@ async fn run_download(
         hasher.update(&chunk);
         bytes.extend_from_slice(&chunk);
         downloaded += chunk.len() as u64;
-        sink.emit(&progress(dll_type, &entry.version, downloaded, total, false));
+        sink.emit(&progress(
+            dll_type,
+            &entry.version,
+            downloaded,
+            total,
+            false,
+        ));
     }
 
     let digest = hasher.finalize();
-    let actual = digest.iter().map(|b| format!("{b:02x}")).collect::<String>();
+    let actual = digest
+        .iter()
+        .map(|b| format!("{b:02x}"))
+        .collect::<String>();
 
     std::fs::write(&temp_path, &bytes)?;
     let store_result = store_zip_bytes(app_data_dir, dll_type, entry, &bytes, &actual);
@@ -219,9 +230,8 @@ fn extract_dll(
         }
     }
 
-    let dll_bytes = dll_bytes.ok_or_else(|| {
-        DlssError::Invalid(format!("{target_name} not found in downloaded zip"))
-    })?;
+    let dll_bytes = dll_bytes
+        .ok_or_else(|| DlssError::Invalid(format!("{target_name} not found in downloaded zip")))?;
 
     if !entry.md5.is_empty() {
         let actual = super::detect::md5_hex(&dll_bytes);
@@ -245,15 +255,17 @@ fn extract_dll(
 fn cleanup_temp(path: &Path) {
     if path.exists() {
         if let Err(err) = std::fs::remove_file(path) {
-            tracing::warn!(category = "dlss", "remove temp download {path:?} failed: {err}");
+            tracing::warn!(
+                category = "dlss",
+                "remove temp download {path:?} failed: {err}"
+            );
         }
     }
 }
 
 /// Load the catalog (cache → static) without forcing a remote refresh.
 async fn load_catalog(state: &AppState) -> DlssResult<crate::domain::DllCatalog> {
-    let app_data_dir = state.app_data_dir().to_path_buf();
-    manifest::build_catalog(&app_data_dir, false).await
+    manifest::resolve_catalog(state, false).await
 }
 
 /// Build an in-progress event.

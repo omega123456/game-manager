@@ -9,10 +9,8 @@ use std::path::{Path, PathBuf};
 
 use game_manager_lib::db::connection::open_in_memory;
 use game_manager_lib::db::repo::games::{self, NewGame};
+use game_manager_lib::dlss::detect::{self, DllIdentity, FileVersionReader, RealFileVersionReader};
 use game_manager_lib::domain::{CatalogSource, DllCatalog, DllType, DllVersion, MonitorMode};
-use game_manager_lib::dlss::detect::{
-    self, DllIdentity, FileVersionReader, RealFileVersionReader,
-};
 use game_manager_lib::state::AppState;
 use tempfile::TempDir;
 
@@ -81,10 +79,7 @@ fn new_game(launch_target: &str) -> NewGame {
 #[test]
 fn resolve_folder_prefers_override() {
     let dir = TempDir::new().unwrap();
-    let resolved = detect::resolve_folder(
-        Some(dir.path().to_str().unwrap()),
-        "steam://run/123",
-    );
+    let resolved = detect::resolve_folder(Some(dir.path().to_str().unwrap()), "steam://run/123");
     assert_eq!(resolved, Some(dir.path().to_path_buf()));
 }
 
@@ -143,7 +138,10 @@ fn detect_in_folder_matches_catalog_md5() {
     let mut map = HashMap::new();
     map.insert(
         dll.clone(),
-        DllIdentity { md5: md5.clone(), file_version: "3.7.0.0".into() },
+        DllIdentity {
+            md5: md5.clone(),
+            file_version: "3.7.0.0".into(),
+        },
     );
     let reader = FakeReader { map };
 
@@ -164,7 +162,10 @@ fn detect_in_folder_falls_back_to_file_version() {
     let mut map = HashMap::new();
     map.insert(
         dll.clone(),
-        DllIdentity { md5: "ffff".into(), file_version: "2.5.1.0".into() },
+        DllIdentity {
+            md5: "ffff".into(),
+            file_version: "2.5.1.0".into(),
+        },
     );
     let reader = FakeReader { map };
     let summary = detect::detect_in_folder(dir.path(), &catalog, &reader).unwrap();
@@ -190,7 +191,13 @@ fn scan_game_with_persists_state() {
 
     let catalog = catalog_with(sr_version(&md5));
     let mut map = HashMap::new();
-    map.insert(dll, DllIdentity { md5, file_version: "3.7.0.0".into() });
+    map.insert(
+        dll,
+        DllIdentity {
+            md5,
+            file_version: "3.7.0.0".into(),
+        },
+    );
     let reader = FakeReader { map };
 
     let result = detect::scan_game_with(&st, game_id, &catalog, &reader).unwrap();
@@ -214,7 +221,9 @@ fn scan_game_with_no_folder_yields_empty_state() {
         .with_db(|c| games::create(c, &new_game("steam://run/9")))
         .unwrap();
     let catalog = catalog_with(sr_version("abc"));
-    let reader = FakeReader { map: HashMap::new() };
+    let reader = FakeReader {
+        map: HashMap::new(),
+    };
     let result = detect::scan_game_with(&st, game_id, &catalog, &reader).unwrap();
     assert!(result.super_resolution.is_none());
     assert!(result.folder_resolved.is_none());
@@ -241,7 +250,13 @@ fn scan_library_with_scans_all_games() {
 
     let catalog = catalog_with(sr_version(&md5));
     let mut map = HashMap::new();
-    map.insert(dll, DllIdentity { md5, file_version: "3.7.0.0".into() });
+    map.insert(
+        dll,
+        DllIdentity {
+            md5,
+            file_version: "3.7.0.0".into(),
+        },
+    );
     let reader = FakeReader { map };
 
     let states = detect::scan_library_with(&st, &catalog, &reader).unwrap();
@@ -281,7 +296,10 @@ async fn download_already_present_reports_done() {
     download_version_impl(&st, DllType::SuperResolution, "3.7", &sink)
         .await
         .unwrap();
-    assert!(*sink.0.lock().unwrap(), "should report done for present DLL");
+    assert!(
+        *sink.0.lock().unwrap(),
+        "should report done for present DLL"
+    );
 }
 
 #[tokio::test]
@@ -341,8 +359,7 @@ fn build_zip(name: &str, content: &[u8]) -> Vec<u8> {
     let mut buf = std::io::Cursor::new(Vec::new());
     {
         let mut writer = zip::ZipWriter::new(&mut buf);
-        let opts = SimpleFileOptions::default()
-            .compression_method(zip::CompressionMethod::Stored);
+        let opts = SimpleFileOptions::default().compression_method(zip::CompressionMethod::Stored);
         writer.start_file(name, opts).unwrap();
         writer.write_all(content).unwrap();
         writer.finish().unwrap();
@@ -384,7 +401,8 @@ fn store_zip_bytes_extracts_and_stores() {
     )
     .unwrap();
 
-    let stored = storage::local_dll_path(app_data.path(), DllType::SuperResolution, "3.7", &entry.md5);
+    let stored =
+        storage::local_dll_path(app_data.path(), DllType::SuperResolution, "3.7", &entry.md5);
     assert_eq!(std::fs::read(stored).unwrap(), dll_content);
 }
 
@@ -506,7 +524,8 @@ async fn download_version_streams_verifies_and_stores() {
     let guard = sink.0.lock().unwrap();
     assert!(guard.0 >= 2, "expected multiple progress events");
     assert!(guard.1, "expected a done event");
-    let stored = storage::local_dll_path(app_data.path(), DllType::SuperResolution, "3.7", &entry.md5);
+    let stored =
+        storage::local_dll_path(app_data.path(), DllType::SuperResolution, "3.7", &entry.md5);
     assert_eq!(std::fs::read(stored).unwrap(), dll_content);
 }
 
@@ -605,10 +624,7 @@ fn detect_in_folder_finds_frame_generation_dll() {
     );
     let reader = FakeReader { map };
     let summary = detect::detect_in_folder(dir.path(), &catalog, &reader).unwrap();
-    assert_eq!(
-        summary.frame_generation.as_ref().unwrap().version,
-        "1.1"
-    );
+    assert_eq!(summary.frame_generation.as_ref().unwrap().version, "1.1");
 }
 
 #[test]
@@ -625,7 +641,9 @@ fn scan_library_impl_runs_over_all_games() {
 
 #[test]
 fn clear_cancelled_clears_a_pending_download_cancel() {
-    use game_manager_lib::dlss::download::{cancel_download_impl, clear_cancelled, is_cancel_pending};
+    use game_manager_lib::dlss::download::{
+        cancel_download_impl, clear_cancelled, is_cancel_pending,
+    };
 
     cancel_download_impl(
         &state_with_app_data(TempDir::new().unwrap().path()),

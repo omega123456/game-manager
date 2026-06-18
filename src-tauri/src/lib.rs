@@ -11,8 +11,8 @@ pub mod dlss;
 pub mod domain;
 pub mod error;
 pub mod keep_awake;
-pub mod logging;
 pub mod launch;
+pub mod logging;
 pub mod monitor;
 pub mod priority;
 pub mod state;
@@ -178,17 +178,11 @@ pub fn run() {
                 match db::connection::open(&db_path) {
                     Ok(conn) => {
                         if let Err(err) = logging::run_retention(&conn) {
-                            tracing::warn!(
-                                category = "logging",
-                                "daily retention failed: {err}"
-                            );
+                            tracing::warn!(category = "logging", "daily retention failed: {err}");
                         }
                     }
                     Err(err) => {
-                        tracing::warn!(
-                            category = "logging",
-                            "daily retention open failed: {err}"
-                        );
+                        tracing::warn!(category = "logging", "daily retention open failed: {err}");
                     }
                 }
             });

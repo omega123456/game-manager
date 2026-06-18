@@ -11,8 +11,8 @@
 
 use std::path::{Path, PathBuf};
 
-use crate::domain::{DetectedDll, DllType, GameDlssState};
 use crate::dlss::{manifest, DlssError, DlssResult};
+use crate::domain::{DetectedDll, DllType, GameDlssState};
 use crate::state::AppState;
 
 /// The identity of a DLL file read from disk.
@@ -331,7 +331,11 @@ pub fn scan_game_with(
 
 /// Re-scan a single game's folder and persist the detected versions.
 pub fn scan_game_impl(state: &AppState, game_id: i64) -> DlssResult<GameDlssState> {
-    tracing::debug!(category = "dlss", game_id, "dlss_scan_game: starting folder scan");
+    tracing::debug!(
+        category = "dlss",
+        game_id,
+        "dlss_scan_game: starting folder scan"
+    );
     let catalog = load_catalog(state)?;
     let reader = RealFileVersionReader;
     scan_game_with(state, game_id, &catalog, &reader)
@@ -364,7 +368,10 @@ pub fn scan_library_with(
 
 /// Re-scan every applicable game and return the refreshed states.
 pub fn scan_library_impl(state: &AppState) -> DlssResult<Vec<GameDlssState>> {
-    tracing::debug!(category = "dlss", "dlss_scan_library: starting full library scan");
+    tracing::debug!(
+        category = "dlss",
+        "dlss_scan_library: starting full library scan"
+    );
     let catalog = load_catalog(state)?;
     let reader = RealFileVersionReader;
     let states = scan_library_with(state, &catalog, &reader)?;
@@ -386,9 +393,15 @@ pub fn scan_library_impl(state: &AppState) -> DlssResult<Vec<GameDlssState>> {
 
 /// Load the catalog (cache → static) for MD5 matching during a scan.
 fn load_catalog(state: &AppState) -> DlssResult<crate::domain::DllCatalog> {
-    let app_data_dir = state.app_data_dir().to_path_buf();
-    match manifest::load_cache(&app_data_dir)? {
-        Some(catalog) => Ok(catalog),
-        None => manifest::load_static(),
+    if let Some((mut catalog, _refresh_attempted)) = state.dlss_catalog_get() {
+        manifest::apply_downloaded_flags(state.app_data_dir(), &mut catalog);
+        return Ok(catalog);
     }
+
+    let catalog = match manifest::load_cache(state.app_data_dir())? {
+        Some(catalog) => catalog,
+        None => manifest::load_static()?,
+    };
+    state.dlss_catalog_set(catalog.clone(), false);
+    Ok(catalog)
 }

@@ -50,6 +50,12 @@ describe('buildVersionOptions', () => {
     expect(downloaded.map((o) => o.value)).toEqual(['3.7', '3.5'])
     expect(available.map((o) => o.value)).toEqual(['3.8'])
   })
+
+  it('drops duplicate version values from the same catalog list', () => {
+    const options = buildVersionOptions([v('3.8', false), v('3.8', true), v('3.7', true)])
+    expect(options.filter((option) => option.value === '3.8')).toHaveLength(1)
+    expect(options.filter((option) => option.value === '3.7')).toHaveLength(1)
+  })
 })
 
 describe('findVersion', () => {

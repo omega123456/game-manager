@@ -99,7 +99,12 @@ fn new_game(name: &str) -> games::NewGame {
     }
 }
 
-fn normal(name: &str, before: PhaseConfig, after: PhaseConfig, on_exit: PhaseConfig) -> scripts::NewScript {
+fn normal(
+    name: &str,
+    before: PhaseConfig,
+    after: PhaseConfig,
+    on_exit: PhaseConfig,
+) -> scripts::NewScript {
     scripts::NewScript {
         name: name.to_string(),
         description: None,
@@ -166,13 +171,25 @@ async fn runs_all_phases_emits_full_sequence_and_writes_session() {
         );
         cursor = phases.iter().position(|p| *p == phase).unwrap() + 1;
     }
-    assert!(recorder.ended_phase().is_some(), "an ended event must be emitted");
+    assert!(
+        recorder.ended_phase().is_some(),
+        "an ended event must be emitted"
+    );
 
     // An ended event was emitted exactly once.
-    assert_eq!(recorder.names().iter().filter(|n| *n == EVENT_ENDED).count(), 1);
+    assert_eq!(
+        recorder
+            .names()
+            .iter()
+            .filter(|n| *n == EVENT_ENDED)
+            .count(),
+        1
+    );
 
     // A session row was written and closed.
-    let sessions = state.with_db(|conn| sessions::list_for_game(conn, game_id)).unwrap();
+    let sessions = state
+        .with_db(|conn| sessions::list_for_game(conn, game_id))
+        .unwrap();
     assert_eq!(sessions.len(), 1);
     assert!(sessions[0].ended_at.is_some());
     let last_played = state
@@ -181,17 +198,22 @@ async fn runs_all_phases_emits_full_sequence_and_writes_session() {
     assert_eq!(last_played, Some(game_id.to_string()));
 
     // Each phase's script result was logged.
-    let logs = state.with_db(|conn| {
-        game_manager_lib::db::repo::logs::list_recent(conn, 100)
-    }).unwrap();
-    let ran_logs = logs.iter().filter(|l| l.message.contains("'Tri' ran")).count();
+    let logs = state
+        .with_db(|conn| game_manager_lib::db::repo::logs::list_recent(conn, 100))
+        .unwrap();
+    let ran_logs = logs
+        .iter()
+        .filter(|l| l.message.contains("'Tri' ran"))
+        .count();
     assert_eq!(ran_logs, 3, "expected one ran-log per phase");
 }
 
 #[tokio::test]
 async fn normal_script_calls_required_utility_function() {
     let state = state();
-    let game_id = state.with_db(|conn| games::create(conn, &new_game("UtilGame"))).unwrap();
+    let game_id = state
+        .with_db(|conn| games::create(conn, &new_game("UtilGame")))
+        .unwrap();
 
     let util_id = state
         .with_db(|conn| {
@@ -213,13 +235,23 @@ async fn normal_script_calls_required_utility_function() {
 
     let script_id = state
         .with_db(|conn| {
-            scripts::create(conn, &normal("Greeter", inline("Write-Output (Get-Greeting)"), none(), none()))
+            scripts::create(
+                conn,
+                &normal(
+                    "Greeter",
+                    inline("Write-Output (Get-Greeting)"),
+                    none(),
+                    none(),
+                ),
+            )
         })
         .unwrap();
     state
         .with_db(|conn| scripts::set_dependencies(conn, script_id, &[util_id]))
         .unwrap();
-    state.with_db(|conn| games::set_scripts(conn, game_id, &[script_id])).unwrap();
+    state
+        .with_db(|conn| games::set_scripts(conn, game_id, &[script_id]))
+        .unwrap();
 
     let recorder = Recorder::default();
     let monitor: Arc<dyn Monitor> = Arc::new(StubMonitor::immediate());
@@ -227,24 +259,36 @@ async fn normal_script_calls_required_utility_function() {
         .await
         .unwrap();
 
-    let logs = state.with_db(|conn| game_manager_lib::db::repo::logs::list_recent(conn, 100)).unwrap();
+    let logs = state
+        .with_db(|conn| game_manager_lib::db::repo::logs::list_recent(conn, 100))
+        .unwrap();
     let detail_has_util = logs
         .iter()
         .any(|l| l.details.as_deref().is_some_and(|d| d.contains("hi-util")));
-    assert!(detail_has_util, "utility function output should be captured in logs");
+    assert!(
+        detail_has_util,
+        "utility function output should be captured in logs"
+    );
 }
 
 #[tokio::test]
 async fn failing_script_does_not_halt_pipeline() {
     let state = state();
-    let game_id = state.with_db(|conn| games::create(conn, &new_game("FailGame"))).unwrap();
+    let game_id = state
+        .with_db(|conn| games::create(conn, &new_game("FailGame")))
+        .unwrap();
 
     // A failing before-script + a succeeding on-exit script.
     let failing = state
         .with_db(|conn| scripts::create(conn, &normal("Boom", inline("exit 7"), none(), none())))
         .unwrap();
     let cleanup = state
-        .with_db(|conn| scripts::create(conn, &normal("Cleanup", none(), none(), inline("Write-Output 'cleaned'"))))
+        .with_db(|conn| {
+            scripts::create(
+                conn,
+                &normal("Cleanup", none(), none(), inline("Write-Output 'cleaned'")),
+            )
+        })
         .unwrap();
     state
         .with_db(|conn| games::set_scripts(conn, game_id, &[failing, cleanup]))
@@ -262,7 +306,9 @@ async fn failing_script_does_not_halt_pipeline() {
     assert_eq!(recorder.ended_phase(), Some(LaunchPhase::Ended));
     assert!(recorder.names().iter().any(|n| n == EVENT_ERROR));
 
-    let logs = state.with_db(|conn| game_manager_lib::db::repo::logs::list_recent(conn, 100)).unwrap();
+    let logs = state
+        .with_db(|conn| game_manager_lib::db::repo::logs::list_recent(conn, 100))
+        .unwrap();
     assert!(logs.iter().any(|l| l.message.contains("'Cleanup' ran")));
     assert!(logs
         .iter()
@@ -272,11 +318,15 @@ async fn failing_script_does_not_halt_pipeline() {
 #[tokio::test]
 async fn cancel_before_start_aborts_without_session() {
     let state = state();
-    let game_id = state.with_db(|conn| games::create(conn, &new_game("CancelEarly"))).unwrap();
+    let game_id = state
+        .with_db(|conn| games::create(conn, &new_game("CancelEarly")))
+        .unwrap();
 
     // A monitor that would wait a long time for start; cancel pre-empts it.
-    let monitor: Arc<dyn Monitor> =
-        Arc::new(StubMonitor::with_delays(Duration::from_secs(30), Duration::ZERO));
+    let monitor: Arc<dyn Monitor> = Arc::new(StubMonitor::with_delays(
+        Duration::from_secs(30),
+        Duration::ZERO,
+    ));
     let cancel = CancelToken::new();
     cancel.cancel();
 
@@ -286,12 +336,20 @@ async fn cancel_before_start_aborts_without_session() {
         .unwrap();
 
     // No session opened; ended emitted with a cancel detail.
-    let sessions = state.with_db(|conn| sessions::list_for_game(conn, game_id)).unwrap();
-    assert!(sessions.is_empty(), "cancel before start must not open a session");
+    let sessions = state
+        .with_db(|conn| sessions::list_for_game(conn, game_id))
+        .unwrap();
+    assert!(
+        sessions.is_empty(),
+        "cancel before start must not open a session"
+    );
     let last_played = state
         .with_db(|conn| game_manager_lib::db::repo::settings::get(conn, "last_played_game_id"))
         .unwrap();
-    assert_eq!(last_played, None, "pre-start cancellation must not update Play Now");
+    assert_eq!(
+        last_played, None,
+        "pre-start cancellation must not update Play Now"
+    );
     let ended = recorder
         .events
         .lock()
@@ -307,11 +365,15 @@ async fn cancel_before_start_aborts_without_session() {
 #[tokio::test]
 async fn cancel_aborts_a_pending_end_wait_quickly() {
     let state = state();
-    let game_id = state.with_db(|conn| games::create(conn, &new_game("CancelWait"))).unwrap();
+    let game_id = state
+        .with_db(|conn| games::create(conn, &new_game("CancelWait")))
+        .unwrap();
 
     // Immediate start, but a very long end wait that cancel must interrupt.
-    let monitor: Arc<dyn Monitor> =
-        Arc::new(StubMonitor::with_delays(Duration::ZERO, Duration::from_secs(30)));
+    let monitor: Arc<dyn Monitor> = Arc::new(StubMonitor::with_delays(
+        Duration::ZERO,
+        Duration::from_secs(30),
+    ));
     let cancel = CancelToken::new();
     let recorder = Recorder::default();
 
@@ -331,7 +393,9 @@ async fn cancel_aborts_a_pending_end_wait_quickly() {
 
     // Session was still closed despite the cancel, and ended within the test
     // budget (far under the 30s monitor delay).
-    let sessions = state.with_db(|conn| sessions::list_for_game(conn, game_id)).unwrap();
+    let sessions = state
+        .with_db(|conn| sessions::list_for_game(conn, game_id))
+        .unwrap();
     assert_eq!(sessions.len(), 1);
     assert!(sessions[0].ended_at.is_some());
 }

@@ -15,8 +15,8 @@ use game_manager_lib::db::repo::{games, sessions};
 use game_manager_lib::domain::MonitorMode;
 use game_manager_lib::launch::cancel::CancelToken;
 use game_manager_lib::monitor::job_object::{
-    split_arguments, JobHandle, JobLauncher, JobObjectMonitor,
-    JOB_OBJECT_MSG_ACTIVE_PROCESS_ZERO, JOB_OBJECT_MSG_EXIT_PROCESS, JOB_OBJECT_MSG_NEW_PROCESS,
+    split_arguments, JobHandle, JobLauncher, JobObjectMonitor, JOB_OBJECT_MSG_ACTIVE_PROCESS_ZERO,
+    JOB_OBJECT_MSG_EXIT_PROCESS, JOB_OBJECT_MSG_NEW_PROCESS,
 };
 use game_manager_lib::monitor::{Monitor, StartOutcome};
 use game_manager_lib::state::AppState;
@@ -68,7 +68,10 @@ impl JobHandle for FakeHandle {
         Ok(self.active_processes)
     }
 
-    async fn wait_for_tree_exit(&self, cancel: &CancelToken) -> game_manager_lib::error::AppResult<bool> {
+    async fn wait_for_tree_exit(
+        &self,
+        cancel: &CancelToken,
+    ) -> game_manager_lib::error::AppResult<bool> {
         self.waited.store(true, Ordering::SeqCst);
         tokio::select! {
             _ = tokio::time::sleep(self.exit_after) => Ok(true),
@@ -144,17 +147,32 @@ async fn launches_tree_and_writes_accurate_session() {
     .with_confirm_delay(TEST_CONFIRM_DELAY);
     let cancel = CancelToken::new();
 
-    let session_id = match monitor.wait_for_start(&state, game_id, &cancel).await.unwrap() {
+    let session_id = match monitor
+        .wait_for_start(&state, game_id, &cancel)
+        .await
+        .unwrap()
+    {
         StartOutcome::Started(id) => id,
         StartOutcome::Cancelled => panic!("expected start"),
     };
-    assert_eq!(*last_target.lock().unwrap(), Some("C:/Games/Direct.exe".to_string()));
+    assert_eq!(
+        *last_target.lock().unwrap(),
+        Some("C:/Games/Direct.exe".to_string())
+    );
 
-    let elapsed = monitor.wait_for_end(&state, session_id, &cancel).await.unwrap();
+    let elapsed = monitor
+        .wait_for_end(&state, session_id, &cancel)
+        .await
+        .unwrap();
     assert!(elapsed >= 0);
-    assert!(waited.load(Ordering::SeqCst), "wait_for_tree_exit must be invoked");
+    assert!(
+        waited.load(Ordering::SeqCst),
+        "wait_for_tree_exit must be invoked"
+    );
 
-    let sessions = state.with_db(|conn| sessions::list_for_game(conn, game_id)).unwrap();
+    let sessions = state
+        .with_db(|conn| sessions::list_for_game(conn, game_id))
+        .unwrap();
     assert_eq!(sessions.len(), 1);
     assert!(sessions[0].ended_at.is_some());
 }
@@ -187,7 +205,10 @@ async fn raises_launched_process_priority_on_start() {
     })
     .with_confirm_delay(TEST_CONFIRM_DELAY);
     let cancel = CancelToken::new();
-    monitor.wait_for_start(&state, game_id, &cancel).await.unwrap();
+    monitor
+        .wait_for_start(&state, game_id, &cancel)
+        .await
+        .unwrap();
 
     assert_eq!(
         *recorder.pids.lock().unwrap(),
@@ -210,16 +231,28 @@ async fn cancellation_during_wait_still_closes_session() {
     })
     .with_confirm_delay(TEST_CONFIRM_DELAY);
     let cancel = CancelToken::new();
-    let session_id = match monitor.wait_for_start(&state, game_id, &cancel).await.unwrap() {
+    let session_id = match monitor
+        .wait_for_start(&state, game_id, &cancel)
+        .await
+        .unwrap()
+    {
         StartOutcome::Started(id) => id,
         StartOutcome::Cancelled => panic!("expected start"),
     };
     cancel.cancel();
-    let elapsed = monitor.wait_for_end(&state, session_id, &cancel).await.unwrap();
+    let elapsed = monitor
+        .wait_for_end(&state, session_id, &cancel)
+        .await
+        .unwrap();
     assert!(elapsed >= 0);
 
-    let sessions = state.with_db(|conn| sessions::list_for_game(conn, game_id)).unwrap();
-    assert!(sessions[0].ended_at.is_some(), "cancel must still close the session");
+    let sessions = state
+        .with_db(|conn| sessions::list_for_game(conn, game_id))
+        .unwrap();
+    assert!(
+        sessions[0].ended_at.is_some(),
+        "cancel must still close the session"
+    );
 }
 
 #[tokio::test]
@@ -254,14 +287,22 @@ async fn transient_tree_opens_no_session_and_skips_priority_boost() {
     .with_confirm_delay(TEST_CONFIRM_DELAY);
     let cancel = CancelToken::new();
 
-    let outcome = monitor.wait_for_start(&state, game_id, &cancel).await.unwrap();
+    let outcome = monitor
+        .wait_for_start(&state, game_id, &cancel)
+        .await
+        .unwrap();
     assert_eq!(
         outcome,
         StartOutcome::Cancelled,
         "a tree that empties during confirmation must not be treated as started"
     );
-    let sessions = state.with_db(|conn| sessions::list_for_game(conn, game_id)).unwrap();
-    assert!(sessions.is_empty(), "no session opened for a transient bootstrapper");
+    let sessions = state
+        .with_db(|conn| sessions::list_for_game(conn, game_id))
+        .unwrap();
+    assert!(
+        sessions.is_empty(),
+        "no session opened for a transient bootstrapper"
+    );
     assert!(
         recorder.pids.lock().unwrap().is_empty(),
         "priority must not be raised for a transient process"
@@ -285,9 +326,14 @@ async fn cancel_before_start_opens_no_session() {
     });
     let cancel = CancelToken::new();
     cancel.cancel();
-    let outcome = monitor.wait_for_start(&state, game_id, &cancel).await.unwrap();
+    let outcome = monitor
+        .wait_for_start(&state, game_id, &cancel)
+        .await
+        .unwrap();
     assert_eq!(outcome, StartOutcome::Cancelled);
-    let sessions = state.with_db(|conn| sessions::list_for_game(conn, game_id)).unwrap();
+    let sessions = state
+        .with_db(|conn| sessions::list_for_game(conn, game_id))
+        .unwrap();
     assert!(sessions.is_empty());
 }
 
@@ -305,7 +351,9 @@ async fn launch_failure_propagates() {
     let cancel = CancelToken::new();
     let result = monitor.wait_for_start(&state, game_id, &cancel).await;
     assert!(result.is_err(), "a failed launch must surface as an error");
-    let sessions = state.with_db(|conn| sessions::list_for_game(conn, game_id)).unwrap();
+    let sessions = state
+        .with_db(|conn| sessions::list_for_game(conn, game_id))
+        .unwrap();
     assert!(sessions.is_empty(), "no session when launch fails");
 }
 
@@ -322,11 +370,18 @@ async fn wait_for_end_without_parked_handle_still_closes() {
         active_processes: 1,
     });
     // Open a session directly, then call wait_for_end with no parked handle.
-    let session_id = state.with_db(|conn| sessions::start(conn, game_id)).unwrap();
+    let session_id = state
+        .with_db(|conn| sessions::start(conn, game_id))
+        .unwrap();
     let cancel = CancelToken::new();
-    let elapsed = monitor.wait_for_end(&state, session_id, &cancel).await.unwrap();
+    let elapsed = monitor
+        .wait_for_end(&state, session_id, &cancel)
+        .await
+        .unwrap();
     assert!(elapsed >= 0);
-    let sessions = state.with_db(|conn| sessions::list_for_game(conn, game_id)).unwrap();
+    let sessions = state
+        .with_db(|conn| sessions::list_for_game(conn, game_id))
+        .unwrap();
     assert!(sessions[0].ended_at.is_some());
 }
 
@@ -359,14 +414,23 @@ async fn windows_times_a_real_tree_to_exit() {
     // than the grace period, so it confirms rather than being treated transient.
     let monitor = windows_monitor().with_confirm_delay(Duration::from_millis(200));
     let cancel = CancelToken::new();
-    let session_id = match monitor.wait_for_start(&state, game_id, &cancel).await.unwrap() {
+    let session_id = match monitor
+        .wait_for_start(&state, game_id, &cancel)
+        .await
+        .unwrap()
+    {
         StartOutcome::Started(id) => id,
         StartOutcome::Cancelled => panic!("expected start"),
     };
-    let elapsed = monitor.wait_for_end(&state, session_id, &cancel).await.unwrap();
+    let elapsed = monitor
+        .wait_for_end(&state, session_id, &cancel)
+        .await
+        .unwrap();
     assert!(elapsed >= 0);
 
-    let sessions = state.with_db(|conn| sessions::list_for_game(conn, game_id)).unwrap();
+    let sessions = state
+        .with_db(|conn| sessions::list_for_game(conn, game_id))
+        .unwrap();
     assert_eq!(sessions.len(), 1);
     assert!(sessions[0].ended_at.is_some());
 }

@@ -125,7 +125,10 @@ pub async fn run_launch(
     let resolved = state.with_db(|conn| resolver::resolve_for_game(conn, game_id))?;
     let scripts_by_id = state.with_db(|conn| {
         let all = crate::db::repo::scripts::list(conn)?;
-        Ok(all.into_iter().map(|s| (s.id, s)).collect::<HashMap<_, _>>())
+        Ok(all
+            .into_iter()
+            .map(|s| (s.id, s))
+            .collect::<HashMap<_, _>>())
     })?;
 
     let mut lifecycle = Lifecycle {
@@ -138,7 +141,14 @@ pub async fn run_launch(
 
     // Phase 1 — Before Launch.
     lifecycle.emit_phase(LaunchPhase::Before, None, None);
-    run_phase_logged(state, &mut lifecycle, LaunchPhase::Before, &resolved, &scripts_by_id).await;
+    run_phase_logged(
+        state,
+        &mut lifecycle,
+        LaunchPhase::Before,
+        &resolved,
+        &scripts_by_id,
+    )
+    .await;
 
     // Phase 2 — wait for the process to appear.
     lifecycle.emit_phase(LaunchPhase::WaitingForProcess, None, None);
@@ -146,7 +156,13 @@ pub async fn run_launch(
     let session_id = match start {
         StartOutcome::Started(id) => id,
         StartOutcome::Cancelled => {
-            log_via_state(state, LogLevel::Warn, game_id, None, "launch cancelled before start");
+            log_via_state(
+                state,
+                LogLevel::Warn,
+                game_id,
+                None,
+                "launch cancelled before start",
+            );
             lifecycle.emit_ended(Some("cancelled".to_string()), None);
             return Ok(lifecycle.failed_count);
         }
@@ -157,14 +173,28 @@ pub async fn run_launch(
 
     // Phase 3 — playing; run the After-Process-Detected scripts.
     lifecycle.emit_phase(LaunchPhase::Playing, None, Some(0));
-    run_phase_logged(state, &mut lifecycle, LaunchPhase::Playing, &resolved, &scripts_by_id).await;
+    run_phase_logged(
+        state,
+        &mut lifecycle,
+        LaunchPhase::Playing,
+        &resolved,
+        &scripts_by_id,
+    )
+    .await;
 
     // Wait for the process to exit (or cancellation), closing the session.
     let elapsed = monitor.wait_for_end(state, session_id, &cancel).await?;
 
     // Phase 4 — On Exit cleanup (always runs, even on cancel — best-effort).
     lifecycle.emit_phase(LaunchPhase::OnExit, None, Some(elapsed));
-    run_phase_logged(state, &mut lifecycle, LaunchPhase::OnExit, &resolved, &scripts_by_id).await;
+    run_phase_logged(
+        state,
+        &mut lifecycle,
+        LaunchPhase::OnExit,
+        &resolved,
+        &scripts_by_id,
+    )
+    .await;
 
     // Done.
     let ended_detail = if cancel.is_cancelled() {
@@ -177,7 +207,10 @@ pub async fn run_launch(
         LogLevel::Info,
         game_id,
         None,
-        &format!("launch ended ({elapsed}s, {} failed)", lifecycle.failed_count),
+        &format!(
+            "launch ended ({elapsed}s, {} failed)",
+            lifecycle.failed_count
+        ),
     );
     lifecycle.emit_ended(ended_detail, Some(elapsed));
     Ok(lifecycle.failed_count)
@@ -262,7 +295,15 @@ fn log_via_state(
     message: &str,
 ) {
     let _ = state.with_db(|conn| {
-        logging::write_log(conn, level, "launch", message, Some(game_id), script_id, None)
+        logging::write_log(
+            conn,
+            level,
+            "launch",
+            message,
+            Some(game_id),
+            script_id,
+            None,
+        )
     });
 }
 

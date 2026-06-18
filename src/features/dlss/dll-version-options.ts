@@ -30,6 +30,10 @@ export function formatApproxSize(bytes: number): string {
  * downloaded) versions. Available entries carry their approximate zip size.
  */
 export function buildVersionOptions(versions: DllVersion[]): ComboboxOption[] {
+  const uniqueVersions = versions.filter(
+    (version, index, all) =>
+      all.findIndex((candidate) => candidate.version === version.version) === index
+  )
   const options: ComboboxOption[] = [
     {
       value: SYSTEM_DEFAULT_VALUE,
@@ -38,7 +42,7 @@ export function buildVersionOptions(versions: DllVersion[]): ComboboxOption[] {
     },
   ]
 
-  for (const version of versions) {
+  for (const version of uniqueVersions) {
     if (version.isDownloaded) {
       options.push({
         value: version.version,
@@ -48,7 +52,7 @@ export function buildVersionOptions(versions: DllVersion[]): ComboboxOption[] {
     }
   }
 
-  for (const version of versions) {
+  for (const version of uniqueVersions) {
     if (!version.isDownloaded) {
       options.push({
         value: version.version,

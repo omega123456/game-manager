@@ -88,7 +88,10 @@ impl Monitor for StubMonitor {
         state.with_db(|conn| {
             sessions::end(conn, session_id)?;
             let session = sessions::get(conn, session_id)?;
-            Ok(elapsed_seconds(&session.started_at, session.ended_at.as_deref()))
+            Ok(elapsed_seconds(
+                &session.started_at,
+                session.ended_at.as_deref(),
+            ))
         })
     }
 }

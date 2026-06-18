@@ -9,12 +9,12 @@ use std::path::Path;
 use game_manager_lib::db::connection::open_in_memory;
 use game_manager_lib::db::repo::games::{self, NewGame};
 use game_manager_lib::dlss::detect::{DetectionResult, DetectionSummary};
-use game_manager_lib::domain::{DetectedDll, DllType, MonitorMode};
 use game_manager_lib::dlss::storage;
 use game_manager_lib::dlss::swap::{
     apply_to_all_impl, apply_to_game_impl, count_applicable_impl, ApplyProgressSink,
     NoopApplyProgressSink, SwapTarget,
 };
+use game_manager_lib::domain::{DetectedDll, DllType, MonitorMode};
 use game_manager_lib::state::AppState;
 use tempfile::TempDir;
 
@@ -151,9 +151,14 @@ async fn system_default_restores_backup() {
         .unwrap();
     seed_sr_detection(&st, game_id, &game_dll);
 
-    apply_to_game_impl(&st, game_id, DllType::SuperResolution, SwapTarget::SystemDefault)
-        .await
-        .unwrap();
+    apply_to_game_impl(
+        &st,
+        game_id,
+        DllType::SuperResolution,
+        SwapTarget::SystemDefault,
+    )
+    .await
+    .unwrap();
 
     assert_eq!(std::fs::read(&game_dll).unwrap(), b"original");
     assert!(!backup.exists(), "backup should be consumed on reset");
@@ -179,13 +184,23 @@ async fn backup_is_created_only_once() {
         .unwrap();
     seed_sr_detection(&st, game_id, &game_dll);
 
-    apply_to_game_impl(&st, game_id, DllType::SuperResolution, SwapTarget::Version("3.7".into()))
-        .await
-        .unwrap();
+    apply_to_game_impl(
+        &st,
+        game_id,
+        DllType::SuperResolution,
+        SwapTarget::Version("3.7".into()),
+    )
+    .await
+    .unwrap();
     // Apply again — backup must still be the very first original.
-    apply_to_game_impl(&st, game_id, DllType::SuperResolution, SwapTarget::Version("3.7".into()))
-        .await
-        .unwrap();
+    apply_to_game_impl(
+        &st,
+        game_id,
+        DllType::SuperResolution,
+        SwapTarget::Version("3.7".into()),
+    )
+    .await
+    .unwrap();
 
     let backup = game_dir.path().join("nvngx_dlss.dll.dlsss");
     assert_eq!(std::fs::read(&backup).unwrap(), b"original");
@@ -217,7 +232,9 @@ async fn apply_to_all_is_resilient() {
         .unwrap();
     seed_sr_detection(&st, bad_id, Path::new("Z:/missing/nvngx_dlss.dll"));
 
-    let recorder = Recorder { seen: std::sync::Mutex::new(vec![]) };
+    let recorder = Recorder {
+        seen: std::sync::Mutex::new(vec![]),
+    };
     let batch = apply_to_all_impl(&st, DllType::SuperResolution, "3.7", &recorder)
         .await
         .unwrap();
@@ -287,9 +304,14 @@ async fn apply_resolves_destination_without_cached_detection() {
         .unwrap();
     // Intentionally do NOT upsert a detection row.
 
-    apply_to_game_impl(&st, game_id, DllType::SuperResolution, SwapTarget::Version("3.7".into()))
-        .await
-        .unwrap();
+    apply_to_game_impl(
+        &st,
+        game_id,
+        DllType::SuperResolution,
+        SwapTarget::Version("3.7".into()),
+    )
+    .await
+    .unwrap();
     assert_eq!(std::fs::read(&game_dll).unwrap(), content);
 }
 
@@ -311,9 +333,14 @@ async fn apply_creates_dll_when_folder_has_none() {
         .with_db(|c| games::create(c, &new_game(exe.to_str().unwrap())))
         .unwrap();
 
-    apply_to_game_impl(&st, game_id, DllType::SuperResolution, SwapTarget::Version("3.7".into()))
-        .await
-        .unwrap();
+    apply_to_game_impl(
+        &st,
+        game_id,
+        DllType::SuperResolution,
+        SwapTarget::Version("3.7".into()),
+    )
+    .await
+    .unwrap();
     let dll = game_dir.path().join("nvngx_dlss.dll");
     assert_eq!(std::fs::read(&dll).unwrap(), content);
 }
@@ -335,9 +362,14 @@ async fn system_default_without_backup_is_noop_ok() {
     seed_sr_detection(&st, game_id, &game_dll);
 
     // No .dlsss backup exists → reset is a no-op success.
-    apply_to_game_impl(&st, game_id, DllType::SuperResolution, SwapTarget::SystemDefault)
-        .await
-        .unwrap();
+    apply_to_game_impl(
+        &st,
+        game_id,
+        DllType::SuperResolution,
+        SwapTarget::SystemDefault,
+    )
+    .await
+    .unwrap();
     assert_eq!(std::fs::read(&game_dll).unwrap(), b"current");
 }
 

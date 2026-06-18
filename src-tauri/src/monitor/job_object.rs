@@ -318,8 +318,8 @@ impl JobLauncher for WindowsJobLauncher {
 #[cfg(windows)]
 mod windows_impl {
     use super::{
-        split_arguments, JobHandle, JOB_OBJECT_MSG_ACTIVE_PROCESS_ZERO, JOB_OBJECT_MSG_EXIT_PROCESS,
-        JOB_OBJECT_MSG_NEW_PROCESS,
+        split_arguments, JobHandle, JOB_OBJECT_MSG_ACTIVE_PROCESS_ZERO,
+        JOB_OBJECT_MSG_EXIT_PROCESS, JOB_OBJECT_MSG_NEW_PROCESS,
     };
     use crate::error::{AppError, AppResult};
     use crate::launch::cancel::CancelToken;
@@ -332,11 +332,11 @@ mod windows_impl {
     use windows::core::PCWSTR;
     use windows::Win32::Foundation::{CloseHandle, HANDLE};
     use windows::Win32::System::JobObjects::{
-        AssignProcessToJobObject, CreateJobObjectW, QueryInformationJobObject,
-        SetInformationJobObject, JOBOBJECT_ASSOCIATE_COMPLETION_PORT,
-        JOBOBJECT_BASIC_ACCOUNTING_INFORMATION, JOBOBJECT_EXTENDED_LIMIT_INFORMATION,
-        JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE, JobObjectAssociateCompletionPortInformation,
+        AssignProcessToJobObject, CreateJobObjectW, JobObjectAssociateCompletionPortInformation,
         JobObjectBasicAccountingInformation, JobObjectExtendedLimitInformation,
+        QueryInformationJobObject, SetInformationJobObject, JOBOBJECT_ASSOCIATE_COMPLETION_PORT,
+        JOBOBJECT_BASIC_ACCOUNTING_INFORMATION, JOBOBJECT_EXTENDED_LIMIT_INFORMATION,
+        JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE,
     };
     use windows::Win32::System::Threading::OpenProcess;
     use windows::Win32::System::Threading::PROCESS_SET_QUOTA;
@@ -403,8 +403,10 @@ mod windows_impl {
 
         // Associate a completion port so we are notified of ACTIVE_PROCESS_ZERO.
         // SAFETY: null existing port + 0 threads creates a new completion port.
-        let port = unsafe { CreateIoCompletionPort(windows::Win32::Foundation::INVALID_HANDLE_VALUE, None, 0, 1) }
-            .map_err(|err| AppError::other(format!("CreateIoCompletionPort failed: {err}")))?;
+        let port = unsafe {
+            CreateIoCompletionPort(windows::Win32::Foundation::INVALID_HANDLE_VALUE, None, 0, 1)
+        }
+        .map_err(|err| AppError::other(format!("CreateIoCompletionPort failed: {err}")))?;
         let assoc = JOBOBJECT_ASSOCIATE_COMPLETION_PORT {
             CompletionKey: job.0 as *mut core::ffi::c_void,
             CompletionPort: port,
@@ -418,9 +420,7 @@ mod windows_impl {
                 std::mem::size_of::<JOBOBJECT_ASSOCIATE_COMPLETION_PORT>() as u32,
             )
         }
-        .map_err(|err| {
-            AppError::other(format!("SetInformationJobObject(port) failed: {err}"))
-        })?;
+        .map_err(|err| AppError::other(format!("SetInformationJobObject(port) failed: {err}")))?;
 
         // Spawn suspended so we can assign to the job before any child spawns.
         let mut command = Command::new(launch_target);
@@ -435,10 +435,8 @@ mod windows_impl {
 
         // Open the process with rights needed to assign + (implicitly) terminate.
         // SAFETY: pid refers to the just-spawned, still-suspended child.
-        let proc_handle = unsafe {
-            OpenProcess(PROCESS_SET_QUOTA | PROCESS_TERMINATE, false, pid)
-        }
-        .map_err(|err| AppError::other(format!("OpenProcess({pid}) failed: {err}")))?;
+        let proc_handle = unsafe { OpenProcess(PROCESS_SET_QUOTA | PROCESS_TERMINATE, false, pid) }
+            .map_err(|err| AppError::other(format!("OpenProcess({pid}) failed: {err}")))?;
 
         // SAFETY: job + process handles are valid and owned here.
         let assign = unsafe { AssignProcessToJobObject(job, proc_handle) };
@@ -518,16 +516,12 @@ mod windows_impl {
             let mut overlapped: *mut windows::Win32::System::IO::OVERLAPPED = std::ptr::null_mut();
             // SAFETY: out-params are valid locals; INFINITE timeout.
             let ok = unsafe {
-                GetQueuedCompletionStatus(
-                    port,
-                    &mut bytes,
-                    &mut key,
-                    &mut overlapped,
-                    u32::MAX,
-                )
+                GetQueuedCompletionStatus(port, &mut bytes, &mut key, &mut overlapped, u32::MAX)
             };
             if ok.is_err() {
-                return Err(AppError::other("GetQueuedCompletionStatus failed".to_string()));
+                return Err(AppError::other(
+                    "GetQueuedCompletionStatus failed".to_string(),
+                ));
             }
             // Only react to messages for our job (CompletionKey == job handle).
             if key == job.0 as usize {

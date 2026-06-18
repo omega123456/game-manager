@@ -35,7 +35,11 @@ fn boosts_when_setting_is_unset_default_on() {
 
     state.raise_priority_if_enabled(4321);
 
-    assert_eq!(recorder.pids(), vec![4321], "default ON when setting is unset");
+    assert_eq!(
+        recorder.pids(),
+        vec![4321],
+        "default ON when setting is unset"
+    );
 }
 
 #[test]
@@ -65,7 +69,10 @@ fn does_not_boost_when_setting_is_false() {
 
     state.raise_priority_if_enabled(99);
 
-    assert!(recorder.pids().is_empty(), "explicit false disables the boost");
+    assert!(
+        recorder.pids().is_empty(),
+        "explicit false disables the boost"
+    );
 }
 
 #[test]

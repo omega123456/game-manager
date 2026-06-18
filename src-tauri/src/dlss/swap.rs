@@ -9,9 +9,9 @@
 
 use std::path::{Path, PathBuf};
 
-use crate::domain::{ApplyResult, BatchApplyResult, DetectedDll, DllType, GameDlssState};
 use crate::dlss::download::NoopProgressSink;
 use crate::dlss::{detect, download, manifest, storage, DlssError, DlssResult};
+use crate::domain::{ApplyResult, BatchApplyResult, DetectedDll, DllType, GameDlssState};
 use crate::state::AppState;
 
 /// Backup extension appended to the original DLL before the first swap.
@@ -44,7 +44,10 @@ impl ApplyProgressSink for NoopApplyProgressSink {
 /// to a generic IO error.
 fn map_io(err: std::io::Error, context: &str) -> DlssError {
     if err.kind() == std::io::ErrorKind::PermissionDenied {
-        tracing::warn!(category = "dlss", "privilege denied during {context}: {err}");
+        tracing::warn!(
+            category = "dlss",
+            "privilege denied during {context}: {err}"
+        );
         DlssError::Privilege
     } else {
         DlssError::Io(format!("{context}: {err}"))
@@ -101,13 +104,9 @@ fn pick(summary: &detect::DetectionSummary, dll_type: DllType) -> &Option<Detect
 
 /// Ensure the chosen version's DLL is present locally, downloading if needed.
 /// Returns the local source path to copy from.
-async fn ensure_local(
-    state: &AppState,
-    dll_type: DllType,
-    version: &str,
-) -> DlssResult<PathBuf> {
+async fn ensure_local(state: &AppState, dll_type: DllType, version: &str) -> DlssResult<PathBuf> {
     let app_data_dir = state.app_data_dir().to_path_buf();
-    let catalog = manifest::build_catalog(&app_data_dir, false).await?;
+    let catalog = manifest::resolve_catalog(state, false).await?;
     let entry = manifest::find_by_version(&catalog, dll_type, version)
         .ok_or_else(|| DlssError::Invalid(format!("unknown version {version}")))?
         .clone();
@@ -173,8 +172,7 @@ pub async fn apply_to_game_impl(
     }
 
     // Re-scan to reflect the change in the cache.
-    let app_data_dir = state.app_data_dir().to_path_buf();
-    let catalog = manifest::build_catalog(&app_data_dir, false).await?;
+    let catalog = manifest::resolve_catalog(state, false).await?;
     let reader = detect::RealFileVersionReader;
     detect::scan_game_with(state, game_id, &catalog, &reader)
 }
@@ -203,13 +201,22 @@ pub async fn apply_to_all_impl(
             .with_db(|conn| crate::db::repo::games::get(conn, game_id))
             .map(|game| game.name)
             .unwrap_or_else(|_| format!("game {game_id}"));
-        let outcome =
-            apply_to_game_impl(state, game_id, dll_type, SwapTarget::Version(version.to_string()))
-                .await;
+        let outcome = apply_to_game_impl(
+            state,
+            game_id,
+            dll_type,
+            SwapTarget::Version(version.to_string()),
+        )
+        .await;
         let result = match outcome {
             Ok(_) => {
                 batch.succeeded += 1;
-                ApplyResult { game_id, name, ok: true, message: None }
+                ApplyResult {
+                    game_id,
+                    name,
+                    ok: true,
+                    message: None,
+                }
             }
             Err(err) => {
                 batch.failed += 1;

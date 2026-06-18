@@ -13,11 +13,11 @@
 
 use std::sync::Arc;
 
+#[cfg(not(coverage))]
+use crate::domain::LaunchPhase;
 use crate::error::AppResult;
 use crate::launch::cancel::CancelToken;
 use crate::launch::events::EventSink;
-#[cfg(not(coverage))]
-use crate::domain::LaunchPhase;
 #[cfg(not(coverage))]
 use crate::launch::events::{LaunchLifecycle, EVENT_ENDED, EVENT_ERROR};
 use crate::launch::state_machine;
@@ -47,7 +47,10 @@ pub fn cancel_launch_impl(state: &AppState, game_id: i64) -> AppResult<bool> {
 
 /// Register a launch and resolve its monitor as a single operation so any
 /// failure before the async run starts cannot strand the active-launch registry.
-pub fn prepare_launch_impl(state: &AppState, game_id: i64) -> AppResult<(CancelToken, Arc<dyn Monitor>)> {
+pub fn prepare_launch_impl(
+    state: &AppState,
+    game_id: i64,
+) -> AppResult<(CancelToken, Arc<dyn Monitor>)> {
     let cancel = state.register_launch(game_id)?;
     match crate::monitor::select_monitor(state, game_id) {
         Ok(monitor) => Ok((cancel, monitor)),

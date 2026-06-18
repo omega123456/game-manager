@@ -11,20 +11,20 @@
 //!
 //! **Phases 2 & 3 must NOT edit this file** — the contract is fixed here.
 
-use crate::domain::{
-    DllType, DlssSupport, GameDlssState, PresetKind, PresetOption, SaveGameDlss,
-    SaveGameDllSelection,
-};
-#[cfg(not(coverage))]
-use crate::domain::{BatchApplyResult, DllCatalog, GamePresetState};
 #[cfg(not(coverage))]
 use crate::dlss::download::{download_version_impl, ProgressSink};
-use crate::dlss::swap::{apply_to_game_impl, SwapTarget};
 #[cfg(not(coverage))]
 use crate::dlss::swap::{apply_to_all_impl, ApplyProgressSink};
+use crate::dlss::swap::{apply_to_game_impl, SwapTarget};
 use crate::dlss::{detect, elevation, nvapi, swap};
 #[cfg(not(coverage))]
 use crate::dlss::{download, manifest};
+#[cfg(not(coverage))]
+use crate::domain::{BatchApplyResult, DllCatalog, GamePresetState};
+use crate::domain::{
+    DllType, DlssSupport, GameDlssState, PresetKind, PresetOption, SaveGameDllSelection,
+    SaveGameDlss,
+};
 use crate::error::AppResult;
 use crate::state::AppState;
 
@@ -187,8 +187,7 @@ pub async fn dlss_get_catalog(
     state: tauri::State<'_, AppState>,
     refresh: bool,
 ) -> AppResult<DllCatalog> {
-    let app_data_dir = state.app_data_dir().to_path_buf();
-    Ok(manifest::build_catalog(&app_data_dir, refresh).await?)
+    Ok(manifest::resolve_catalog(&state, refresh).await?)
 }
 
 /// Cached per-game DLSS state.
@@ -211,10 +210,7 @@ pub fn dlss_list_game_states(state: tauri::State<'_, AppState>) -> AppResult<Vec
 /// Force a re-scan of one game (Phase 2 logic).
 #[cfg(not(coverage))]
 #[tauri::command]
-pub fn dlss_scan_game(
-    state: tauri::State<'_, AppState>,
-    game_id: i64,
-) -> AppResult<GameDlssState> {
+pub fn dlss_scan_game(state: tauri::State<'_, AppState>, game_id: i64) -> AppResult<GameDlssState> {
     Ok(detect::scan_game_impl(&state, game_id)?)
 }
 
@@ -328,7 +324,11 @@ pub fn dlss_set_global_preset(
     preset_kind: PresetKind,
     value: u32,
 ) -> AppResult<()> {
-    Ok(nvapi::presets::set_global_preset_impl(&state, preset_kind, value)?)
+    Ok(nvapi::presets::set_global_preset_impl(
+        &state,
+        preset_kind,
+        value,
+    )?)
 }
 
 /// Read the per-game preset state (Phase 3 logic).
@@ -339,7 +339,11 @@ pub fn dlss_get_game_preset(
     game_id: i64,
     preset_kind: PresetKind,
 ) -> AppResult<GamePresetState> {
-    Ok(nvapi::presets::get_game_preset_impl(&state, game_id, preset_kind)?)
+    Ok(nvapi::presets::get_game_preset_impl(
+        &state,
+        game_id,
+        preset_kind,
+    )?)
 }
 
 /// Write the per-game preset value (Phase 3 logic).
@@ -351,7 +355,12 @@ pub fn dlss_set_game_preset(
     preset_kind: PresetKind,
     value: u32,
 ) -> AppResult<()> {
-    Ok(nvapi::presets::set_game_preset_impl(&state, game_id, preset_kind, value)?)
+    Ok(nvapi::presets::set_game_preset_impl(
+        &state,
+        game_id,
+        preset_kind,
+        value,
+    )?)
 }
 
 /// Apply all per-game DLSS changes (DLL versions + presets + folder override) in
@@ -378,9 +387,27 @@ pub async fn save_game_impl(
     if let Some(folder) = changes.folder_override.as_deref() {
         set_folder_override_impl(state, game_id, Some(folder))?;
     }
-    apply_version(state, game_id, DllType::SuperResolution, changes.sr.as_ref()).await?;
-    apply_version(state, game_id, DllType::FrameGeneration, changes.fg.as_ref()).await?;
-    apply_version(state, game_id, DllType::RayReconstruction, changes.rr.as_ref()).await?;
+    apply_version(
+        state,
+        game_id,
+        DllType::SuperResolution,
+        changes.sr.as_ref(),
+    )
+    .await?;
+    apply_version(
+        state,
+        game_id,
+        DllType::FrameGeneration,
+        changes.fg.as_ref(),
+    )
+    .await?;
+    apply_version(
+        state,
+        game_id,
+        DllType::RayReconstruction,
+        changes.rr.as_ref(),
+    )
+    .await?;
     if let Some(value) = changes.sr_preset {
         nvapi::presets::set_game_preset_impl(state, game_id, PresetKind::Dlss, value)?;
     }
