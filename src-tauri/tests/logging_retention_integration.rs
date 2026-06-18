@@ -2,12 +2,14 @@
 
 use chrono::{Duration, Utc};
 use game_manager_lib::commands::logging::{
-    include_verbose_logs, log_frontend_impl, log_frontend_impl_with_minimum_level,
+    log_frontend_impl, log_frontend_impl_with_minimum_level,
 };
 use game_manager_lib::db::connection::open_in_memory;
 use game_manager_lib::db::repo::logs;
 use game_manager_lib::domain::LogLevel;
-use game_manager_lib::logging::{run_retention, write_log, RETENTION_DAYS};
+use game_manager_lib::logging::{
+    include_verbose_logs, run_retention, write_log, write_log_with_minimum_level, RETENTION_DAYS,
+};
 use game_manager_lib::state::AppState;
 
 #[test]
@@ -56,6 +58,42 @@ fn write_log_persists_and_mirrors() {
     }
     assert!(logs::count(&conn).unwrap() >= 5);
     assert!(!logs::list_recent(&conn, 3).unwrap().is_empty());
+}
+
+#[test]
+fn write_log_suppresses_debug_when_verbose_logs_are_disabled() {
+    let conn = open_in_memory().unwrap();
+
+    let debug_id = write_log_with_minimum_level(
+        &conn,
+        LogLevel::Debug,
+        "backend",
+        "debug",
+        None,
+        None,
+        None,
+        false,
+    )
+    .unwrap();
+    let info_id = write_log_with_minimum_level(
+        &conn,
+        LogLevel::Info,
+        "backend",
+        "info",
+        None,
+        None,
+        None,
+        false,
+    )
+    .unwrap();
+
+    assert_eq!(debug_id, 0);
+    assert!(info_id > 0);
+    assert_eq!(logs::count(&conn).unwrap(), 1);
+    assert_eq!(
+        logs::get(&conn, info_id).unwrap().unwrap().level,
+        LogLevel::Info
+    );
 }
 
 #[test]

@@ -21,6 +21,15 @@ static INIT: Once = Once::new();
 /// Number of days of logs to retain before pruning.
 pub const RETENTION_DAYS: i64 = 7;
 
+/// Whether rows below `info` should be persisted in the current build mode.
+pub fn include_verbose_logs(is_debug_build: bool) -> bool {
+    is_debug_build
+}
+
+fn should_persist_level(level: LogLevel, include_verbose: bool) -> bool {
+    include_verbose || level != LogLevel::Debug
+}
+
 /// Initialize the global `tracing` subscriber exactly once.
 ///
 /// Idempotent: safe to call from both the app entrypoint and tests. Debug builds
@@ -115,7 +124,7 @@ fn mirror_to_tracing(
 ///
 /// Returns the new row's id. This is the single entrypoint for application
 /// logging that must reach the `logs` table.
-pub fn write_log(
+pub fn write_log_with_minimum_level(
     conn: &Connection,
     level: LogLevel,
     category: &str,
@@ -123,7 +132,12 @@ pub fn write_log(
     game_id: Option<i64>,
     script_id: Option<i64>,
     details: Option<&str>,
+    include_verbose: bool,
 ) -> AppResult<i64> {
+    if !should_persist_level(level, include_verbose) {
+        return Ok(0);
+    }
+
     mirror_to_tracing(level, category, message, game_id, script_id, details);
     let entry = NewLog {
         ts: Utc::now().to_rfc3339(),
@@ -135,6 +149,27 @@ pub fn write_log(
         details: details.map(str::to_string),
     };
     logs::insert(conn, &entry)
+}
+
+pub fn write_log(
+    conn: &Connection,
+    level: LogLevel,
+    category: &str,
+    message: &str,
+    game_id: Option<i64>,
+    script_id: Option<i64>,
+    details: Option<&str>,
+) -> AppResult<i64> {
+    write_log_with_minimum_level(
+        conn,
+        level,
+        category,
+        message,
+        game_id,
+        script_id,
+        details,
+        include_verbose_logs(cfg!(debug_assertions)),
+    )
 }
 
 /// Delete log rows older than the retention window and reclaim space.

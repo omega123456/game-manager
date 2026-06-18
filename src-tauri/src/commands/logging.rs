@@ -10,7 +10,7 @@ use chrono::{Duration, Utc};
 use crate::db::repo::logs::{self, LogFilter};
 use crate::domain::{LogLevel, LogPage};
 use crate::error::AppResult;
-use crate::logging::write_log;
+use crate::logging::{include_verbose_logs, write_log_with_minimum_level};
 use crate::state::AppState;
 
 /// Number of log rows shown per page in the Log Viewer.
@@ -35,11 +35,6 @@ fn parse_level(level: &str) -> LogLevel {
     }
 }
 
-/// Whether rows below `info` should be persisted or returned by the Log Viewer.
-pub fn include_verbose_logs(is_debug_build: bool) -> bool {
-    is_debug_build
-}
-
 /// Persist a frontend log line to the `logs` table (mirrored to `tracing`).
 ///
 /// Returns the new row's id, or `0` when the row is intentionally suppressed.
@@ -53,12 +48,19 @@ pub fn log_frontend_impl_with_minimum_level(
     include_verbose: bool,
 ) -> AppResult<i64> {
     let level = parse_level(level);
-    if level == LogLevel::Debug && !include_verbose {
-        return Ok(0);
-    }
-
     let category = category.unwrap_or("frontend");
-    state.with_db(|conn| write_log(conn, level, category, message, None, None, details))
+    state.with_db(|conn| {
+        write_log_with_minimum_level(
+            conn,
+            level,
+            category,
+            message,
+            None,
+            None,
+            details,
+            include_verbose,
+        )
+    })
 }
 
 /// Persist a frontend log line using the current build's verbose-log visibility.
