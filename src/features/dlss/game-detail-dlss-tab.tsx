@@ -1,4 +1,5 @@
 import * as React from 'react'
+import { createPortal } from 'react-dom'
 import { open } from '@tauri-apps/plugin-dialog'
 
 import { Button } from '@/components/ui/button'
@@ -64,6 +65,8 @@ function detectedVersion(state: GameDlssState | undefined, type: DllType): strin
 export interface GameDetailDlssTabProps {
   /** The game this tab manages. */
   gameId: number
+  /** Optional external footer host used by the modal layout. */
+  footerHost?: HTMLElement | null
 }
 
 const PRESET_DEFAULT_VALUE = 0
@@ -89,7 +92,10 @@ function DetectedRow({ label, version }: { label: string; version?: string }): R
  * input + picker, and a Save button (disabled until dirty) that applies DLLs +
  * presets + folder override in one `dlss_save_game` call.
  */
-export function GameDetailDlssTab({ gameId }: GameDetailDlssTabProps): React.JSX.Element {
+export function GameDetailDlssTab({
+  gameId,
+  footerHost = null,
+}: GameDetailDlssTabProps): React.JSX.Element {
   React.useEffect(() => {
     logFrontend('debug', 'DLSS detail tab mounted — fetching live preset state', {
       category: 'dlss.detail',
@@ -258,126 +264,138 @@ export function GameDetailDlssTab({ gameId }: GameDetailDlssTabProps): React.JSX
   }
 
   const canSave = isDirty && !busy && !saveGame.isPending
+  const footer = (
+    <div
+      className="flex justify-end"
+      data-testid="game-detail-dlss-footer"
+      data-footer-mode={footerHost ? 'portal' : 'inline'}
+    >
+      <Button type="button" disabled={!canSave} onClick={() => void handleSave()}>
+        {saveGame.isPending ? 'Saving…' : 'Save DLSS settings for this game'}
+      </Button>
+    </div>
+  )
 
   return (
-    <div className="space-y-5" data-testid="game-detail-dlss">
-      <section className="space-y-3 rounded-[1.5rem] border border-border bg-surface-low p-5">
-        <div>
-          <h3 className="font-heading text-base font-semibold text-foreground">
-            Detected versions
-          </h3>
-          <p className="text-sm text-muted-foreground">
-            Versions currently installed in this game&apos;s folder.
-          </p>
-        </div>
-        <div className="space-y-2 rounded-xl border border-border bg-background/70 p-4">
-          {DLL_TYPES.map((type) => (
-            <DetectedRow
-              key={type}
-              label={DLL_TYPE_LABELS[type]}
-              version={detected[type] ?? undefined}
-            />
-          ))}
-        </div>
-      </section>
+    <>
+      <div className="space-y-5" data-testid="game-detail-dlss">
+        <section className="space-y-3 rounded-[1.5rem] border border-border bg-surface-low p-5">
+          <div>
+            <h3 className="font-heading text-base font-semibold text-foreground">
+              Detected versions
+            </h3>
+            <p className="text-sm text-muted-foreground">
+              Versions currently installed in this game&apos;s folder.
+            </p>
+          </div>
+          <div className="space-y-2 rounded-xl border border-border bg-background/70 p-4">
+            {DLL_TYPES.map((type) => (
+              <DetectedRow
+                key={type}
+                label={DLL_TYPE_LABELS[type]}
+                version={detected[type] ?? undefined}
+              />
+            ))}
+          </div>
+        </section>
 
-      <section className="space-y-4 rounded-[1.5rem] border border-border bg-surface-low p-5">
-        <div>
-          <h3 className="font-heading text-base font-semibold text-foreground">DLL versions</h3>
-          <p className="text-sm text-muted-foreground">
-            Overrides the global setting for this game only.
-          </p>
-        </div>
-        {DLL_TYPES.map((type) => (
-          <div key={type} className="space-y-2">
-            <span className="block text-sm font-medium text-foreground">
-              {DLL_TYPE_LABELS[type]}
-            </span>
-            <DllVersionCombobox
-              dllType={type}
-              versions={catalog ? catalog[CATALOG_KEY[type]] : []}
-              value={selections[type]}
-              onChange={(version) => setSelection(type, version)}
-              label={DLL_TYPE_LABELS[type]}
-              progress={downloadProgress.progress}
-              onClearProgress={downloadProgress.clear}
-              onBusyChange={setBusy}
-              disabled={!detectedSupport[type]}
+        <section className="space-y-4 rounded-[1.5rem] border border-border bg-surface-low p-5">
+          <div>
+            <h3 className="font-heading text-base font-semibold text-foreground">DLL versions</h3>
+            <p className="text-sm text-muted-foreground">
+              Overrides the global setting for this game only.
+            </p>
+          </div>
+          {DLL_TYPES.map((type) => (
+            <div key={type} className="space-y-2">
+              <span className="block text-sm font-medium text-foreground">
+                {DLL_TYPE_LABELS[type]}
+              </span>
+              <DllVersionCombobox
+                dllType={type}
+                versions={catalog ? catalog[CATALOG_KEY[type]] : []}
+                value={selections[type]}
+                onChange={(version) => setSelection(type, version)}
+                label={DLL_TYPE_LABELS[type]}
+                progress={downloadProgress.progress}
+                onClearProgress={downloadProgress.clear}
+                onBusyChange={setBusy}
+                disabled={!detectedSupport[type]}
+              />
+            </div>
+          ))}
+        </section>
+
+        <section className="space-y-4 rounded-[1.5rem] border border-border bg-surface-low p-5">
+          <div>
+            <h3 className="font-heading text-base font-semibold text-foreground">Driver presets</h3>
+            <p className="text-sm text-muted-foreground">
+              Per-game NVIDIA driver profile overrides for DLSS quality.
+            </p>
+          </div>
+          {showPresetCallout ? (
+            <DlssUnsupportedCallout
+              title="Presets unavailable"
+              description="No NVIDIA driver profile matches this game, so per-game presets can't be set."
+            />
+          ) : null}
+          <div className="space-y-2">
+            <span className="block text-sm font-medium text-foreground">DLSS Preset</span>
+            <PresetCombobox
+              label="DLSS Preset"
+              options={srPresetOptions.data ?? []}
+              value={srPreset}
+              onChange={setSrPresetOverride}
+              disabled={!srPresetEnabled}
             />
           </div>
-        ))}
-      </section>
+          <div className="space-y-2">
+            <span className="block text-sm font-medium text-foreground">
+              Ray Reconstruction Preset
+            </span>
+            <PresetCombobox
+              label="Ray Reconstruction Preset"
+              options={rrPresetOptions.data ?? []}
+              value={rrPreset}
+              onChange={setRrPresetOverride}
+              disabled={!rrPresetEnabled}
+            />
+          </div>
+        </section>
 
-      <section className="space-y-4 rounded-[1.5rem] border border-border bg-surface-low p-5">
-        <div>
-          <h3 className="font-heading text-base font-semibold text-foreground">Driver presets</h3>
-          <p className="text-sm text-muted-foreground">
-            Per-game NVIDIA driver profile overrides for DLSS quality.
-          </p>
-        </div>
-        {showPresetCallout ? (
-          <DlssUnsupportedCallout
-            title="Presets unavailable"
-            description="No NVIDIA driver profile matches this game, so per-game presets can't be set."
-          />
-        ) : null}
-        <div className="space-y-2">
-          <span className="block text-sm font-medium text-foreground">DLSS Preset</span>
-          <PresetCombobox
-            label="DLSS Preset"
-            options={srPresetOptions.data ?? []}
-            value={srPreset}
-            onChange={setSrPresetOverride}
-            disabled={!srPresetEnabled}
-          />
-        </div>
-        <div className="space-y-2">
-          <span className="block text-sm font-medium text-foreground">
-            Ray Reconstruction Preset
-          </span>
-          <PresetCombobox
-            label="Ray Reconstruction Preset"
-            options={rrPresetOptions.data ?? []}
-            value={rrPreset}
-            onChange={setRrPresetOverride}
-            disabled={!rrPresetEnabled}
-          />
-        </div>
-      </section>
-
-      <section className="space-y-3 rounded-[1.5rem] border border-border bg-surface-low p-5">
-        <div>
-          <h3 className="font-heading text-base font-semibold text-foreground">Game folder</h3>
-          <p className="text-sm text-muted-foreground">
-            Auto-detected when possible. Override only if the scanner can&apos;t find the right
-            folder.
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <Input
-            value={folder}
-            onChange={(event) => setFolderOverride(event.target.value)}
-            placeholder="Auto-detected when possible"
-            aria-label="Game folder override"
-          />
-          <Button
-            type="button"
-            variant="outline"
-            size="icon"
-            onClick={() => void pickFolder()}
-            aria-label="Browse for game folder"
-          >
-            <Icon name="folder_open" className="text-[18px]" />
-          </Button>
-        </div>
-        {folderError ? <p className="text-sm text-destructive">{folderError}</p> : null}
-      </section>
-
-      <div className="flex justify-end">
-        <Button type="button" disabled={!canSave} onClick={() => void handleSave()}>
-          {saveGame.isPending ? 'Saving…' : 'Save DLSS settings for this game'}
-        </Button>
+        <section className="space-y-3 rounded-[1.5rem] border border-border bg-surface-low p-5">
+          <div>
+            <h3 className="font-heading text-base font-semibold text-foreground">Game folder</h3>
+            <p className="text-sm text-muted-foreground">
+              Auto-detected when possible. Override only if the scanner can&apos;t find the right
+              folder.
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <Input
+              value={folder}
+              onChange={(event) => setFolderOverride(event.target.value)}
+              placeholder="Auto-detected when possible"
+              aria-label="Game folder override"
+            />
+            <Button
+              type="button"
+              variant="outline"
+              size="icon"
+              onClick={() => void pickFolder()}
+              aria-label="Browse for game folder"
+            >
+              <Icon name="folder_open" className="text-[18px]" />
+            </Button>
+          </div>
+          {folderError ? <p className="text-sm text-destructive">{folderError}</p> : null}
+        </section>
       </div>
-    </div>
+      {footerHost ? (
+        createPortal(footer, footerHost)
+      ) : (
+        <div className="border-t border-border pt-4">{footer}</div>
+      )}
+    </>
   )
 }

@@ -195,6 +195,13 @@ describe('GameDetailModal', () => {
     const tab = await screen.findByTestId('game-detail-dlss')
     expect(tab).toHaveTextContent('v3.7.10')
     expect(tab).toHaveTextContent('Not detected')
+    expect(within(dialog).getByTestId('game-detail-dlss-footer-shell')).toBeInTheDocument()
+    expect(
+      within(dialog).getByTestId('game-detail-dlss-footer').getAttribute('data-footer-mode')
+    ).toBe('portal')
+    expect(
+      within(tab).queryByRole('button', { name: 'Save DLSS settings for this game' })
+    ).not.toBeInTheDocument()
   })
 
   it('disables the overview launch button while another launch is already active', async () => {

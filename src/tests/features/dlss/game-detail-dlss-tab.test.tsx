@@ -74,6 +74,10 @@ describe('GameDetailDlssTab', () => {
     renderWithProviders(<GameDetailDlssTab gameId={7} />)
 
     const summary = await screen.findByTestId('game-detail-dlss')
+    expect(screen.getByTestId('game-detail-dlss-footer')).toHaveAttribute(
+      'data-footer-mode',
+      'inline'
+    )
     await waitFor(() => expect(summary).toHaveTextContent('v3.5.10'))
     expect(summary).toHaveTextContent('v1.1.0')
     expect(summary).toHaveTextContent('Not detected')

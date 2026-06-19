@@ -73,6 +73,7 @@ function GameDetailModalInner({ selectedGameId }: GameDetailModalInnerProps): Re
   const [activeTab, setActiveTab] = useState<GameDetailTab>('overview')
   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false)
   const [deleteError, setDeleteError] = useState<string | null>(null)
+  const [dlssFooterHost, setDlssFooterHost] = useState<HTMLDivElement | null>(null)
   const gameQuery = useGameQuery(selectedGameId)
   const deleteGameMutation = useDeleteGameMutation()
   const isLaunchActive = useLaunchStore((state) => state.phase !== 'idle')
@@ -170,160 +171,170 @@ function GameDetailModalInner({ selectedGameId }: GameDetailModalInnerProps): Re
           </TabsList>
         </div>
 
-        <div className="min-h-0 flex-1 overflow-y-auto px-6 py-6">
-          <TabsContent value="overview" className="mt-0">
-            {gameQuery.isLoading || !game || !meta ? (
-              <div
-                className="grid gap-6 lg:grid-cols-[19rem_1fr]"
-                data-testid="game-detail-loading"
-              >
-                <div className="aspect-3/4 self-start animate-pulse rounded-[1.8rem] bg-surface-high" />
-                <div className="space-y-4">
-                  <div className="h-8 w-52 animate-pulse rounded-full bg-surface-high" />
-                  <div className="h-24 animate-pulse rounded-[1.5rem] bg-surface-high" />
-                  <div className="grid gap-4 md:grid-cols-2">
-                    {Array.from({ length: 2 }).map((_, index) => (
-                      <div
-                        key={index}
-                        className="h-28 animate-pulse rounded-[1.4rem] bg-surface-high"
-                      />
-                    ))}
-                  </div>
-                </div>
-              </div>
-            ) : (
-              <div
-                className="grid gap-6 lg:grid-cols-[19rem_1fr]"
-                data-testid="game-detail-overview"
-              >
-                <div className="self-start overflow-hidden rounded-[1.8rem] border border-border bg-card shadow-sm">
-                  <div className="aspect-3/4 overflow-hidden bg-surface-high">
-                    {toCoverImageUrl(game.imagePath) ? (
-                      <img
-                        src={toCoverImageUrl(game.imagePath) ?? undefined}
-                        alt={`${game.name} cover art`}
-                        className="h-full w-full object-cover"
-                      />
-                    ) : (
-                      <div className="flex h-full items-center justify-center bg-linear-to-br from-primary/20 via-transparent to-secondary/15 text-primary">
-                        <Icon name="photo" className="text-[52px]" />
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                <div className="space-y-6">
-                  <section className="overflow-hidden rounded-[1.8rem] border border-border bg-surface-container">
-                    <div className="border-b border-border bg-linear-to-r from-primary/20 via-secondary/10 to-transparent px-6 py-5">
-                      <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-                        <div className="space-y-2">
-                          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">
-                            Launch profile
-                          </p>
-                          <h2 className="font-heading text-3xl font-bold tracking-tight text-foreground">
-                            {game.name}
-                          </h2>
-                          <p className="max-w-2xl text-sm text-muted-foreground">
-                            Launch runs this game's resolved script pipeline. Track live status in
-                            the banner and the currently-playing hero.
-                          </p>
-                        </div>
-                        <Button
-                          type="button"
-                          disabled={isLaunchActive}
-                          onClick={() => launchGameById(game.id, game.name)}
-                          data-testid="game-detail-launch"
-                        >
-                          <Icon name="play_circle" className="text-[18px]" />
-                          {isLaunchActive ? 'Launch in progress…' : 'Launch Game'}
-                        </Button>
-                      </div>
+        <div className="flex min-h-0 flex-1 flex-col">
+          <div className="min-h-0 flex-1 overflow-y-auto px-6 py-6">
+            <TabsContent value="overview" className="mt-0">
+              {gameQuery.isLoading || !game || !meta ? (
+                <div
+                  className="grid gap-6 lg:grid-cols-[19rem_1fr]"
+                  data-testid="game-detail-loading"
+                >
+                  <div className="aspect-3/4 self-start animate-pulse rounded-[1.8rem] bg-surface-high" />
+                  <div className="space-y-4">
+                    <div className="h-8 w-52 animate-pulse rounded-full bg-surface-high" />
+                    <div className="h-24 animate-pulse rounded-[1.5rem] bg-surface-high" />
+                    <div className="grid gap-4 md:grid-cols-2">
+                      {Array.from({ length: 2 }).map((_, index) => (
+                        <div
+                          key={index}
+                          className="h-28 animate-pulse rounded-[1.4rem] bg-surface-high"
+                        />
+                      ))}
                     </div>
-                    <div className="space-y-4 px-6 py-5">
-                      <div className="rounded-[1.4rem] border border-border bg-background/70 p-4">
-                        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-                          Launch target
-                        </p>
-                        <p className="mt-2 break-all text-sm text-foreground">
-                          {game.launchTarget}
-                        </p>
-                        {game.arguments ? (
-                          <>
-                            <p className="mt-4 text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-                              Arguments
+                  </div>
+                </div>
+              ) : (
+                <div
+                  className="grid gap-6 lg:grid-cols-[19rem_1fr]"
+                  data-testid="game-detail-overview"
+                >
+                  <div className="self-start overflow-hidden rounded-[1.8rem] border border-border bg-card shadow-sm">
+                    <div className="aspect-3/4 overflow-hidden bg-surface-high">
+                      {toCoverImageUrl(game.imagePath) ? (
+                        <img
+                          src={toCoverImageUrl(game.imagePath) ?? undefined}
+                          alt={`${game.name} cover art`}
+                          className="h-full w-full object-cover"
+                        />
+                      ) : (
+                        <div className="flex h-full items-center justify-center bg-linear-to-br from-primary/20 via-transparent to-secondary/15 text-primary">
+                          <Icon name="photo" className="text-[52px]" />
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="space-y-6">
+                    <section className="overflow-hidden rounded-[1.8rem] border border-border bg-surface-container">
+                      <div className="border-b border-border bg-linear-to-r from-primary/20 via-secondary/10 to-transparent px-6 py-5">
+                        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+                          <div className="space-y-2">
+                            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">
+                              Launch profile
                             </p>
-                            <p className="mt-2 break-all text-sm text-foreground">
-                              {game.arguments}
+                            <h2 className="font-heading text-3xl font-bold tracking-tight text-foreground">
+                              {game.name}
+                            </h2>
+                            <p className="max-w-2xl text-sm text-muted-foreground">
+                              Launch runs this game's resolved script pipeline. Track live status in
+                              the banner and the currently-playing hero.
                             </p>
-                          </>
-                        ) : null}
+                          </div>
+                          <Button
+                            type="button"
+                            disabled={isLaunchActive}
+                            onClick={() => launchGameById(game.id, game.name)}
+                            data-testid="game-detail-launch"
+                          >
+                            <Icon name="play_circle" className="text-[18px]" />
+                            {isLaunchActive ? 'Launch in progress…' : 'Launch Game'}
+                          </Button>
+                        </div>
                       </div>
-                      <div
-                        className={cn(
-                          'rounded-[1.4rem] border p-4',
-                          game.monitorMode === 'named'
-                            ? 'border-primary/40 bg-primary/10'
-                            : 'border-border bg-background/70'
-                        )}
-                      >
-                        <div className="flex items-center gap-3">
-                          <span className="flex h-10 w-10 items-center justify-center rounded-full bg-background/80 text-primary">
-                            <Icon
-                              name={game.monitorMode === 'named' ? 'rocket_launch' : 'device_hub'}
-                              className="text-[20px]"
-                            />
-                          </span>
-                          <div>
-                            <p className="text-sm font-semibold text-foreground">
-                              {game.monitorMode === 'named'
-                                ? 'Launcher-aware monitoring'
-                                : 'Direct executable monitoring'}
-                            </p>
-                            <p className="text-sm text-muted-foreground">
-                              {game.monitorMode === 'named'
-                                ? `Watching ${game.monitorProcessName ?? 'the selected executable'} after the launcher starts.`
-                                : 'Tracking the launched process tree with zero extra setup.'}
-                            </p>
+                      <div className="space-y-4 px-6 py-5">
+                        <div className="rounded-[1.4rem] border border-border bg-background/70 p-4">
+                          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                            Launch target
+                          </p>
+                          <p className="mt-2 break-all text-sm text-foreground">
+                            {game.launchTarget}
+                          </p>
+                          {game.arguments ? (
+                            <>
+                              <p className="mt-4 text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                                Arguments
+                              </p>
+                              <p className="mt-2 break-all text-sm text-foreground">
+                                {game.arguments}
+                              </p>
+                            </>
+                          ) : null}
+                        </div>
+                        <div
+                          className={cn(
+                            'rounded-[1.4rem] border p-4',
+                            game.monitorMode === 'named'
+                              ? 'border-primary/40 bg-primary/10'
+                              : 'border-border bg-background/70'
+                          )}
+                        >
+                          <div className="flex items-center gap-3">
+                            <span className="flex h-10 w-10 items-center justify-center rounded-full bg-background/80 text-primary">
+                              <Icon
+                                name={game.monitorMode === 'named' ? 'rocket_launch' : 'device_hub'}
+                                className="text-[20px]"
+                              />
+                            </span>
+                            <div>
+                              <p className="text-sm font-semibold text-foreground">
+                                {game.monitorMode === 'named'
+                                  ? 'Launcher-aware monitoring'
+                                  : 'Direct executable monitoring'}
+                              </p>
+                              <p className="text-sm text-muted-foreground">
+                                {game.monitorMode === 'named'
+                                  ? `Watching ${game.monitorProcessName ?? 'the selected executable'} after the launcher starts.`
+                                  : 'Tracking the launched process tree with zero extra setup.'}
+                              </p>
+                            </div>
                           </div>
                         </div>
                       </div>
-                    </div>
-                  </section>
+                    </section>
 
-                  <section className="grid gap-4 md:grid-cols-2">
-                    <StatCard
-                      label="Total playtime"
-                      value={meta.playtime}
-                      icon="timer"
-                      tone="primary"
-                    />
-                    <StatCard
-                      label="Last played"
-                      value={meta.lastPlayed}
-                      icon="history"
-                      tone="secondary"
-                    />
-                  </section>
+                    <section className="grid gap-4 md:grid-cols-2">
+                      <StatCard
+                        label="Total playtime"
+                        value={meta.playtime}
+                        icon="timer"
+                        tone="primary"
+                      />
+                      <StatCard
+                        label="Last played"
+                        value={meta.lastPlayed}
+                        icon="history"
+                        tone="secondary"
+                      />
+                    </section>
+                  </div>
                 </div>
-              </div>
-            )}
-          </TabsContent>
+              )}
+            </TabsContent>
 
-          <TabsContent value="edit" className="mt-0">
-            {game ? <GameEditForm key={game.id} game={game} /> : null}
-          </TabsContent>
+            <TabsContent value="edit" className="mt-0">
+              {game ? <GameEditForm key={game.id} game={game} /> : null}
+            </TabsContent>
 
-          <TabsContent value="groups" className="mt-0">
-            {game ? <GameDetailGroupsTab game={game} /> : null}
-          </TabsContent>
+            <TabsContent value="groups" className="mt-0">
+              {game ? <GameDetailGroupsTab game={game} /> : null}
+            </TabsContent>
 
-          <TabsContent value="scripts" className="mt-0">
-            {game ? <GameDetailScriptsTab game={game} /> : null}
-          </TabsContent>
+            <TabsContent value="scripts" className="mt-0">
+              {game ? <GameDetailScriptsTab game={game} /> : null}
+            </TabsContent>
 
-          <TabsContent value="dlss" className="mt-0">
-            {game ? <GameDetailDlssTab gameId={game.id} /> : null}
-          </TabsContent>
+            <TabsContent value="dlss" className="mt-0">
+              {game ? <GameDetailDlssTab gameId={game.id} footerHost={dlssFooterHost} /> : null}
+            </TabsContent>
+          </div>
+          {activeTab === 'dlss' && game ? (
+            <div
+              className="shrink-0 border-t border-border bg-background/95 px-6 py-4"
+              data-testid="game-detail-dlss-footer-shell"
+            >
+              <div ref={setDlssFooterHost} />
+            </div>
+          ) : null}
         </div>
       </Tabs>
 

@@ -51,6 +51,22 @@ describe('GameCard', () => {
     expect(groupArea).toBeEmptyDOMElement()
   })
 
+  it('lets a single group pill fill the available row width', () => {
+    render(<GameCard game={BASE_GAME} groups={GROUPS} />)
+
+    const groupArea = screen.getByTestId('game-card-groups')
+    expect(groupArea).toHaveClass('grid-cols-1')
+    expect(screen.getByTitle('HDR Games')).toHaveClass('w-full')
+  })
+
+  it('lets the last group pill span the full second row when the count is odd', () => {
+    render(<GameCard game={{ ...BASE_GAME, groupIds: [1, 2, 3] }} groups={GROUPS} />)
+
+    const indieBadge = screen.getByTitle('Indie Picks')
+    expect(screen.getByTestId('game-card-groups')).toHaveClass('grid-cols-2')
+    expect(indieBadge).toHaveClass('col-span-2')
+  })
+
   it('shows the playing pip, ring, and live counter when active', () => {
     render(<GameCard game={BASE_GAME} groups={GROUPS} isPlaying elapsedSeconds={95} />)
 
