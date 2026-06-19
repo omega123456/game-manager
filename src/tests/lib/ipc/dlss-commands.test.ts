@@ -8,6 +8,7 @@ import {
   DLSS_EVENTS,
   downloadDlssVersion,
   getDlssCatalog,
+  getDlssGlobalIndicator,
   getDlssGamePreset,
   getDlssGameState,
   getDlssGlobalPreset,
@@ -22,6 +23,7 @@ import {
   scanDlssGame,
   scanDlssLibrary,
   setDlssFolderOverride,
+  setDlssGlobalIndicator,
   setDlssGamePreset,
   setDlssGlobalPreset,
 } from '@/lib/ipc/dlss-commands'
@@ -120,6 +122,13 @@ describe('dlss-commands', () => {
     expect(ipc.calls('dlss_set_game_preset')).toEqual([
       { gameId: 4, presetKind: 'rayReconstruction', value: 1 },
     ])
+  })
+
+  it('reads and writes the global indicator mode', async () => {
+    await getDlssGlobalIndicator()
+    await setDlssGlobalIndicator('allDlssDlls')
+    expect(ipc.calls('dlss_get_global_indicator')).toEqual([{}])
+    expect(ipc.calls('dlss_set_global_indicator')).toEqual([{ mode: 'allDlssDlls' }])
   })
 
   it('saves a game change-set', async () => {

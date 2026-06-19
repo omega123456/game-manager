@@ -7,6 +7,7 @@ import {
   countDlssApplicable,
   downloadDlssVersion,
   getDlssCatalog,
+  getDlssGlobalIndicator,
   getDlssGamePreset,
   getDlssGameState,
   getDlssGlobalPreset,
@@ -20,6 +21,7 @@ import {
   scanDlssGame,
   scanDlssLibrary,
   setDlssFolderOverride,
+  setDlssGlobalIndicator,
   setDlssGamePreset,
   setDlssGlobalPreset,
 } from '@/lib/ipc/dlss-commands'
@@ -29,6 +31,7 @@ import {
   DLSS_CATALOG_QUERY_KEY,
   DLSS_GAME_PRESET_QUERY_KEY,
   DLSS_GAME_STATE_QUERY_KEY,
+  DLSS_GLOBAL_INDICATOR_QUERY_KEY,
   DLSS_GLOBAL_PRESET_QUERY_KEY,
   DLSS_PRESET_OPTIONS_QUERY_KEY,
   DLSS_STATES_QUERY_KEY,
@@ -38,6 +41,7 @@ import {
 import type {
   ApplyResult,
   BatchApplyResult,
+  DlssIndicatorMode,
   DllType,
   DownloadProgress,
   PresetKind,
@@ -95,6 +99,16 @@ export function useDlssGlobalPresetQuery(kind: PresetKind, enabled: boolean) {
     queryKey: [...DLSS_GLOBAL_PRESET_QUERY_KEY, kind],
     queryFn: () => getDlssGlobalPreset(kind),
     enabled,
+    staleTime: 0,
+    refetchOnMount: 'always',
+  })
+}
+
+/** Live global DLSS indicator mode. */
+export function useDlssGlobalIndicatorQuery() {
+  return useQuery({
+    queryKey: DLSS_GLOBAL_INDICATOR_QUERY_KEY,
+    queryFn: getDlssGlobalIndicator,
     staleTime: 0,
     refetchOnMount: 'always',
   })
@@ -243,6 +257,19 @@ export function useSetDlssGlobalPresetMutation() {
     onSuccess: (_data, { kind }) => {
       void queryClient.invalidateQueries({
         queryKey: [...DLSS_GLOBAL_PRESET_QUERY_KEY, kind],
+      })
+    },
+  })
+}
+
+/** Set the global DLSS indicator mode. */
+export function useSetDlssGlobalIndicatorMutation() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (mode: DlssIndicatorMode) => setDlssGlobalIndicator(mode),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({
+        queryKey: DLSS_GLOBAL_INDICATOR_QUERY_KEY,
       })
     },
   })

@@ -216,6 +216,8 @@ pub fn run() {
             commands::dlss::dlss_apply_to_all,
             commands::dlss::dlss_count_applicable,
             commands::dlss::dlss_get_preset_options,
+            commands::dlss::dlss_get_global_indicator,
+            commands::dlss::dlss_set_global_indicator,
             commands::dlss::dlss_get_global_preset,
             commands::dlss::dlss_set_global_preset,
             commands::dlss::dlss_get_game_preset,

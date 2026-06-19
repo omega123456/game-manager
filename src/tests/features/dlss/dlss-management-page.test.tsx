@@ -42,6 +42,7 @@ describe('DlssManagementPage', () => {
     ipc.override('dlss_get_support', () => ({ nvapiAvailable: true, isElevated: true }))
     ipc.override('dlss_get_catalog', () => CATALOG)
     ipc.override('dlss_list_game_states', () => POPULATED)
+    ipc.override('dlss_get_global_indicator', () => 'off')
     renderWithProviders(<DlssManagementPage />, { route: '/dlss' })
 
     expect(
@@ -49,6 +50,7 @@ describe('DlssManagementPage', () => {
     ).toBeInTheDocument()
     expect(await screen.findByText('Global Overrides')).toBeInTheDocument()
     expect(await screen.findByText('Global Presets')).toBeInTheDocument()
+    expect(await screen.findByText('Global Indicator')).toBeInTheDocument()
   })
 
   it('triggers a scan-if-stale on mount', async () => {

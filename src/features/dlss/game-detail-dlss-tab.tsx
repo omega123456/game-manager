@@ -310,9 +310,7 @@ export function GameDetailDlssTab({ gameId }: GameDetailDlssTabProps): React.JSX
 
       <section className="space-y-4 rounded-[1.5rem] border border-border bg-surface-low p-5">
         <div>
-          <h3 className="font-heading text-base font-semibold text-foreground">
-            Driver presets
-          </h3>
+          <h3 className="font-heading text-base font-semibold text-foreground">Driver presets</h3>
           <p className="text-sm text-muted-foreground">
             Per-game NVIDIA driver profile overrides for DLSS quality.
           </p>

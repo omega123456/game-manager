@@ -15,6 +15,7 @@
 pub mod detect;
 pub mod download;
 pub mod elevation;
+pub mod indicator;
 pub mod manifest;
 pub mod nvapi;
 pub mod storage;

@@ -55,6 +55,8 @@
     "allow-dlss-apply-to-all",
     "allow-dlss-count-applicable",
     "allow-dlss-get-preset-options",
+    "allow-dlss-get-global-indicator",
+    "allow-dlss-set-global-indicator",
     "allow-dlss-get-global-preset",
     "allow-dlss-set-global-preset",
     "allow-dlss-get-game-preset",

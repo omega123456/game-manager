@@ -68,6 +68,16 @@ description = "Allows the frontend to fetch preset options via dlss_get_preset_o
 commands.allow = ["dlss_get_preset_options"]
 
 [[permission]]
+identifier = "allow-dlss-get-global-indicator"
+description = "Allows the frontend to read the global DLSS indicator via dlss_get_global_indicator."
+commands.allow = ["dlss_get_global_indicator"]
+
+[[permission]]
+identifier = "allow-dlss-set-global-indicator"
+description = "Allows the frontend to write the global DLSS indicator via dlss_set_global_indicator."
+commands.allow = ["dlss_set_global_indicator"]
+
+[[permission]]
 identifier = "allow-dlss-get-global-preset"
 description = "Allows the frontend to read the global preset via dlss_get_global_preset."
 commands.allow = ["dlss_get_global_preset"]

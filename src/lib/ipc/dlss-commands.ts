@@ -5,6 +5,7 @@ import type {
   ApplyResult,
   BatchApplyResult,
   DllCatalog,
+  DlssIndicatorMode,
   DllType,
   DlssSupport,
   DownloadProgress,
@@ -114,6 +115,16 @@ export function getDlssGlobalPreset(presetKind: PresetKind): Promise<number> {
 /** Write the global (base profile) preset value (live NVAPI). */
 export function setDlssGlobalPreset(presetKind: PresetKind, value: number): Promise<void> {
   return invoke<void>('dlss_set_global_preset', { presetKind, value })
+}
+
+/** Read the global DLSS on-screen indicator mode. */
+export function getDlssGlobalIndicator(): Promise<DlssIndicatorMode> {
+  return invoke<DlssIndicatorMode>('dlss_get_global_indicator')
+}
+
+/** Write the global DLSS on-screen indicator mode. */
+export function setDlssGlobalIndicator(mode: DlssIndicatorMode): Promise<void> {
+  return invoke<void>('dlss_set_global_indicator', { mode })
 }
 
 /** Read the per-game preset state (live NVAPI). */

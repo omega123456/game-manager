@@ -13,6 +13,9 @@ export type DllType = 'superResolution' | 'frameGeneration' | 'rayReconstruction
 /** A preset selector kind. Frame Generation has no exposed preset (by design). */
 export type PresetKind = 'dlss' | 'rayReconstruction'
 
+/** Global NVIDIA DLSS indicator mode. */
+export type DlssIndicatorMode = 'off' | 'debugDllsOnly' | 'allDlssDlls'
+
 /** The provenance of a returned catalog. */
 export type CatalogSource = 'remote' | 'cache' | 'static'
 

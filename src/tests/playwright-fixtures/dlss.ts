@@ -10,6 +10,7 @@ import type {
   BatchApplyResult,
   DllCatalog,
   DllVersion,
+  DlssIndicatorMode,
   DlssSupport,
   GameDlssState,
   GamePresetState,
@@ -143,6 +144,7 @@ const EMPTY_GAME_STATES: GameDlssState[] = DLSS_GAME_STATES.map((state) => ({
 
 const NO_NVIDIA_SUPPORT: DlssSupport = { nvapiAvailable: false, isElevated: true }
 const NOT_ELEVATED_SUPPORT: DlssSupport = { nvapiAvailable: true, isElevated: false }
+const DEFAULT_INDICATOR_MODE: DlssIndicatorMode = 'off'
 
 /** Error message that the elevation-error heuristic recognises. */
 const ELEVATION_ERROR = 'This action requires elevation (administrator privilege).'
@@ -187,6 +189,16 @@ function getDlssScenario(): DlssScenario {
 /** Never-resolving promise to hold a loading state for a stable screenshot. */
 function pending<T>(): Promise<T> {
   return new Promise<T>(() => {})
+}
+
+function getIndicatorStore(): { mode: DlssIndicatorMode } {
+  const scope = globalThis as typeof globalThis & {
+    __playwrightDlssIndicator?: { mode: DlssIndicatorMode }
+  }
+  if (!scope.__playwrightDlssIndicator) {
+    scope.__playwrightDlssIndicator = { mode: DEFAULT_INDICATOR_MODE }
+  }
+  return scope.__playwrightDlssIndicator
 }
 
 export const dlssFixtures: Record<string, PlaywrightFixtureHandler> = {
@@ -251,6 +263,12 @@ export const dlssFixtures: Record<string, PlaywrightFixtureHandler> = {
     args?.presetKind === 'rayReconstruction' ? RR_PRESET_OPTIONS : SR_PRESET_OPTIONS,
   dlss_get_global_preset: () => 0,
   dlss_set_global_preset: () => undefined,
+  dlss_get_global_indicator: () => getIndicatorStore().mode,
+  dlss_set_global_indicator: (args) => {
+    getIndicatorStore().mode =
+      (args?.mode as DlssIndicatorMode | undefined) ?? DEFAULT_INDICATOR_MODE
+    return undefined
+  },
   dlss_get_game_preset: (args) => gamePresetState(Number(args?.gameId ?? 0)),
   dlss_set_game_preset: () => undefined,
   dlss_save_game: (args) =>

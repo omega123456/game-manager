@@ -12,6 +12,7 @@ import {
   useDlssApplyProgress,
   useDlssCatalogQuery,
   useDlssDownloadProgress,
+  useDlssGlobalIndicatorQuery,
   useDlssGamePresetQuery,
   useDlssGameStateQuery,
   useDlssGlobalPresetQuery,
@@ -23,10 +24,12 @@ import {
   useScanDlssGameMutation,
   useScanDlssLibraryMutation,
   useSetDlssFolderOverrideMutation,
+  useSetDlssGlobalIndicatorMutation,
   useSetDlssGamePresetMutation,
   useSetDlssGlobalPresetMutation,
 } from '@/lib/queries/use-dlss'
 import { DLSS_EVENTS } from '@/lib/ipc/dlss-commands'
+import { DLSS_GLOBAL_INDICATOR_QUERY_KEY } from '@/lib/queries/query-keys'
 import type { DllCatalog } from '@/types/dlss'
 
 import { ipc } from '../../ipc-mock'
@@ -83,6 +86,12 @@ describe('use-dlss queries', () => {
     const { result } = renderHook(() => useDlssGlobalPresetQuery('dlss', false), { wrapper })
     expect(result.current.fetchStatus).toBe('idle')
   })
+
+  it('loads the global indicator mode', async () => {
+    ipc.override('dlss_get_global_indicator', () => 'allDlssDlls')
+    const { result } = renderHook(() => useDlssGlobalIndicatorQuery(), { wrapper })
+    await waitFor(() => expect(result.current.data).toBe('allDlssDlls'))
+  })
 })
 
 describe('use-dlss mutations', () => {
@@ -104,6 +113,34 @@ describe('use-dlss mutations', () => {
     const { result } = renderHook(() => useSetDlssGlobalPresetMutation(), { wrapper })
     await result.current.mutateAsync({ kind: 'dlss', value: 5 })
     expect(ipc.calls('dlss_set_global_preset')).toEqual([{ presetKind: 'dlss', value: 5 }])
+  })
+
+  it('sets the global indicator mode and invalidates the indicator query', async () => {
+    const client = createQueryClient()
+    const invalidateSpy = vi.spyOn(client, 'invalidateQueries')
+    function indicatorWrapper({ children }: { children: ReactNode }) {
+      return <QueryClientProvider client={client}>{children}</QueryClientProvider>
+    }
+
+    const { result } = renderHook(() => useSetDlssGlobalIndicatorMutation(), {
+      wrapper: indicatorWrapper,
+    })
+    await result.current.mutateAsync('debugDllsOnly')
+
+    expect(ipc.calls('dlss_set_global_indicator')).toEqual([{ mode: 'debugDllsOnly' }])
+    await waitFor(() => {
+      expect(invalidateSpy).toHaveBeenCalledWith({
+        queryKey: DLSS_GLOBAL_INDICATOR_QUERY_KEY,
+      })
+    })
+  })
+
+  it('surfaces global indicator write failures', async () => {
+    ipc.override('dlss_set_global_indicator', () => {
+      throw new Error('write failed')
+    })
+    const { result } = renderHook(() => useSetDlssGlobalIndicatorMutation(), { wrapper })
+    await expect(result.current.mutateAsync('allDlssDlls')).rejects.toThrow('write failed')
   })
 
   it('scans a game', async () => {

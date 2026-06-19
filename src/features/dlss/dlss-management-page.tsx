@@ -9,6 +9,7 @@ import {
 } from '@/lib/queries/use-dlss'
 
 import { GlobalOverridesCard } from './global-overrides-card'
+import { GlobalIndicatorCard } from './global-indicator-card'
 import { GlobalPresetsCard } from './global-presets-card'
 import { DlssElevationBanner } from './dlss-elevation-banner'
 import { DlssEmptyState } from './dlss-empty-state'
@@ -92,6 +93,7 @@ export function DlssManagementPage(): React.JSX.Element {
               />
             ) : null}
             <GlobalPresetsCard supported={nvapiAvailable} />
+            <GlobalIndicatorCard />
           </>
         )}
       </div>

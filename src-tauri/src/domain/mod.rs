@@ -515,6 +515,41 @@ pub enum PresetKind {
     RayReconstruction,
 }
 
+/// The supported global DLSS on-screen indicator modes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum DlssIndicatorMode {
+    /// Disable the indicator.
+    Off,
+    /// Show the indicator only for debug DLSS DLLs.
+    DebugDllsOnly,
+    /// Show the indicator for all DLSS DLLs.
+    AllDlssDlls,
+}
+
+impl DlssIndicatorMode {
+    /// The NVIDIA registry DWORD for this mode.
+    pub fn registry_value(self) -> u32 {
+        match self {
+            DlssIndicatorMode::Off => 0,
+            DlssIndicatorMode::DebugDllsOnly => 1,
+            DlssIndicatorMode::AllDlssDlls => 1024,
+        }
+    }
+
+    /// Parse the NVIDIA registry DWORD into a supported mode.
+    pub fn from_registry_value(value: u32) -> crate::dlss::DlssResult<Self> {
+        match value {
+            0 => Ok(DlssIndicatorMode::Off),
+            1 => Ok(DlssIndicatorMode::DebugDllsOnly),
+            1024 => Ok(DlssIndicatorMode::AllDlssDlls),
+            other => Err(crate::dlss::DlssError::Invalid(format!(
+                "unsupported DLSS indicator registry value: {other}"
+            ))),
+        }
+    }
+}
+
 /// A single available DLL version from the catalog.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]

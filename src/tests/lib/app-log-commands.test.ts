@@ -1,11 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import {
-  logFrontend,
-  shouldEmitFrontendLog,
-  toast,
-  toastError,
-} from '../../lib/app-log-commands'
+import { logFrontend, shouldEmitFrontendLog, toast, toastError } from '../../lib/app-log-commands'
 import { useToastStore } from '../../stores/toast-store'
 import { ipc } from '../ipc-mock'
 
@@ -37,7 +32,6 @@ describe('logFrontend', () => {
     })
     consoleError.mockRestore()
   })
-
 })
 
 describe('shouldEmitFrontendLog', () => {

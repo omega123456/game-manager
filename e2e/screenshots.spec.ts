@@ -247,8 +247,22 @@ for (const theme of THEMES) {
     await page.getByRole('heading', { name: 'DLSS Management' }).waitFor({ state: 'visible' })
     await page.getByRole('heading', { name: 'Global Overrides' }).waitFor({ state: 'visible' })
     await page.getByRole('heading', { name: 'Global Presets' }).waitFor({ state: 'visible' })
+    await page.getByRole('heading', { name: 'Global Indicator' }).waitFor({ state: 'visible' })
     await scrollRouteOutletToTop(page)
     await expect(page).toHaveScreenshot(`dlss-page-populated-${theme}.png`)
+  })
+
+  test(`dlss global indicator card — ${theme}`, async ({ page }) => {
+    await gotoAppState(page, '#/dlss')
+    await setTheme(page, theme)
+    const indicatorHeading = page.getByRole('heading', { name: 'Global Indicator' })
+    await indicatorHeading.waitFor({ state: 'visible' })
+    const indicatorCard = indicatorHeading.locator('xpath=ancestor::section[1]')
+    await indicatorHeading.scrollIntoViewIfNeeded()
+    await page.getByRole('combobox', { name: 'Show on-screen indicator' }).waitFor({
+      state: 'visible',
+    })
+    await expect(indicatorCard).toHaveScreenshot(`dlss-global-indicator-card-${theme}.png`)
   })
 
   test(`dlss version combobox open — ${theme}`, async ({ page }) => {

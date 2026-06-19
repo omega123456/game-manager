@@ -22,8 +22,8 @@ use crate::dlss::{download, manifest};
 #[cfg(not(coverage))]
 use crate::domain::{BatchApplyResult, DllCatalog, GamePresetState};
 use crate::domain::{
-    DllType, DlssSupport, GameDlssState, PresetKind, PresetOption, SaveGameDllSelection,
-    SaveGameDlss,
+    DllType, DlssIndicatorMode, DlssSupport, GameDlssState, PresetKind, PresetOption,
+    SaveGameDllSelection, SaveGameDlss,
 };
 use crate::error::AppResult;
 use crate::state::AppState;
@@ -209,6 +209,18 @@ pub fn get_preset_options_impl(kind: PresetKind) -> AppResult<Vec<PresetOption>>
     Ok(nvapi::presets::preset_options(kind)?)
 }
 
+/// Read the global NVIDIA DLSS indicator mode.
+pub fn get_global_indicator_impl() -> AppResult<DlssIndicatorMode> {
+    Ok(crate::dlss::indicator::get_global_indicator_mode_impl()?)
+}
+
+/// Write the global NVIDIA DLSS indicator mode.
+pub fn set_global_indicator_impl(mode: DlssIndicatorMode) -> AppResult<()> {
+    Ok(crate::dlss::indicator::set_global_indicator_mode_impl(
+        mode,
+    )?)
+}
+
 // ---------------------------------------------------------------------------
 // Tauri command wrappers.
 // ---------------------------------------------------------------------------
@@ -377,6 +389,20 @@ pub fn dlss_count_applicable(
 #[tauri::command]
 pub fn dlss_get_preset_options(preset_kind: PresetKind) -> AppResult<Vec<PresetOption>> {
     get_preset_options_impl(preset_kind)
+}
+
+/// Read the global DLSS on-screen indicator mode.
+#[cfg(not(coverage))]
+#[tauri::command]
+pub fn dlss_get_global_indicator() -> AppResult<DlssIndicatorMode> {
+    get_global_indicator_impl()
+}
+
+/// Write the global DLSS on-screen indicator mode.
+#[cfg(not(coverage))]
+#[tauri::command]
+pub fn dlss_set_global_indicator(mode: DlssIndicatorMode) -> AppResult<()> {
+    set_global_indicator_impl(mode)
 }
 
 /// Read the global (base profile) preset value (Phase 3 logic).

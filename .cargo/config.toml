@@ -65,6 +65,8 @@ gm-test-integration = [
   "dlss_swap_integration",
   "--test",
   "dlss_preset_logic_integration",
+  "--test",
+  "dlss_indicator_integration",
 ]
 
 gm-llvm-cov = [
@@ -131,6 +133,8 @@ gm-llvm-cov = [
   "dlss_swap_integration",
   "--test",
   "dlss_preset_logic_integration",
+  "--test",
+  "dlss_indicator_integration",
   "--fail-under-lines",
   "90",
   "--fail-under-functions",

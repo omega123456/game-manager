@@ -45,9 +45,7 @@ export function GlobalScriptsSection(): React.JSX.Element {
           data-testid="global-scripts-placeholder"
         >
           <Icon name="code_off" className="text-[32px] text-muted-foreground" />
-          <p className="text-sm text-muted-foreground">
-            Scripts marked global will appear here.
-          </p>
+          <p className="text-sm text-muted-foreground">Scripts marked global will appear here.</p>
         </div>
       ) : (
         <ul className="divide-y divide-border" data-testid="global-scripts-list">
