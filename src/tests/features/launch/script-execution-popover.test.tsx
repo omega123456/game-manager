@@ -11,7 +11,6 @@ import type { LaunchRun } from '@/types/domain'
 function createLaunchRun(overrides: Partial<LaunchRun> & Pick<LaunchRun, 'gameId'>): LaunchRun {
   return {
     id: 41,
-    gameId: overrides.gameId,
     status: 'active',
     startedAt: '2026-06-19T10:00:00Z',
     failureCount: 0,
@@ -61,7 +60,7 @@ describe('ScriptExecutionPopover', () => {
 
   it('shows loading state before the query resolves', async () => {
     const user = userEvent.setup()
-    let resolveRun: ((value: LaunchRun | null) => void) | null = null
+    let resolveRun!: (value: LaunchRun | null) => void
     ipc.override(
       'get_latest_launch_run',
       () =>
@@ -79,7 +78,7 @@ describe('ScriptExecutionPopover', () => {
       'Loading script execution details…'
     )
 
-    resolveRun?.(null)
+    resolveRun(null)
     await waitFor(() => {
       expect(screen.queryByTestId('script-execution-loading')).not.toBeInTheDocument()
     })

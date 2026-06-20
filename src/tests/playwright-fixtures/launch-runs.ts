@@ -45,7 +45,6 @@ function scriptRecord(
 function createLaunchRun(overrides: Partial<LaunchRun> & Pick<LaunchRun, 'gameId'>): LaunchRun {
   return {
     id: 101,
-    gameId: overrides.gameId,
     status: 'completed',
     startedAt: '2026-06-19T10:00:00Z',
     endedAt: '2026-06-19T10:01:15Z',
