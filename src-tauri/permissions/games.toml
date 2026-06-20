@@ -46,3 +46,8 @@ commands.allow = ["set_game_scripts"]
 identifier = "allow-get-resolved-scripts"
 description = "Allows the frontend to preview a game's resolved execution scripts via get_resolved_scripts."
 commands.allow = ["get_resolved_scripts"]
+
+[[permission]]
+identifier = "allow-get-latest-launch-run"
+description = "Allows the frontend to read the latest retained launch execution pipeline via get_latest_launch_run."
+commands.allow = ["get_latest_launch_run"]

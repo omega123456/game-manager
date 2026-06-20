@@ -17,7 +17,7 @@ use std::sync::Arc;
 use crate::domain::LaunchPhase;
 use crate::error::AppResult;
 use crate::launch::cancel::CancelToken;
-use crate::launch::events::EventSink;
+use crate::launch::events::{EventSink, ScriptExecutionUpdated};
 #[cfg(not(coverage))]
 use crate::launch::events::{LaunchLifecycle, EVENT_ENDED, EVENT_ERROR};
 use crate::launch::state_machine;
@@ -35,9 +35,68 @@ pub async fn run_launch_impl(
     sink: &dyn EventSink,
     cancel: CancelToken,
 ) -> AppResult<u32> {
-    let result = state_machine::run_launch(state, game_id, monitor, sink, cancel).await;
+    let created_run_id = std::sync::atomic::AtomicI64::new(0);
+    let result =
+        state_machine::run_launch(state, game_id, monitor, sink, cancel, &created_run_id).await;
+    if let Err(err) = &result {
+        let run_id = created_run_id.load(std::sync::atomic::Ordering::SeqCst);
+        if run_id != 0 {
+            if let Err(finalize_err) =
+                finalize_incomplete_run_after_failure(state, game_id, run_id, sink)
+            {
+                tracing::warn!(
+                    category = "launch",
+                    game_id,
+                    run_id,
+                    "failed to finalize incomplete launch run after hard failure: {finalize_err}"
+                );
+            }
+        }
+        tracing::error!(category = "launch", game_id, "launch failed: {err}");
+    }
     state.unregister_launch(game_id);
     result
+}
+
+/// Finalize the run THIS launch attempt created when a hard error interrupted
+/// it before the normal terminal status write.
+///
+/// `run_id` must be the run created by the current attempt (threaded out of the
+/// state machine). We look that exact run up by id — never the game's latest
+/// run — so a stale, orphaned `Active` run from a prior crashed session is never
+/// wrongly marked `Incomplete`.
+fn finalize_incomplete_run_after_failure(
+    state: &AppState,
+    game_id: i64,
+    run_id: i64,
+    sink: &dyn EventSink,
+) -> AppResult<()> {
+    let run = state.with_db(|conn| crate::db::repo::launch_runs::get_run(conn, run_id))?;
+    if run.status != crate::domain::LaunchRunStatus::Active {
+        return Ok(());
+    }
+
+    crate::launch::state_machine::mark_pending_records_incomplete(state, run.id, game_id);
+    let ended_at = chrono::Utc::now().to_rfc3339();
+    let updated = state.with_db(|conn| {
+        crate::db::repo::launch_runs::set_run_status(
+            conn,
+            run.id,
+            crate::domain::LaunchRunStatus::Incomplete,
+            run.failure_count,
+            Some(ended_at.as_str()),
+        )
+    })?;
+    if updated {
+        sink.emit_script_execution_updated(
+            crate::launch::events::EVENT_SCRIPT_EXECUTION_UPDATED,
+            &ScriptExecutionUpdated {
+                game_id,
+                launch_run_id: run.id,
+            },
+        );
+    }
+    Ok(())
 }
 
 /// Cancel an in-flight launch for `game_id`. Returns whether one was active.
@@ -69,7 +128,14 @@ struct TauriEventSink {
 
 #[cfg(not(coverage))]
 impl EventSink for TauriEventSink {
-    fn emit(&self, event: &str, payload: &LaunchLifecycle) {
+    fn emit_lifecycle(&self, event: &str, payload: &LaunchLifecycle) {
+        use tauri::Emitter;
+        if let Err(err) = self.app.emit(event, payload) {
+            tracing::warn!(category = "launch", "failed to emit {event}: {err}");
+        }
+    }
+
+    fn emit_script_execution_updated(&self, event: &str, payload: &ScriptExecutionUpdated) {
         use tauri::Emitter;
         if let Err(err) = self.app.emit(event, payload) {
             tracing::warn!(category = "launch", "failed to emit {event}: {err}");
@@ -84,7 +150,7 @@ fn emit_terminal_launch_failure(
     failed_count: u32,
     detail: String,
 ) {
-    sink.emit(
+    sink.emit_lifecycle(
         EVENT_ERROR,
         &LaunchLifecycle {
             game_id,
@@ -94,7 +160,7 @@ fn emit_terminal_launch_failure(
             elapsed_seconds: None,
         },
     );
-    sink.emit(
+    sink.emit_lifecycle(
         EVENT_ENDED,
         &LaunchLifecycle {
             game_id,

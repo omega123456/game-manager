@@ -4,7 +4,7 @@
 //! function-pointer resolution (using the IDs from the plan's Reference Data
 //! Appendix), the versioned `NVDRS_SETTING_V1`/profile/application structs (with
 //! `version` computed via `MAKE_NVAPI_VERSION = size_of::<T>() | (ver << 16)`),
-//! safe wrappers, and the [`super::drs::NvapiDrs`] trait so the orchestration in
+//! safe wrappers, and the [`NvapiDrs`] trait so the orchestration in
 //! [`super::drs`] / [`super::presets`] is testable with a fake.
 //!
 //! Two layers live here:
@@ -12,9 +12,10 @@
 //! * The **driver layer** ([`NvapiDriver`]) — the lowest-level abstraction over
 //!   the resolved NVAPI function pointers. It deals only in opaque handles and
 //!   raw DWORD settings. The real implementation ([`real_driver`]) is gated to
-//!   `cfg(windows)` and exercises genuine `unsafe` FFI against a live driver, so
-//!   it is the one true runtime boundary that cannot be unit-tested in CI.
-//! * The **orchestration layer** ([`super::drs::NvapiDrs`]) — pure logic over a
+//!   Windows production/development builds and exercises genuine `unsafe` FFI
+//!   against a live driver, so it is the one true runtime boundary that cannot
+//!   be unit-tested in CI.
+//! * The **orchestration layer** ([`NvapiDrs`]) — pure logic over a
 //!   [`NvapiDriver`]: profile matching (Levenshtein + exe match), value reads,
 //!   and writes. This is implemented in [`super::drs`] and is fully testable
 //!   against a fake [`NvapiDriver`].
@@ -26,27 +27,43 @@ pub fn make_nvapi_version<T>(interface_version: u32) -> u32 {
     (std::mem::size_of::<T>() as u32) | (interface_version << 16)
 }
 
-/// NVAPI DRS setting id for the DLSS SR render-preset selection
-/// (`NGX_DLSS_SR_OVERRIDE_RENDER_PRESET_SELECTION`).
+/// NVAPI DRS setting id for the DLSS SR render-preset selection.
 pub const SETTING_ID_DLSS_SR: u32 = 0x10E4_1DF3;
-/// NVAPI DRS setting id for the DLSS RR render-preset selection
-/// (`NGX_DLSS_RR_OVERRIDE_RENDER_PRESET_SELECTION`).
+/// NVAPI DRS setting id for the DLSS RR render-preset selection.
 pub const SETTING_ID_DLSS_RR: u32 = 0x10E4_1DF7;
-/// DLSS-SR override enable (`NGX_DLSS_SR_OVERRIDE`): a render-preset selection
-/// only takes effect when this is on.
+/// NVAPI DRS setting id for enabling DLSS-SR override on a profile.
 pub const SETTING_ID_DLSS_SR_OVERRIDE: u32 = 0x10E4_1E01;
-/// DLSS-RR override enable (`NGX_DLSS_RR_OVERRIDE`).
+/// NVAPI DRS setting id for enabling DLSS-RR override on a profile.
 pub const SETTING_ID_DLSS_RR_OVERRIDE: u32 = 0x10E4_1E02;
+/// NVAPI DRS setting id for DLSS-SR preset profile mode (Recommended / Custom).
+pub const SETTING_ID_DLSS_SR_PRESET_PROFILE: u32 = 0x0063_4291;
+/// `0x10E41DF3` value: use NVIDIA's recommended preset bundle.
+pub const PRESET_VALUE_RECOMMENDED: u32 = 0x00FF_FFFF;
+/// `0x00634291` value: NVIDIA App "Recommended" model preset mode.
+pub const PRESET_PROFILE_MODE_RECOMMENDED: u32 = 1;
+/// `0x00634291` value: NVIDIA App "Custom" model preset mode.
+pub const PRESET_PROFILE_MODE_CUSTOM: u32 = 2;
 
-/// Sentinel preset value meaning "let NVIDIA pick the recommended preset".
-pub const PRESET_RECOMMENDED: u32 = 0x00FF_FFFF;
-/// The `Default` preset value (no forced preset).
-pub const PRESET_DEFAULT: u32 = 0;
+/// A DWORD driver setting value plus its DRS [`setting_location`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct DrsDwordSetting {
+    /// The setting's DWORD value.
+    pub value: u32,
+    /// Where the value comes from (`NVDRS_*_PROFILE_LOCATION`).
+    pub location: u32,
+}
 
-/// `nvapi_QueryInterface` ids for the DRS functions. Verified against
-/// DLSSTweaks / NVIDIA Profile Inspector — the values here are the ones modern
-/// drivers actually export (several earlier "appendix" ids were wrong; see the
-/// DLSS preset root-cause handoff).
+/// `NVDRS_SETTING_LOCATION` values returned by `DRS_GetSetting`.
+pub mod setting_location {
+    /// Value is stored on the queried profile.
+    pub const CURRENT_PROFILE: u32 = 0;
+    /// Value is inherited from the current global profile.
+    pub const GLOBAL_PROFILE: u32 = 1;
+    /// Value is inherited from the base profile.
+    pub const BASE_PROFILE: u32 = 2;
+}
+
+/// `nvapi_QueryInterface` ids for the DRS functions (Reference Data Appendix).
 pub mod query_interface_id {
     /// `NvAPI_Initialize`.
     pub const INITIALIZE: u32 = 0x0150_E828;
@@ -54,10 +71,9 @@ pub mod query_interface_id {
     pub const DRS_CREATE_SESSION: u32 = 0x0694_D52E;
     /// `NvAPI_DRS_LoadSettings`.
     pub const DRS_LOAD_SETTINGS: u32 = 0x375D_BD6B;
-    /// `NvAPI_DRS_GetBaseProfile` (lowest-priority defaults).
+    /// `NvAPI_DRS_GetBaseProfile`.
     pub const DRS_GET_BASE_PROFILE: u32 = 0xDA84_66A0;
-    /// `NvAPI_DRS_GetCurrentGlobalProfile` — the profile NVIDIA App/Control Panel
-    /// edits as "Global"; what global presets must read/write.
+    /// `NvAPI_DRS_GetCurrentGlobalProfile`.
     pub const DRS_GET_CURRENT_GLOBAL_PROFILE: u32 = 0x617B_FF9F;
     /// `NvAPI_DRS_EnumProfiles`.
     pub const DRS_ENUM_PROFILES: u32 = 0xBC37_1EE0;
@@ -65,20 +81,21 @@ pub mod query_interface_id {
     pub const DRS_GET_PROFILE_INFO: u32 = 0x61CD_6FD6;
     /// `NvAPI_DRS_EnumApplications`.
     pub const DRS_ENUM_APPLICATIONS: u32 = 0x7FA2_173A;
-    /// `NvAPI_DRS_GetSetting` — the canonical id used by NVIDIA Profile Inspector
-    /// / DLSSTweaks, paired with `NVDRS_SETTING_V1`. (The `0xEA99498D` variant some
-    /// references list resolves to a function that rejects the V1 struct with
-    /// `INVALID_ARGUMENT` on current drivers, so it is intentionally not used.)
-    pub const DRS_GET_SETTING: u32 = 0x73BF_8338;
-    /// `NvAPI_DRS_SetSetting` — canonical id paired with `NVDRS_SETTING_V1`.
-    pub const DRS_SET_SETTING: u32 = 0x577D_D202;
+    /// Primary `NvAPI_DRS_GetSetting` query id (newer drivers).
+    pub const DRS_GET_SETTING: u32 = 0xEA99_498D;
+    /// Legacy `NvAPI_DRS_GetSetting` query id fallback.
+    pub const DRS_GET_SETTING_LEGACY: u32 = 0x73BF_8338;
+    /// Primary `NvAPI_DRS_SetSetting` query id (newer drivers).
+    pub const DRS_SET_SETTING: u32 = 0x8A2C_F5F5;
+    /// Legacy `NvAPI_DRS_SetSetting` query id fallback.
+    pub const DRS_SET_SETTING_LEGACY: u32 = 0x577D_D202;
     /// `NvAPI_DRS_SaveSettings`.
     pub const DRS_SAVE_SETTINGS: u32 = 0xFCBC_7E14;
     /// `NvAPI_DRS_DestroySession`.
     pub const DRS_DESTROY_SESSION: u32 = 0xDAD9_CFF8;
 }
 
-/// NVAPI `NvAPI_Status` values we care about.
+/// NVAPI `NvAPI_Status` values we care about (Reference Data Appendix).
 pub mod status {
     /// Success.
     pub const OK: i32 = 0;
@@ -86,73 +103,12 @@ pub mod status {
     pub const NOT_SUPPORTED: i32 = -2;
     /// The caller lacks the elevation required to write/save settings.
     pub const INVALID_USER_PRIVILEGE: i32 = -130;
-    /// Enumeration ran off the end of the list. On current drivers this is `-7`
-    /// (`NVAPI_END_ENUMERATION`) — the normal end-of-list signal, not an error.
+    /// Enumeration ran off the end of the list (`NVAPI_END_ENUMERATION`).
     pub const END_ENUMERATION: i32 = -7;
     /// The profile does not exist.
     pub const PROFILE_NOT_FOUND: i32 = -163;
-    /// The requested setting is not present on the profile. Drivers report an
-    /// absent setting as either `-165` or `-160` depending on header/driver
-    /// version; [`is_setting_absent`] treats both as "unset".
+    /// The requested setting is not present on the profile.
     pub const SETTING_NOT_FOUND: i32 = -165;
-    /// Alternate "setting not present" code seen on current drivers.
-    pub const SETTING_NOT_FOUND_ALT: i32 = -160;
-
-    /// Whether `code` means the setting is simply not present on the profile (so
-    /// the read should yield `None`/Default rather than an error).
-    pub fn is_setting_absent(code: i32) -> bool {
-        code == SETTING_NOT_FOUND || code == SETTING_NOT_FOUND_ALT
-    }
-}
-
-/// Where DRS reports a setting value as living, relative to the queried profile
-/// (`NVDRS_SETTING_V1.settingLocation`). Only [`SettingLocation::Current`] values
-/// are *locally* stored on the profile; everything else is inherited and must not
-/// be displayed as a per-profile preset (it does not reflect the NVIDIA App view).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum SettingLocation {
-    /// Stored locally on the queried profile (`NVDRS_CURRENT_PROFILE_LOCATION`, 0).
-    Current,
-    /// Inherited from the current global profile (`NVDRS_GLOBAL_PROFILE_LOCATION`, 1).
-    Global,
-    /// Inherited from the base profile (`NVDRS_BASE_PROFILE_LOCATION`, 2).
-    Base,
-    /// Any other / unrecognised location reported by the driver.
-    Other(u32),
-}
-
-impl SettingLocation {
-    /// Decode the raw `settingLocation` DWORD.
-    pub fn from_raw(raw: u32) -> Self {
-        match raw {
-            0 => SettingLocation::Current,
-            1 => SettingLocation::Global,
-            2 => SettingLocation::Base,
-            other => SettingLocation::Other(other),
-        }
-    }
-
-    /// `true` when the value is stored locally on the queried profile.
-    pub fn is_local(self) -> bool {
-        matches!(self, SettingLocation::Current)
-    }
-}
-
-/// A DWORD setting read from a DRS profile, paired with the location the driver
-/// reports it from (so inherited values can be distinguished from local ones).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct SettingValue {
-    /// The DWORD value.
-    pub value: u32,
-    /// Where the driver reports this value as stored.
-    pub location: SettingLocation,
-}
-
-impl SettingValue {
-    /// The value if it is stored locally on the queried profile, else `None`.
-    pub fn local_value(self) -> Option<u32> {
-        self.location.is_local().then_some(self.value)
-    }
 }
 
 /// One enumerated driver profile: an opaque handle, its name, and the lowercase
@@ -178,22 +134,71 @@ pub struct ProfileInfo {
 /// boundary; the orchestration in [`super::drs`] is written purely against this
 /// trait so it can be unit-tested with a fake.
 pub trait NvapiDriver: Send {
-    /// The current global profile handle token — the profile NVIDIA App edits as
-    /// "Global" (`GetCurrentGlobalProfile`, falling back to the base profile).
-    fn global_profile(&self) -> DlssResult<usize>;
+    /// The base profile handle token (lowest-priority global defaults).
+    fn base_profile(&self) -> DlssResult<usize>;
+    /// The current global profile handle (what NVIDIA Control Panel / App edits).
+    fn current_global_profile(&self) -> DlssResult<usize>;
     /// Enumerate every per-application profile (handle + name + exe names).
     fn enumerate_profiles(&self) -> DlssResult<Vec<ProfileInfo>>;
-    /// Reload DRS settings from the driver so subsequent reads observe edits made
-    /// outside the app (NVIDIA App, Profile Inspector).
-    fn reload(&self) -> DlssResult<()>;
-    /// Read a DWORD setting from `profile`, including its [`SettingLocation`].
-    /// `None` when the setting is absent on the profile and all its parents.
-    fn get_setting(&self, profile: usize, setting_id: u32) -> DlssResult<Option<SettingValue>>;
-    /// Write a DWORD setting *locally* to `profile`. Does not persist on its own —
-    /// call [`NvapiDriver::save`] after a batch of writes.
+    /// Read a DWORD setting from `profile`. `None` when the setting is absent.
+    fn get_setting(&self, profile: usize, setting_id: u32) -> DlssResult<Option<u32>> {
+        Ok(self
+            .get_setting_detail(profile, setting_id)?
+            .map(|setting| setting.value))
+    }
+    /// Read a DWORD setting and its DRS location from `profile`.
+    fn get_setting_detail(
+        &self,
+        profile: usize,
+        setting_id: u32,
+    ) -> DlssResult<Option<DrsDwordSetting>>;
+    /// Write a DWORD setting to `profile` and persist it (requires elevation).
     fn set_setting(&self, profile: usize, setting_id: u32, value: u32) -> DlssResult<()>;
-    /// Persist pending writes to the driver (requires elevation).
-    fn save(&self) -> DlssResult<()>;
+    /// Reload the in-memory DRS session from the driver store (picks up external edits).
+    fn reload_settings(&self) -> DlssResult<()> {
+        Ok(())
+    }
+}
+
+/// An abstraction over the high-level NVAPI preset reads/writes so the preset
+/// surface in [`super::presets`] is testable with a fake.
+///
+/// Implemented by [`super::drs::DrsOrchestrator`] over any [`NvapiDriver`].
+pub trait NvapiDrs: Send {
+    /// Read a DWORD setting from the current global profile. `None` when unset.
+    fn get_base_setting(&self, setting_id: u32) -> DlssResult<Option<u32>>;
+    /// Read the effective global preset for NVIDIA App parity.
+    ///
+    /// `profile_mode_id` is the SR-only `SETTING_ID_DLSS_SR_PRESET_PROFILE`
+    /// (`0x00634291`); pass `None` for RR.
+    fn get_global_preset_selection(
+        &self,
+        selection_id: u32,
+        profile_mode_id: Option<u32>,
+    ) -> DlssResult<u32>;
+    /// Write a DWORD setting to the current global profile and save.
+    fn set_base_setting(&self, setting_id: u32, value: u32) -> DlssResult<()>;
+    /// Read the effective preset selection for a matched app profile.
+    /// `override_id` is the profile's DLSS override-enable setting; when it is off
+    /// the effective preset is Default regardless of stale selection DWORDs.
+    fn get_app_preset_selection(
+        &self,
+        game_name: &str,
+        exe_names: &[String],
+        selection_id: u32,
+        override_id: u32,
+    ) -> DlssResult<Option<u32>>;
+    /// Write a DWORD setting to the matched app profile and save. Returns `false`
+    /// when no profile matches.
+    fn set_app_setting(
+        &self,
+        game_name: &str,
+        exe_names: &[String],
+        setting_id: u32,
+        value: u32,
+    ) -> DlssResult<bool>;
+    /// Reload driver settings into the shared session and drop cached profile lists.
+    fn reload_from_driver(&self) -> DlssResult<()>;
 }
 
 // ---------------------------------------------------------------------------
@@ -207,20 +212,16 @@ pub trait NvapiDriver: Send {
 /// On a system without an NVIDIA driver it returns [`crate::dlss::DlssError::Unsupported`].
 ///
 /// The unsafe FFI here only executes against a live driver and therefore is the
-/// single legitimate runtime boundary excluded from CI coverage via the existing
-/// `cfg(coverage)` entrypoint carve-out — every line of *logic* lives in the
-/// `cfg(coverage)`-free orchestration layer ([`super::drs`]).
+/// single legitimate runtime boundary excluded from CI coverage and `test-utils`
+/// builds — every line of *logic* lives in the fake-driver-tested orchestration
+/// layer ([`super::drs`]).
 #[cfg(all(windows, not(coverage), not(feature = "test-utils")))]
 pub fn real_driver() -> DlssResult<Box<dyn NvapiDriver>> {
     windows_impl::RealDriver::open().map(|driver| Box::new(driver) as Box<dyn NvapiDriver>)
 }
 
-/// Fallback when NVAPI cannot be used (non-Windows / coverage) or must never be
-/// reached (`test-utils`). Tests always build with `test-utils`, so this
-/// guarantees a test can never touch the live driver and mutate real preset
-/// state; it returns [`crate::dlss::DlssError::Unsupported`] just like a host
-/// with no NVIDIA driver.
-#[cfg(not(all(windows, not(coverage), not(feature = "test-utils"))))]
+/// Fallback when NVAPI cannot be used at compile time (non-Windows / coverage / tests).
+#[cfg(any(not(windows), coverage, feature = "test-utils"))]
 pub fn real_driver() -> DlssResult<Box<dyn NvapiDriver>> {
     Err(crate::dlss::DlssError::Unsupported)
 }
@@ -236,8 +237,8 @@ mod windows_impl {
     use windows::Win32::System::LibraryLoader::{GetProcAddress, LoadLibraryW};
 
     use super::{
-        make_nvapi_version, query_interface_id as qid, status, NvapiDriver, ProfileInfo,
-        SettingLocation, SettingValue,
+        make_nvapi_version, query_interface_id as qid, setting_location, status, DrsDwordSetting,
+        NvapiDriver, ProfileInfo,
     };
     use crate::dlss::{DlssError, DlssResult};
 
@@ -246,8 +247,8 @@ mod windows_impl {
     type InitializeFn = unsafe extern "C" fn() -> i32;
     type CreateSessionFn = unsafe extern "C" fn(*mut *mut c_void) -> i32;
     type LoadSettingsFn = unsafe extern "C" fn(*mut c_void) -> i32;
-    type GetGlobalProfileFn = unsafe extern "C" fn(*mut c_void, *mut *mut c_void) -> i32;
     type GetBaseProfileFn = unsafe extern "C" fn(*mut c_void, *mut *mut c_void) -> i32;
+    type GetCurrentGlobalProfileFn = unsafe extern "C" fn(*mut c_void, *mut *mut c_void) -> i32;
     type EnumProfilesFn = unsafe extern "C" fn(*mut c_void, u32, *mut *mut c_void) -> i32;
     type GetProfileInfoFn =
         unsafe extern "C" fn(*mut c_void, *mut c_void, *mut NvdrsProfileV1) -> i32;
@@ -260,8 +261,12 @@ mod windows_impl {
     ) -> i32;
     type GetSettingFn =
         unsafe extern "C" fn(*mut c_void, *mut c_void, u32, *mut NvdrsSettingV1) -> i32;
+    type GetSettingFnV2 =
+        unsafe extern "C" fn(*mut c_void, *mut c_void, u32, *mut NvdrsSettingV1, *mut u32) -> i32;
     type SetSettingFn =
         unsafe extern "C" fn(*mut c_void, *mut c_void, *const NvdrsSettingV1) -> i32;
+    type SetSettingFnV2 =
+        unsafe extern "C" fn(*mut c_void, *mut c_void, *mut NvdrsSettingV1, u32, u32) -> i32;
     type SaveSettingsFn = unsafe extern "C" fn(*mut c_void) -> i32;
     type DestroySessionFn = unsafe extern "C" fn(*mut c_void) -> i32;
 
@@ -320,7 +325,7 @@ mod windows_impl {
     /// `NVDRS_SETTING_TYPE::NVDRS_DWORD_TYPE`.
     const NVDRS_DWORD_TYPE: u32 = 0;
     /// `NVDRS_SETTING_LOCATION::NVDRS_CURRENT_PROFILE_LOCATION`.
-    const NVDRS_CURRENT_PROFILE_LOCATION: u32 = 0;
+    const NVDRS_CURRENT_PROFILE_LOCATION: u32 = setting_location::CURRENT_PROFILE;
 
     fn utf16_to_string(buf: &[u16]) -> String {
         let end = buf.iter().position(|&c| c == 0).unwrap_or(buf.len());
@@ -339,18 +344,119 @@ mod windows_impl {
         }
     }
 
+    fn free_module(module: HMODULE) {
+        // SAFETY: module was successfully loaded above.
+        unsafe {
+            let _ = FreeLibrary(module);
+        }
+    }
+
+    /// Resolve a required NVAPI export via `nvapi_QueryInterface`.
+    fn resolve_required(
+        query: QueryInterfaceFn,
+        id: u32,
+        name: &str,
+        module: HMODULE,
+    ) -> DlssResult<*mut c_void> {
+        // SAFETY: caller transmutes to the correct function signature when non-null.
+        let ptr = unsafe { query(id) };
+        if ptr.is_null() {
+            tracing::warn!(
+                category = "dlss",
+                query_id = format!("0x{id:08X}"),
+                function = name,
+                "nvapi open: required function pointer not found"
+            );
+            free_module(module);
+            return Err(DlssError::Unsupported);
+        }
+        Ok(ptr)
+    }
+
+    enum ResolvedGetSetting {
+        V1(GetSettingFn),
+        V2(GetSettingFnV2),
+    }
+
+    enum ResolvedSetSetting {
+        V1(SetSettingFn),
+        V2(SetSettingFnV2),
+    }
+
+    fn resolve_get_setting(
+        query: QueryInterfaceFn,
+        module: HMODULE,
+    ) -> DlssResult<ResolvedGetSetting> {
+        // SAFETY: resolved pointer matches the declared signature when non-null.
+        let primary = unsafe { query(qid::DRS_GET_SETTING) };
+        if !primary.is_null() {
+            return Ok(ResolvedGetSetting::V2(unsafe {
+                std::mem::transmute(primary)
+            }));
+        }
+        // SAFETY: resolved pointer matches the declared signature when non-null.
+        let legacy = unsafe { query(qid::DRS_GET_SETTING_LEGACY) };
+        if legacy.is_null() {
+            tracing::warn!(
+                category = "dlss",
+                "nvapi open: DRS_GetSetting not found (primary or legacy query id)"
+            );
+            free_module(module);
+            return Err(DlssError::Unsupported);
+        }
+        tracing::info!(
+            category = "dlss",
+            "nvapi open: DRS_GetSetting resolved via legacy query id"
+        );
+        // SAFETY: resolved pointer matches the declared signature.
+        Ok(ResolvedGetSetting::V1(unsafe {
+            std::mem::transmute(legacy)
+        }))
+    }
+
+    fn resolve_set_setting(
+        query: QueryInterfaceFn,
+        module: HMODULE,
+    ) -> DlssResult<ResolvedSetSetting> {
+        // SAFETY: resolved pointer matches the declared signature when non-null.
+        let primary = unsafe { query(qid::DRS_SET_SETTING) };
+        if !primary.is_null() {
+            return Ok(ResolvedSetSetting::V2(unsafe {
+                std::mem::transmute(primary)
+            }));
+        }
+        // SAFETY: resolved pointer matches the declared signature when non-null.
+        let legacy = unsafe { query(qid::DRS_SET_SETTING_LEGACY) };
+        if legacy.is_null() {
+            tracing::warn!(
+                category = "dlss",
+                "nvapi open: DRS_SetSetting not found (primary or legacy query id)"
+            );
+            free_module(module);
+            return Err(DlssError::Unsupported);
+        }
+        tracing::info!(
+            category = "dlss",
+            "nvapi open: DRS_SetSetting resolved via legacy query id"
+        );
+        // SAFETY: resolved pointer matches the declared signature.
+        Ok(ResolvedSetSetting::V1(unsafe {
+            std::mem::transmute(legacy)
+        }))
+    }
+
     /// The resolved, live NVAPI driver session.
     pub(super) struct RealDriver {
         module: HMODULE,
         session: *mut c_void,
-        load_settings: LoadSettingsFn,
         enum_profiles: EnumProfilesFn,
         get_profile_info: GetProfileInfoFn,
         enum_applications: EnumApplicationsFn,
-        get_global_profile: Option<GetGlobalProfileFn>,
         get_base_profile: GetBaseProfileFn,
-        get_setting: GetSettingFn,
-        set_setting: SetSettingFn,
+        get_current_global_profile: GetCurrentGlobalProfileFn,
+        get_setting: ResolvedGetSetting,
+        set_setting: ResolvedSetSetting,
+        load_settings: LoadSettingsFn,
         save_settings: SaveSettingsFn,
         destroy_session: DestroySessionFn,
     }
@@ -386,80 +492,97 @@ mod windows_impl {
             // SAFETY: the resolved symbol has the QueryInterface signature.
             let query: QueryInterfaceFn = unsafe { std::mem::transmute(query) };
 
-            // SAFETY: resolve each function by id; null means unsupported.
-            let resolve = |id: u32| -> *mut c_void { unsafe { query(id) } };
-            // Resolve a required function pointer, logging *which* one is missing
-            // (pointer-resolution failures happen before Initialize and were
-            // historically invisible).
-            macro_rules! resolve_fn {
-                ($name:expr, $ty:ty, $id:expr) => {{
-                    let ptr = resolve($id);
-                    if ptr.is_null() {
-                        tracing::warn!(
-                            category = "dlss",
-                            function = $name,
-                            "nvapi open: required function pointer did not resolve"
-                        );
-                        // SAFETY: module loaded above.
-                        unsafe {
-                            let _ = FreeLibrary(module);
-                        }
-                        return Err(DlssError::Unsupported);
-                    }
-                    // SAFETY: resolved pointer matches the declared signature.
-                    unsafe { std::mem::transmute::<*mut c_void, $ty>(ptr) }
-                }};
-            }
-
-            let initialize: InitializeFn =
-                resolve_fn!("NvAPI_Initialize", InitializeFn, qid::INITIALIZE);
-            let create_session: CreateSessionFn = resolve_fn!(
-                "DRS_CreateSession",
-                CreateSessionFn,
-                qid::DRS_CREATE_SESSION
-            );
-            let load_settings: LoadSettingsFn =
-                resolve_fn!("DRS_LoadSettings", LoadSettingsFn, qid::DRS_LOAD_SETTINGS);
-            let get_base_profile: GetBaseProfileFn = resolve_fn!(
-                "DRS_GetBaseProfile",
-                GetBaseProfileFn,
-                qid::DRS_GET_BASE_PROFILE
-            );
-            // Current-global profile is optional: fall back to the base profile if
-            // the driver does not export it (logged at use site).
-            let get_global_profile: Option<GetGlobalProfileFn> = {
-                let ptr = resolve(qid::DRS_GET_CURRENT_GLOBAL_PROFILE);
-                if ptr.is_null() {
-                    None
-                } else {
-                    // SAFETY: resolved pointer matches the declared signature.
-                    Some(unsafe { std::mem::transmute::<*mut c_void, GetGlobalProfileFn>(ptr) })
-                }
+            tracing::info!(category = "dlss", "nvapi open: resolving function pointers");
+            // SAFETY: each resolved pointer matches the declared signature.
+            let initialize: InitializeFn = unsafe {
+                std::mem::transmute(resolve_required(
+                    query,
+                    qid::INITIALIZE,
+                    "NvAPI_Initialize",
+                    module,
+                )?)
             };
-            let enum_profiles: EnumProfilesFn =
-                resolve_fn!("DRS_EnumProfiles", EnumProfilesFn, qid::DRS_ENUM_PROFILES);
-            let get_profile_info: GetProfileInfoFn = resolve_fn!(
-                "DRS_GetProfileInfo",
-                GetProfileInfoFn,
-                qid::DRS_GET_PROFILE_INFO
-            );
-            let enum_applications: EnumApplicationsFn = resolve_fn!(
-                "DRS_EnumApplications",
-                EnumApplicationsFn,
-                qid::DRS_ENUM_APPLICATIONS
-            );
-            let get_setting: GetSettingFn =
-                resolve_fn!("DRS_GetSetting", GetSettingFn, qid::DRS_GET_SETTING);
-            let set_setting: SetSettingFn =
-                resolve_fn!("DRS_SetSetting", SetSettingFn, qid::DRS_SET_SETTING);
-            let save_settings: SaveSettingsFn =
-                resolve_fn!("DRS_SaveSettings", SaveSettingsFn, qid::DRS_SAVE_SETTINGS);
-            let destroy_session: DestroySessionFn = resolve_fn!(
-                "DRS_DestroySession",
-                DestroySessionFn,
-                qid::DRS_DESTROY_SESSION
-            );
+            let create_session: CreateSessionFn = unsafe {
+                std::mem::transmute(resolve_required(
+                    query,
+                    qid::DRS_CREATE_SESSION,
+                    "NvAPI_DRS_CreateSession",
+                    module,
+                )?)
+            };
+            let load_settings: LoadSettingsFn = unsafe {
+                std::mem::transmute(resolve_required(
+                    query,
+                    qid::DRS_LOAD_SETTINGS,
+                    "NvAPI_DRS_LoadSettings",
+                    module,
+                )?)
+            };
+            let get_base_profile: GetBaseProfileFn = unsafe {
+                std::mem::transmute(resolve_required(
+                    query,
+                    qid::DRS_GET_BASE_PROFILE,
+                    "NvAPI_DRS_GetBaseProfile",
+                    module,
+                )?)
+            };
+            let get_current_global_profile: GetCurrentGlobalProfileFn = unsafe {
+                std::mem::transmute(resolve_required(
+                    query,
+                    qid::DRS_GET_CURRENT_GLOBAL_PROFILE,
+                    "NvAPI_DRS_GetCurrentGlobalProfile",
+                    module,
+                )?)
+            };
+            let enum_profiles: EnumProfilesFn = unsafe {
+                std::mem::transmute(resolve_required(
+                    query,
+                    qid::DRS_ENUM_PROFILES,
+                    "NvAPI_DRS_EnumProfiles",
+                    module,
+                )?)
+            };
+            let get_profile_info: GetProfileInfoFn = unsafe {
+                std::mem::transmute(resolve_required(
+                    query,
+                    qid::DRS_GET_PROFILE_INFO,
+                    "NvAPI_DRS_GetProfileInfo",
+                    module,
+                )?)
+            };
+            let enum_applications: EnumApplicationsFn = unsafe {
+                std::mem::transmute(resolve_required(
+                    query,
+                    qid::DRS_ENUM_APPLICATIONS,
+                    "NvAPI_DRS_EnumApplications",
+                    module,
+                )?)
+            };
+            let get_setting = resolve_get_setting(query, module)?;
+            let set_setting = resolve_set_setting(query, module)?;
+            let save_settings: SaveSettingsFn = unsafe {
+                std::mem::transmute(resolve_required(
+                    query,
+                    qid::DRS_SAVE_SETTINGS,
+                    "NvAPI_DRS_SaveSettings",
+                    module,
+                )?)
+            };
+            let destroy_session: DestroySessionFn = unsafe {
+                std::mem::transmute(resolve_required(
+                    query,
+                    qid::DRS_DESTROY_SESSION,
+                    "NvAPI_DRS_DestroySession",
+                    module,
+                )?)
+            };
+            tracing::info!(category = "dlss", "nvapi open: function pointers resolved");
 
+            // Step logging: these three NVAPI calls are the runtime boundary that
+            // cannot be unit-tested in CI, and `DRS_LoadSettings` (reads the whole
+            // driver settings DB) is the most likely place to block on real
+            // hardware. Logging each step pinpoints exactly which call stalls/fails.
+            tracing::info!(category = "dlss", "nvapi open: NvAPI_Initialize");
             // SAFETY: initialise NVAPI before any DRS call.
             let code = unsafe { initialize() };
             if code != status::OK {
@@ -470,6 +593,7 @@ mod windows_impl {
                 return Err(classify(code, "initialize"));
             }
 
+            tracing::info!(category = "dlss", "nvapi open: DRS_CreateSession");
             let mut session: *mut c_void = std::ptr::null_mut();
             // SAFETY: out-pointer is a valid local.
             let code = unsafe { create_session(&mut session) };
@@ -479,6 +603,7 @@ mod windows_impl {
                 }
                 return Err(classify(code, "create_session"));
             }
+            tracing::info!(category = "dlss", "nvapi open: DRS_LoadSettings");
             // SAFETY: session was created above.
             let code = unsafe { load_settings(session) };
             if code != status::OK {
@@ -488,19 +613,19 @@ mod windows_impl {
                 }
                 return Err(classify(code, "load_settings"));
             }
+            tracing::info!(category = "dlss", "nvapi open: session ready");
 
-            tracing::info!(category = "dlss", "nvapi session: shared DRS session ready");
             Ok(Self {
                 module,
                 session,
-                load_settings,
                 enum_profiles,
                 get_profile_info,
                 enum_applications,
-                get_global_profile,
                 get_base_profile,
+                get_current_global_profile,
                 get_setting,
                 set_setting,
+                load_settings,
                 save_settings,
                 destroy_session,
             })
@@ -559,21 +684,7 @@ mod windows_impl {
     }
 
     impl NvapiDriver for RealDriver {
-        fn global_profile(&self) -> DlssResult<usize> {
-            // Prefer the current global profile (what NVIDIA App edits as "Global").
-            if let Some(get_global) = self.get_global_profile {
-                let mut profile: *mut c_void = std::ptr::null_mut();
-                // SAFETY: valid session + out-pointer.
-                let code = unsafe { get_global(self.session, &mut profile) };
-                if code == status::OK && !profile.is_null() {
-                    return Ok(profile as usize);
-                }
-                tracing::warn!(
-                    category = "dlss",
-                    status = code,
-                    "nvapi: GetCurrentGlobalProfile failed; falling back to base profile"
-                );
-            }
+        fn base_profile(&self) -> DlssResult<usize> {
             let mut profile: *mut c_void = std::ptr::null_mut();
             // SAFETY: valid session + out-pointer.
             let code = unsafe { (self.get_base_profile)(self.session, &mut profile) };
@@ -581,16 +692,6 @@ mod windows_impl {
                 return Err(classify(code, "get_base_profile"));
             }
             Ok(profile as usize)
-        }
-
-        fn reload(&self) -> DlssResult<()> {
-            // SAFETY: valid session; re-reads settings edited outside the app.
-            let code = unsafe { (self.load_settings)(self.session) };
-            if code != status::OK {
-                return Err(classify(code, "load_settings"));
-            }
-            tracing::debug!(category = "dlss", "nvapi session: reloaded driver settings");
-            Ok(())
         }
 
         fn enumerate_profiles(&self) -> DlssResult<Vec<ProfileInfo>> {
@@ -618,28 +719,57 @@ mod windows_impl {
             Ok(out)
         }
 
-        fn get_setting(&self, profile: usize, setting_id: u32) -> DlssResult<Option<SettingValue>> {
+        fn current_global_profile(&self) -> DlssResult<usize> {
+            let mut profile: *mut c_void = std::ptr::null_mut();
+            // SAFETY: valid session + out-pointer.
+            let code = unsafe { (self.get_current_global_profile)(self.session, &mut profile) };
+            if code != status::OK {
+                tracing::warn!(
+                    category = "dlss",
+                    status = code,
+                    "nvapi get_current_global_profile failed; falling back to base profile"
+                );
+                return self.base_profile();
+            }
+            Ok(profile as usize)
+        }
+
+        fn get_setting_detail(
+            &self,
+            profile: usize,
+            setting_id: u32,
+        ) -> DlssResult<Option<DrsDwordSetting>> {
             let mut setting: NvdrsSettingV1 = unsafe { std::mem::zeroed() };
             setting.version = make_nvapi_version::<NvdrsSettingV1>(1);
+            let profile_ptr = profile as *mut c_void;
             // SAFETY: valid session + profile handle + out struct.
-            let code = unsafe {
-                (self.get_setting)(
-                    self.session,
-                    profile as *mut c_void,
-                    setting_id,
-                    &mut setting,
-                )
+            let code = match self.get_setting {
+                ResolvedGetSetting::V1(get_setting) => unsafe {
+                    get_setting(self.session, profile_ptr, setting_id, &mut setting)
+                },
+                ResolvedGetSetting::V2(get_setting) => {
+                    let mut flags = 0u32;
+                    unsafe {
+                        get_setting(
+                            self.session,
+                            profile_ptr,
+                            setting_id,
+                            &mut setting,
+                            &mut flags,
+                        )
+                    }
+                }
             };
-            if status::is_setting_absent(code) {
+            if code == status::SETTING_NOT_FOUND {
                 return Ok(None);
             }
             if code != status::OK {
                 return Err(classify(code, "get_setting"));
             }
-            Ok(Some(SettingValue {
-                // SAFETY: preset settings are DWORD type; read the u32 arm.
+            // SAFETY: preset settings are DWORD type; read the u32 arm.
+            Ok(Some(DrsDwordSetting {
                 value: unsafe { setting.current_value.u32_value },
-                location: SettingLocation::from_raw(setting.setting_location),
+                location: setting.setting_location,
             }))
         }
 
@@ -650,20 +780,32 @@ mod windows_impl {
             setting.setting_type = NVDRS_DWORD_TYPE;
             setting.setting_location = NVDRS_CURRENT_PROFILE_LOCATION;
             setting.current_value.u32_value = value;
+            let profile_ptr = profile as *mut c_void;
             // SAFETY: valid session + profile handle + populated setting struct.
-            let code =
-                unsafe { (self.set_setting)(self.session, profile as *mut c_void, &setting) };
+            let code = match self.set_setting {
+                ResolvedSetSetting::V1(set_setting) => unsafe {
+                    set_setting(self.session, profile_ptr, &setting)
+                },
+                ResolvedSetSetting::V2(set_setting) => unsafe {
+                    set_setting(self.session, profile_ptr, &mut setting, 0, 0)
+                },
+            };
             if code != status::OK {
                 return Err(classify(code, "set_setting"));
             }
-            Ok(())
-        }
-
-        fn save(&self) -> DlssResult<()> {
             // SAFETY: valid session; save persists to the driver (needs elevation).
             let code = unsafe { (self.save_settings)(self.session) };
             if code != status::OK {
                 return Err(classify(code, "save_settings"));
+            }
+            Ok(())
+        }
+
+        fn reload_settings(&self) -> DlssResult<()> {
+            // SAFETY: session was created and loaded during `open`.
+            let code = unsafe { (self.load_settings)(self.session) };
+            if code != status::OK {
+                return Err(classify(code, "reload_settings"));
             }
             Ok(())
         }

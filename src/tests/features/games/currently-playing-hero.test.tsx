@@ -54,6 +54,42 @@ describe('CurrentlyPlayingHero', () => {
     })
   })
 
+  it('shows a Scripts button for idle Play Now games with retained latest-run data', async () => {
+    const user = userEvent.setup()
+    ipc.override('get_play_now_game', () => makeGame())
+    ipc.override('get_latest_launch_run', () => ({
+      id: 88,
+      gameId: 1,
+      status: 'completed' as const,
+      startedAt: '2026-06-19T10:00:00Z',
+      endedAt: '2026-06-19T10:01:15Z',
+      failureCount: 1,
+      scriptRecords: [],
+    }))
+
+    renderWithProviders(<CurrentlyPlayingHero />)
+
+    expect(await screen.findByTestId('hero-scripts')).toBeInTheDocument()
+    expect(screen.getByTestId('hero-scripts')).toHaveClass('bg-background')
+    expect(screen.getByTestId('hero-play')).toBeInTheDocument()
+
+    await user.click(screen.getByTestId('hero-scripts'))
+
+    expect(await screen.findByText('Execution pipeline')).toBeInTheDocument()
+    expect(ipc.calls('get_latest_launch_run')).toContainEqual({ gameId: 1 })
+  })
+
+  it('hides the Scripts button for idle Play Now games without retained latest-run data', async () => {
+    ipc.override('get_play_now_game', () => makeGame())
+    ipc.override('get_latest_launch_run', () => null)
+
+    renderWithProviders(<CurrentlyPlayingHero />)
+
+    expect(await screen.findByTestId('hero-play')).toBeInTheDocument()
+    await waitFor(() => expect(ipc.calls('get_latest_launch_run')).toContainEqual({ gameId: 1 }))
+    expect(screen.queryByTestId('hero-scripts')).not.toBeInTheDocument()
+  })
+
   it('falls back to a gradient when the cover image fails to load', async () => {
     ipc.override('get_play_now_game', () =>
       makeGame({ imagePath: 'https://example.com/cover.png' })
@@ -93,5 +129,36 @@ describe('CurrentlyPlayingHero', () => {
     await waitFor(() => {
       expect(ipc.calls('cancel_launch')).toContainEqual({ gameId: 1 })
     })
+  })
+
+  it('shows a Scripts button during active sessions and opens the shared popover', async () => {
+    const user = userEvent.setup()
+    ipc.override('list_games', () => [makeGame()])
+    ipc.override('get_latest_launch_run', () => ({
+      id: 89,
+      gameId: 1,
+      status: 'active' as const,
+      startedAt: '2026-06-19T10:00:00Z',
+      failureCount: 0,
+      scriptRecords: [],
+    }))
+    useLaunchStore.getState().startPreparing(1, 'Alan Wake 2')
+    useLaunchStore.getState().applyLifecycle({
+      gameId: 1,
+      phase: 'playing',
+      failedCount: 0,
+      elapsedSeconds: 75,
+    })
+
+    renderWithProviders(<CurrentlyPlayingHero />)
+
+    expect(await screen.findByTestId('hero-scripts')).toBeInTheDocument()
+    expect(screen.getByTestId('hero-scripts')).toHaveClass('bg-background')
+    expect(screen.getByTestId('hero-stop')).toBeInTheDocument()
+
+    await user.click(screen.getByTestId('hero-scripts'))
+
+    expect(await screen.findByText('Execution pipeline')).toBeInTheDocument()
+    expect(ipc.calls('get_latest_launch_run')).toContainEqual({ gameId: 1 })
   })
 })

@@ -20,6 +20,7 @@
     "allow-set-game-groups",
     "allow-set-game-scripts",
     "allow-get-resolved-scripts",
+    "allow-get-latest-launch-run",
     "allow-list-groups",
     "allow-get-group",
     "allow-create-group",

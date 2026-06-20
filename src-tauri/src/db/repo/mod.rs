@@ -7,6 +7,7 @@
 pub mod dlss;
 pub mod games;
 pub mod groups;
+pub mod launch_runs;
 pub mod logs;
 pub mod scripts;
 pub mod sessions;

@@ -380,7 +380,7 @@ fn folder_override_command_round_trips_with_none() {
 }
 
 #[test]
-fn relaunch_as_admin_reports_unsupported_under_coverage() {
+fn relaunch_as_admin_reports_unsupported_in_test_builds() {
     let err = elevation::relaunch_as_admin().unwrap_err();
     assert!(matches!(err, DlssError::Unsupported));
 }

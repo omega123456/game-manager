@@ -595,6 +595,42 @@ fn build_game_state_marks_missing_detection_as_stale() {
 }
 
 #[test]
+fn build_game_state_hydrates_detected_fields_when_present() {
+    let state = detect::build_game_state(
+        7,
+        Some("D:/Games/Y".into()),
+        Some(detect::DetectionResult {
+            folder_resolved: Some("D:/Games/Y".into()),
+            summary: detect::DetectionSummary {
+                super_resolution: Some(game_manager_lib::domain::DetectedDll {
+                    version: "3.7".into(),
+                    path: "D:/Games/Y/nvngx_dlss.dll".into(),
+                    md5: Some("abc".into()),
+                }),
+                frame_generation: None,
+                ray_reconstruction: None,
+            },
+            last_scanned_at: Some("2026-06-20T12:00:00Z".into()),
+        }),
+    );
+    assert!(!state.stale);
+    assert_eq!(state.game_id, 7);
+    assert_eq!(state.folder_override.as_deref(), Some("D:/Games/Y"));
+    assert_eq!(state.folder_resolved.as_deref(), Some("D:/Games/Y"));
+    assert_eq!(
+        state
+            .super_resolution
+            .as_ref()
+            .map(|dll| dll.version.as_str()),
+        Some("3.7")
+    );
+    assert_eq!(
+        state.last_scanned_at.as_deref(),
+        Some("2026-06-20T12:00:00Z")
+    );
+}
+
+#[test]
 fn detect_in_folder_finds_frame_generation_dll() {
     let dir = TempDir::new().unwrap();
     let dll = dir.path().join("nvngx_dlssg.dll");
@@ -637,6 +673,60 @@ fn scan_library_impl_runs_over_all_games() {
     let states = detect::scan_library_impl(&st).unwrap();
     assert_eq!(states.len(), 1);
     assert!(states[0].super_resolution.is_none());
+}
+
+#[test]
+fn scan_library_with_prunes_deleted_cache_entries_and_keeps_scanning_after_failures() {
+    let app_data = TempDir::new().unwrap();
+    let game_dir = TempDir::new().unwrap();
+    let st = state_with_app_data(app_data.path());
+
+    let exe = game_dir.path().join("game.exe");
+    let dll = game_dir.path().join("nvngx_dlss.dll");
+    std::fs::write(&exe, b"x").unwrap();
+    std::fs::write(&dll, b"known").unwrap();
+
+    let game_id = st
+        .with_db(|c| games::create(c, &new_game(exe.to_str().unwrap())))
+        .unwrap();
+    st.dlss_detection_set(
+        9999,
+        detect::DetectionResult {
+            folder_resolved: Some("stale".into()),
+            summary: detect::DetectionSummary::default(),
+            last_scanned_at: Some("2026-06-20T00:00:00Z".into()),
+        },
+    );
+
+    let mut map = HashMap::new();
+    map.insert(
+        dll.clone(),
+        DllIdentity {
+            md5: "missing-from-catalog".into(),
+            file_version: "3.1.0.0".into(),
+        },
+    );
+    let reader = FakeReader { map };
+    let catalog = catalog_with(sr_version("other-md5"));
+
+    let states = detect::scan_library_with(&st, &catalog, &reader).unwrap();
+    assert_eq!(states.len(), 1);
+    assert_eq!(states[0].game_id, game_id);
+    assert_eq!(
+        states[0]
+            .super_resolution
+            .as_ref()
+            .map(|dll| dll.version.as_str()),
+        Some("3.1")
+    );
+    assert!(
+        st.dlss_detection_get(9999).is_none(),
+        "stale cache entry should be pruned"
+    );
+    assert!(
+        st.dlss_detection_get(game_id).is_some(),
+        "live game should stay cached"
+    );
 }
 
 #[test]

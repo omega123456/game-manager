@@ -3,12 +3,17 @@ import { useState } from 'react'
 import type { Game } from '@/types/domain'
 import { Icon } from '@/components/ui/icon'
 import { Button } from '@/components/ui/button'
-import { useGamesQuery, usePlayNowGameQuery } from '@/lib/queries/use-games'
+import {
+  useGamesQuery,
+  useLatestLaunchRunQuery,
+  usePlayNowGameQuery,
+} from '@/lib/queries/use-games'
 import { useLaunchStore } from '@/stores/launch-store'
 import { toCoverImageUrl } from '@/lib/asset-url'
 import { CancelLaunchConfirmDialog } from '@/features/launch/cancel-launch-confirm-dialog'
 import { launchGameById } from '@/features/launch/launch-controller'
 import { formatElapsed, formatLoggedPlaytime } from '@/features/launch/launch-format'
+import { ScriptExecutionPopover } from '@/features/launch/script-execution-popover'
 
 /**
  * The image-backed "currently playing" hero. While a launch is active it surfaces
@@ -30,6 +35,8 @@ export function CurrentlyPlayingHero(): React.JSX.Element | null {
   const isActive = phase !== 'idle'
   const activeGame = gamesQuery.data?.find((g) => g.id === activeGameId)
   const game: Game | null = isActive ? (activeGame ?? null) : (playNowQuery.data ?? null)
+  const scriptGameId = isActive ? activeGameId : game?.id
+  const latestLaunchRunQuery = useLatestLaunchRunQuery(scriptGameId)
 
   // Nothing to show: no active session and no game to continue.
   if (!isActive && game === null) {
@@ -48,6 +55,8 @@ export function CurrentlyPlayingHero(): React.JSX.Element | null {
       elapsedSeconds={elapsedSeconds}
       cancelling={cancelling}
       launchDisabled={gamesQuery.isLoading || playNowQuery.isLoading}
+      scriptGameId={scriptGameId}
+      showScriptsAction={isActive || latestLaunchRunQuery.data !== null}
     />
   )
 }
@@ -59,6 +68,8 @@ interface HeroCardProps {
   elapsedSeconds: number
   cancelling: boolean
   launchDisabled: boolean
+  scriptGameId: number | null | undefined
+  showScriptsAction: boolean
 }
 
 function HeroCard({
@@ -68,6 +79,8 @@ function HeroCard({
   elapsedSeconds,
   cancelling,
   launchDisabled,
+  scriptGameId,
+  showScriptsAction,
 }: HeroCardProps): React.JSX.Element {
   const [confirmOpen, setConfirmOpen] = useState(false)
   const coverUrl = toCoverImageUrl(game?.imagePath)
@@ -145,8 +158,28 @@ function HeroCard({
           </div>
         </div>
 
-        {isActive ? (
-          <>
+        <div className="flex flex-wrap items-center justify-end gap-3">
+          {showScriptsAction && typeof scriptGameId === 'number' ? (
+            <ScriptExecutionPopover
+              gameId={scriptGameId}
+              gameName={displayName}
+              trigger={
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="lg"
+                  className="border-border/80 bg-background shadow-sm hover:bg-surface-high"
+                  data-testid="hero-scripts"
+                  aria-label={`View script execution details for ${displayName}`}
+                >
+                  <Icon name="terminal" className="text-[20px]" />
+                  Scripts
+                </Button>
+              }
+            />
+          ) : null}
+
+          {isActive ? (
             <Button
               type="button"
               variant="destructive"
@@ -158,27 +191,28 @@ function HeroCard({
               <Icon name="stop_circle" className="text-[20px]" />
               {cancelling ? 'Stopping…' : 'Stop'}
             </Button>
-            <CancelLaunchConfirmDialog
-              open={confirmOpen}
-              onOpenChange={setConfirmOpen}
-              gameName={displayName}
-              intent="stop-game"
-              cancelling={cancelling}
-            />
-          </>
-        ) : (
-          <Button
-            type="button"
-            size="lg"
-            onClick={handlePlay}
-            disabled={launchDisabled || game === null}
-            data-testid="hero-play"
-          >
-            <Icon name="play_arrow" className="text-[20px]" />
-            Play
-          </Button>
-        )}
+          ) : (
+            <Button
+              type="button"
+              size="lg"
+              onClick={handlePlay}
+              disabled={launchDisabled || game === null}
+              data-testid="hero-play"
+            >
+              <Icon name="play_arrow" className="text-[20px]" />
+              Play
+            </Button>
+          )}
+        </div>
       </div>
+
+      <CancelLaunchConfirmDialog
+        open={confirmOpen}
+        onOpenChange={setConfirmOpen}
+        gameName={displayName}
+        intent="stop-game"
+        cancelling={cancelling}
+      />
     </section>
   )
 }

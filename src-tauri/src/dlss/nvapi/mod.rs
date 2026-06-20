@@ -15,7 +15,7 @@ pub mod presets;
 /// resolve any functions or create a session — it only verifies the DLL exists
 /// and loads, so it is safe (and cheap) to call on any machine. On a system with
 /// no NVIDIA driver (e.g. CI) it returns `false` rather than erroring.
-#[cfg(windows)]
+#[cfg(all(windows, not(coverage), not(feature = "test-utils")))]
 pub fn is_nvapi_available() -> bool {
     use std::os::windows::ffi::OsStrExt;
 
@@ -40,8 +40,8 @@ pub fn is_nvapi_available() -> bool {
     }
 }
 
-/// Non-Windows fallback: NVAPI is never available.
-#[cfg(not(windows))]
+/// Test/coverage/non-Windows fallback: NVAPI is never available.
+#[cfg(any(not(windows), coverage, feature = "test-utils"))]
 pub fn is_nvapi_available() -> bool {
     false
 }

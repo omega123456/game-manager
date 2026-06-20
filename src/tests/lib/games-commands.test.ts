@@ -4,6 +4,7 @@ import {
   createGame,
   deleteGame,
   getGame,
+  getLatestLaunchRun,
   getResolvedScripts,
   listGames,
   setGameGroups,
@@ -85,5 +86,23 @@ describe('games-commands', () => {
     ipc.override('get_resolved_scripts', () => [{ scriptId: 11, phase: 'before' }])
     await expect(getResolvedScripts(8)).resolves.toEqual([{ scriptId: 11, phase: 'before' }])
     expect(ipc.calls('get_resolved_scripts')).toEqual([{ gameId: 8 }])
+  })
+
+  it('loads the latest retained launch run for a game', async () => {
+    ipc.override('get_latest_launch_run', () => ({
+      id: 12,
+      gameId: 8,
+      status: 'completed',
+      startedAt: '2026-06-19T10:00:00Z',
+      endedAt: '2026-06-19T10:01:00Z',
+      failureCount: 1,
+      scriptRecords: [],
+    }))
+    await expect(getLatestLaunchRun(8)).resolves.toMatchObject({
+      id: 12,
+      gameId: 8,
+      failureCount: 1,
+    })
+    expect(ipc.calls('get_latest_launch_run')).toEqual([{ gameId: 8 }])
   })
 })

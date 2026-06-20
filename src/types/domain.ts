@@ -23,11 +23,17 @@ export type LogLevel = 'debug' | 'info' | 'warn' | 'error'
 /** A phase in the launch lifecycle (event payload phase). */
 export type LaunchPhase = 'before' | 'waitingForProcess' | 'playing' | 'onExit' | 'ended'
 
+/** Durable lifecycle status of a persisted launch run. */
+export type LaunchRunStatus = 'active' | 'completed' | 'cancelled' | 'incomplete'
+
 /** One of the three executable script phases used by the resolver/executor. */
 export type ScriptPhase = 'before' | 'after' | 'onExit'
 
 /** Provenance of a resolved script entry. */
 export type Provenance = 'global' | 'group' | 'direct'
+
+/** Status of one persisted script-execution row in a launch run. */
+export type ScriptExecutionStatus = 'pending' | 'running' | 'succeeded' | 'failed' | 'notReached'
 
 /** Provider/source for art candidates and metadata suggestions. */
 export type ArtSource = 'steamGridDb' | 'steam' | 'input'
@@ -125,6 +131,43 @@ export interface LaunchLifecycle {
   detail?: string
   failedCount: number
   elapsedSeconds?: number
+}
+
+/** One persisted script row within a durable launch run. */
+export interface LaunchScriptRecord {
+  id: number
+  launchRunId: number
+  scriptId?: number
+  name: string
+  phase: ScriptPhase
+  provenance: Provenance
+  groupName?: string
+  /** 1-based order within the phase. */
+  order: number
+  priority: number
+  requiredUtilityNames: string[]
+  status: ScriptExecutionStatus
+  startedAt?: string
+  endedAt?: string
+  details?: string
+}
+
+/** The latest retained durable launch run for one game. */
+export interface LaunchRun {
+  id: number
+  gameId: number
+  playSessionId?: number
+  status: LaunchRunStatus
+  startedAt: string
+  endedAt?: string
+  failureCount: number
+  scriptRecords: LaunchScriptRecord[]
+}
+
+/** Payload emitted after each committed script-execution ledger write. */
+export interface ScriptExecutionUpdated {
+  gameId: number
+  launchRunId: number
 }
 
 /** An application log row. */

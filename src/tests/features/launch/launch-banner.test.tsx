@@ -95,9 +95,34 @@ describe('LaunchBanner (event-driven)', () => {
     await ipc.emit(LAUNCH_EVENTS.error, event({ phase: 'before', failedCount: 1 }))
 
     const notice = await screen.findByTestId('launch-banner-failure')
-    expect(notice).toHaveTextContent('1 script failed — view details')
+    expect(notice).toHaveTextContent('1 script failed — open Scripts')
     // The library remains interactive (cards still clickable).
     expect(screen.getByRole('button', { name: 'Open Alan Wake 2' })).toBeEnabled()
+  })
+
+  it('shows a Scripts trigger during active launches and opens the shared popover', async () => {
+    const user = userEvent.setup()
+    ipc.override('get_latest_launch_run', () => ({
+      id: 51,
+      gameId: 1,
+      status: 'active' as const,
+      startedAt: '2026-06-19T10:00:00Z',
+      failureCount: 0,
+      scriptRecords: [],
+    }))
+
+    renderWithProviders(<AppRoutes />, { route: '/library' })
+    await screen.findByText('Alan Wake 2')
+
+    await emitPhase(event({ phase: 'playing', elapsedSeconds: 20 }))
+
+    expect(await screen.findByTestId('launch-banner-scripts')).toBeInTheDocument()
+    expect(screen.getByTestId('launch-banner-cancel')).toBeInTheDocument()
+
+    await user.click(screen.getByTestId('launch-banner-scripts'))
+
+    expect(await screen.findByText('Execution pipeline')).toBeInTheDocument()
+    expect(ipc.calls('get_latest_launch_run')).toContainEqual({ gameId: 1 })
   })
 
   it('ticks the live counter once per second while waiting', async () => {
@@ -135,6 +160,58 @@ describe('LaunchBanner (event-driven)', () => {
       await vi.advanceTimersByTimeAsync(3200)
     })
     await waitFor(() => expect(screen.queryByTestId('launch-banner')).not.toBeInTheDocument())
+  })
+
+  it('uses the done game id for script details after a launch ends', async () => {
+    const user = userEvent.setup()
+    ipc.override('list_games', () => [
+      ...GAMES,
+      {
+        id: 2,
+        name: 'Balatro',
+        launchTarget: 'C:/Games/Balatro.exe',
+        monitorMode: 'tree' as const,
+        imagePath: 'https://example.com/balatro.png',
+        groupIds: [],
+        scriptIds: [],
+        totalPlaytimeSeconds: 3600,
+        lastPlayedAt: '2026-06-11T12:00:00Z',
+        createdAt: '2026-01-02T00:00:00Z',
+      },
+    ])
+    ipc.override('get_latest_launch_run', (args) => ({
+      id: 77,
+      gameId: Number(args?.gameId ?? 0),
+      status: 'cancelled' as const,
+      startedAt: '2026-06-19T10:00:00Z',
+      endedAt: '2026-06-19T10:00:08Z',
+      failureCount: 0,
+      scriptRecords: [],
+    }))
+
+    renderWithProviders(<AppRoutes />, { route: '/library' })
+    await screen.findByText('Alan Wake 2')
+
+    await act(async () => {
+      useLaunchStore.getState().startPreparing(1, 'Alan Wake 2')
+      useLaunchStore.setState({
+        gameId: null,
+        gameName: null,
+        phase: 'idle',
+        detail: null,
+        failedCount: 0,
+        elapsedSeconds: 0,
+        cancelling: false,
+        done: { gameId: 2, playtimeSeconds: 0, cancelled: true },
+      })
+    })
+
+    expect(await screen.findByTestId('launch-banner-done')).toHaveTextContent('Launch cancelled')
+
+    await user.click(screen.getByTestId('launch-banner-scripts'))
+
+    expect(await screen.findByText('Execution pipeline')).toBeInTheDocument()
+    expect(ipc.calls('get_latest_launch_run')).toContainEqual({ gameId: 2 })
   })
 
   it('cancels via the banner Cancel button', async () => {

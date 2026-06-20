@@ -3,20 +3,24 @@
 
 use std::sync::Arc;
 
+use async_trait::async_trait;
 use game_manager_lib::commands::launch::{
     cancel_launch_impl, prepare_launch_impl, run_launch_impl,
 };
-use game_manager_lib::db::repo::games;
-use game_manager_lib::domain::MonitorMode;
+use game_manager_lib::db::repo::{games, launch_runs};
+use game_manager_lib::domain::{LaunchRunStatus, MonitorMode};
+use game_manager_lib::error::AppError;
 use game_manager_lib::launch::cancel::CancelToken;
-use game_manager_lib::launch::events::{EventSink, LaunchLifecycle};
+use game_manager_lib::launch::events::{EventSink, LaunchLifecycle, ScriptExecutionUpdated};
 use game_manager_lib::monitor::stub::{elapsed_seconds, StubMonitor};
 use game_manager_lib::monitor::{Monitor, StartOutcome};
 use game_manager_lib::state::AppState;
 
 struct NoopSink;
 impl EventSink for NoopSink {
-    fn emit(&self, _event: &str, _payload: &LaunchLifecycle) {}
+    fn emit_lifecycle(&self, _event: &str, _payload: &LaunchLifecycle) {}
+
+    fn emit_script_execution_updated(&self, _event: &str, _payload: &ScriptExecutionUpdated) {}
 }
 
 fn new_game(name: &str) -> games::NewGame {
@@ -214,5 +218,204 @@ fn elapsed_seconds_handles_missing_and_unparseable_timestamps() {
     assert_eq!(
         elapsed_seconds("2026-01-01T00:00:05Z", Some("2026-01-01T00:00:00Z")),
         0
+    );
+}
+
+struct FailingEndMonitor;
+
+#[async_trait]
+impl Monitor for FailingEndMonitor {
+    async fn wait_for_start(
+        &self,
+        state: &AppState,
+        game_id: i64,
+        _cancel: &CancelToken,
+    ) -> game_manager_lib::error::AppResult<StartOutcome> {
+        let session_id =
+            state.with_db(|conn| game_manager_lib::db::repo::sessions::start(conn, game_id))?;
+        Ok(StartOutcome::Started(session_id))
+    }
+
+    async fn wait_for_end(
+        &self,
+        _state: &AppState,
+        _session_id: i64,
+        _cancel: &CancelToken,
+    ) -> game_manager_lib::error::AppResult<i64> {
+        Err(AppError::other("simulated monitor crash"))
+    }
+}
+
+#[tokio::test]
+async fn hard_failure_after_run_creation_marks_latest_run_incomplete() {
+    let state = AppState::in_memory().unwrap();
+    let game_id = state
+        .with_db(|conn| games::create(conn, &new_game("IncompleteRun")))
+        .unwrap();
+    let before_script = state
+        .with_db(|conn| {
+            game_manager_lib::db::repo::scripts::create(
+                conn,
+                &game_manager_lib::db::repo::scripts::NewScript {
+                    name: "Before Hook".to_string(),
+                    description: None,
+                    kind: game_manager_lib::domain::ScriptKind::Normal,
+                    priority: 5,
+                    before_launch: game_manager_lib::domain::PhaseConfig {
+                        mode: game_manager_lib::domain::PhaseMode::Inline,
+                        path: None,
+                        inline: Some("Write-Output 'before'".to_string()),
+                        interpreter: Some(game_manager_lib::domain::Interpreter::Powershell),
+                    },
+                    after_launch: game_manager_lib::domain::PhaseConfig::default(),
+                    on_exit: game_manager_lib::domain::PhaseConfig::default(),
+                    snippet: game_manager_lib::domain::PhaseConfig::default(),
+                },
+            )
+        })
+        .unwrap();
+    let on_exit_script = state
+        .with_db(|conn| {
+            game_manager_lib::db::repo::scripts::create(
+                conn,
+                &game_manager_lib::db::repo::scripts::NewScript {
+                    name: "Cleanup Hook".to_string(),
+                    description: None,
+                    kind: game_manager_lib::domain::ScriptKind::Normal,
+                    priority: 5,
+                    before_launch: game_manager_lib::domain::PhaseConfig::default(),
+                    after_launch: game_manager_lib::domain::PhaseConfig::default(),
+                    on_exit: game_manager_lib::domain::PhaseConfig {
+                        mode: game_manager_lib::domain::PhaseMode::Inline,
+                        path: None,
+                        inline: Some("Write-Output 'cleanup'".to_string()),
+                        interpreter: Some(game_manager_lib::domain::Interpreter::Powershell),
+                    },
+                    snippet: game_manager_lib::domain::PhaseConfig::default(),
+                },
+            )
+        })
+        .unwrap();
+    state
+        .with_db(|conn| {
+            game_manager_lib::db::repo::games::set_scripts(
+                conn,
+                game_id,
+                &[before_script, on_exit_script],
+            )
+        })
+        .unwrap();
+
+    let monitor: Arc<dyn Monitor> = Arc::new(FailingEndMonitor);
+    let result = run_launch_impl(&state, game_id, monitor, &NoopSink, CancelToken::new()).await;
+    let err = result.expect_err("monitor failure should bubble out");
+    assert!(err.to_string().contains("simulated monitor crash"));
+
+    let latest_run = state
+        .with_db(|conn| launch_runs::get_latest_run_for_game(conn, game_id))
+        .unwrap()
+        .expect("latest run");
+    assert_eq!(latest_run.status, LaunchRunStatus::Incomplete);
+    assert!(latest_run.play_session_id.is_some());
+    assert!(latest_run.ended_at.is_some());
+    let before = latest_run
+        .script_records
+        .iter()
+        .find(|record| record.name == "Before Hook")
+        .expect("before hook row");
+    assert_eq!(
+        before.status,
+        game_manager_lib::domain::ScriptExecutionStatus::Succeeded
+    );
+    assert!(before.started_at.is_some());
+    assert!(before.ended_at.is_some());
+
+    let cleanup = latest_run
+        .script_records
+        .iter()
+        .find(|record| record.name == "Cleanup Hook")
+        .expect("cleanup hook row");
+    assert_eq!(
+        cleanup.status,
+        game_manager_lib::domain::ScriptExecutionStatus::NotReached
+    );
+    assert_eq!(
+        cleanup.details.as_deref(),
+        Some("launch ended before this script phase was reached")
+    );
+}
+
+/// A launch attempt that fails BEFORE any run is created for it must not touch a
+/// pre-existing, unrelated `Active` run for the same game (a stale leftover from
+/// a prior crashed session). Regression for the bug where the hard-failure
+/// finalizer grabbed the game's latest `Active` run and corrupted it.
+#[tokio::test]
+async fn hard_failure_before_run_creation_leaves_stale_active_run_untouched() {
+    let state = AppState::in_memory().unwrap();
+    let game_id = state
+        .with_db(|conn| games::create(conn, &new_game("StaleActive")))
+        .unwrap();
+
+    // Simulate an orphaned, still-`Active` run left behind by a previous
+    // app crash for THIS game.
+    let stale_run_id = state
+        .with_db(|conn| {
+            let run = launch_runs::create_run(conn, game_id)?;
+            Ok(run.id)
+        })
+        .unwrap();
+    let stale_before = state
+        .with_db(|conn| launch_runs::get_run(conn, stale_run_id))
+        .unwrap();
+    assert_eq!(stale_before.status, LaunchRunStatus::Active);
+    assert!(stale_before.ended_at.is_none());
+
+    // Force `resolve_for_game` to fail BEFORE `create_run` for THIS game by
+    // wiring the game to a script id that does not exist (resolve errors with
+    // "script ... not found during resolve"). This is the precise scenario the
+    // bug mishandled: a hard failure for the same game that owns the stale run,
+    // before this attempt creates any run of its own.
+    state
+        .with_db(|conn| {
+            // Link the game to a script id, then remove that script row while
+            // foreign keys are disabled so the dangling link survives. On the
+            // next launch, resolve sees the link but cannot find the script.
+            conn.execute("PRAGMA foreign_keys = OFF", [])?;
+            conn.execute(
+                "INSERT INTO game_scripts (game_id, script_id) VALUES (?1, ?2)",
+                rusqlite::params![game_id, 999_999_i64],
+            )?;
+            conn.execute("PRAGMA foreign_keys = ON", [])?;
+            Ok(())
+        })
+        .unwrap();
+
+    let monitor: Arc<dyn Monitor> = Arc::new(StubMonitor::immediate());
+    let result = run_launch_impl(&state, game_id, monitor, &NoopSink, CancelToken::new()).await;
+    assert!(
+        result.is_err(),
+        "resolve failure must hard-fail before run creation"
+    );
+
+    // No new run was created for the failed attempt — the stale run is still the
+    // only (and latest) run for the game.
+    let latest = state
+        .with_db(|conn| launch_runs::get_latest_run_for_game(conn, game_id))
+        .unwrap()
+        .expect("stale run is still latest");
+    assert_eq!(latest.id, stale_run_id);
+
+    // The stale run must be byte-for-byte unchanged: still Active, still open.
+    let stale_after = state
+        .with_db(|conn| launch_runs::get_run(conn, stale_run_id))
+        .unwrap();
+    assert_eq!(
+        stale_after.status,
+        LaunchRunStatus::Active,
+        "stale run must NOT be marked Incomplete by an unrelated failed launch"
+    );
+    assert!(
+        stale_after.ended_at.is_none(),
+        "stale run must not be finalized"
     );
 }

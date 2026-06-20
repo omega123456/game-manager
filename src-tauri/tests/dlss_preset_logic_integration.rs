@@ -10,16 +10,22 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 
 use game_manager_lib::db::connection::open_in_memory;
-use game_manager_lib::db::repo::games::{self, NewGame};
+use game_manager_lib::db::repo::{
+    dlss,
+    games::{self, NewGame},
+};
+use game_manager_lib::dlss::detect::{DetectionResult, DetectionSummary};
 use game_manager_lib::dlss::nvapi::drs::{find_app_profile, levenshtein, DrsOrchestrator};
 use game_manager_lib::dlss::nvapi::ffi::{
-    make_nvapi_version, NvapiDriver, ProfileInfo, SettingLocation, SettingValue,
-    PRESET_RECOMMENDED, SETTING_ID_DLSS_RR, SETTING_ID_DLSS_RR_OVERRIDE, SETTING_ID_DLSS_SR,
-    SETTING_ID_DLSS_SR_OVERRIDE,
+    make_nvapi_version, setting_location, DrsDwordSetting, NvapiDriver, NvapiDrs, ProfileInfo,
+    PRESET_VALUE_RECOMMENDED, SETTING_ID_DLSS_RR, SETTING_ID_DLSS_SR, SETTING_ID_DLSS_SR_OVERRIDE,
+    SETTING_ID_DLSS_SR_PRESET_PROFILE,
 };
-use game_manager_lib::dlss::nvapi::presets::{self, game_identity, setting_id};
+use game_manager_lib::dlss::nvapi::presets::{
+    self, game_identity, override_setting_id, setting_id,
+};
 use game_manager_lib::dlss::DlssError;
-use game_manager_lib::domain::{MonitorMode, PresetKind};
+use game_manager_lib::domain::{DetectedDll, MonitorMode, PresetKind};
 use game_manager_lib::state::AppState;
 
 // ---------------------------------------------------------------------------
@@ -28,87 +34,112 @@ use game_manager_lib::state::AppState;
 
 /// A configurable in-memory [`NvapiDriver`] fake.
 struct FakeDriver {
-    global_profile: usize,
+    base_profile: usize,
+    current_global_profile: usize,
     profiles: Vec<ProfileInfo>,
-    /// Settings keyed by `(profile_handle, setting_id)` → value + location.
-    settings: Mutex<Vec<((usize, u32), SettingValue)>>,
-    /// Number of times [`NvapiDriver::reload`] / [`NvapiDriver::save`] were called
-    /// (shared so a test can inspect them after the driver is boxed).
-    reloads: Arc<AtomicUsize>,
-    saves: Arc<AtomicUsize>,
+    /// Settings keyed by `(profile_handle, setting_id)`.
+    settings: Mutex<Vec<((usize, u32), DrsDwordSetting)>>,
     /// Optional forced error for every call.
     error: Option<fn() -> DlssError>,
 }
 
 impl FakeDriver {
-    fn new(global_profile: usize, profiles: Vec<ProfileInfo>) -> Self {
+    fn new(base_profile: usize, profiles: Vec<ProfileInfo>) -> Self {
         Self {
-            global_profile,
+            base_profile,
+            current_global_profile: base_profile,
             profiles,
             settings: Mutex::new(Vec::new()),
-            reloads: Arc::new(AtomicUsize::new(0)),
-            saves: Arc::new(AtomicUsize::new(0)),
             error: None,
         }
     }
 
-    /// Shared handles to the reload / save call counters.
-    fn counters(&self) -> (Arc<AtomicUsize>, Arc<AtomicUsize>) {
-        (Arc::clone(&self.reloads), Arc::clone(&self.saves))
+    fn with_current_global_profile(self, profile: usize) -> Self {
+        Self {
+            current_global_profile: profile,
+            ..self
+        }
     }
 
-    /// Store a value as *locally* stored on `profile`.
     fn with_setting(self, profile: usize, setting_id: u32, value: u32) -> Self {
-        self.put(profile, setting_id, value, SettingLocation::Current);
-        self
+        self.with_setting_detail(
+            profile,
+            setting_id,
+            DrsDwordSetting {
+                value,
+                location: setting_location::CURRENT_PROFILE,
+            },
+        )
     }
 
-    /// Store a value at an explicit [`SettingLocation`] (e.g. inherited).
-    fn with_setting_at(
+    fn with_inherited_setting(self, profile: usize, setting_id: u32, value: u32) -> Self {
+        self.with_setting_detail(
+            profile,
+            setting_id,
+            DrsDwordSetting {
+                value,
+                location: setting_location::GLOBAL_PROFILE,
+            },
+        )
+    }
+
+    fn with_base_inherited_setting(self, profile: usize, setting_id: u32, value: u32) -> Self {
+        self.with_setting_detail(
+            profile,
+            setting_id,
+            DrsDwordSetting {
+                value,
+                location: setting_location::BASE_PROFILE,
+            },
+        )
+    }
+
+    fn with_setting_detail(
         self,
         profile: usize,
         setting_id: u32,
-        value: u32,
-        location: SettingLocation,
+        setting: DrsDwordSetting,
     ) -> Self {
-        self.put(profile, setting_id, value, location);
-        self
-    }
-
-    fn put(&self, profile: usize, setting_id: u32, value: u32, location: SettingLocation) {
         self.settings
             .lock()
             .unwrap()
-            .push(((profile, setting_id), SettingValue { value, location }));
+            .push(((profile, setting_id), setting));
+        self
     }
 
     fn failing(error: fn() -> DlssError) -> Self {
         Self {
-            global_profile: 1,
+            base_profile: 1,
+            current_global_profile: 1,
             profiles: Vec::new(),
             settings: Mutex::new(Vec::new()),
-            reloads: Arc::new(AtomicUsize::new(0)),
-            saves: Arc::new(AtomicUsize::new(0)),
             error: Some(error),
         }
     }
 
-    fn lookup(&self, profile: usize, setting_id: u32) -> Option<SettingValue> {
+    fn lookup(&self, profile: usize, setting_id: u32) -> Option<DrsDwordSetting> {
         self.settings
             .lock()
             .unwrap()
             .iter()
             .find(|((p, s), _)| *p == profile && *s == setting_id)
-            .map(|(_, v)| *v)
+            .map(|(_, setting)| *setting)
     }
 }
 
 impl NvapiDriver for FakeDriver {
-    fn global_profile(&self) -> Result<usize, DlssError> {
+    fn base_profile(&self) -> Result<usize, DlssError> {
         if let Some(err) = self.error {
             return Err(err());
         }
-        Ok(self.global_profile)
+        Ok(self.base_profile)
+    }
+
+    fn current_global_profile(&self) -> Result<usize, DlssError> {
+        if let Some(err) = self.error {
+            return Err(err());
+        }
+        Ok(self.current_global_profile)
     }
 
     fn enumerate_profiles(&self) -> Result<Vec<ProfileInfo>, DlssError> {
@@ -118,19 +149,11 @@ impl NvapiDriver for FakeDriver {
         Ok(self.profiles.clone())
     }
 
-    fn reload(&self) -> Result<(), DlssError> {
-        if let Some(err) = self.error {
-            return Err(err());
-        }
-        self.reloads.fetch_add(1, Ordering::SeqCst);
-        Ok(())
-    }
-
-    fn get_setting(
+    fn get_setting_detail(
         &self,
         profile: usize,
         setting_id: u32,
-    ) -> Result<Option<SettingValue>, DlssError> {
+    ) -> Result<Option<DrsDwordSetting>, DlssError> {
         if let Some(err) = self.error {
             return Err(err());
         }
@@ -142,32 +165,87 @@ impl NvapiDriver for FakeDriver {
             return Err(err());
         }
         let mut settings = self.settings.lock().unwrap();
-        if let Some(entry) = settings
+        let entry = DrsDwordSetting {
+            value,
+            location: setting_location::CURRENT_PROFILE,
+        };
+        if let Some(existing) = settings
             .iter_mut()
             .find(|((p, s), _)| *p == profile && *s == setting_id)
         {
-            // Writes always store locally on the queried profile.
-            entry.1 = SettingValue {
-                value,
-                location: SettingLocation::Current,
-            };
+            existing.1 = entry;
         } else {
-            settings.push((
-                (profile, setting_id),
-                SettingValue {
-                    value,
-                    location: SettingLocation::Current,
-                },
-            ));
+            settings.push(((profile, setting_id), entry));
         }
         Ok(())
     }
+}
 
-    fn save(&self) -> Result<(), DlssError> {
-        if let Some(err) = self.error {
-            return Err(err());
-        }
-        self.saves.fetch_add(1, Ordering::SeqCst);
+struct CountingDriver {
+    profiles: Vec<ProfileInfo>,
+    enumerate_calls: Arc<AtomicUsize>,
+    reload_calls: Arc<AtomicUsize>,
+}
+
+impl NvapiDriver for CountingDriver {
+    fn base_profile(&self) -> Result<usize, DlssError> {
+        Ok(1)
+    }
+
+    fn current_global_profile(&self) -> Result<usize, DlssError> {
+        Ok(1)
+    }
+
+    fn enumerate_profiles(&self) -> Result<Vec<ProfileInfo>, DlssError> {
+        self.enumerate_calls.fetch_add(1, Ordering::SeqCst);
+        Ok(self.profiles.clone())
+    }
+
+    fn get_setting_detail(
+        &self,
+        _profile: usize,
+        _setting_id: u32,
+    ) -> Result<Option<DrsDwordSetting>, DlssError> {
+        Ok(None)
+    }
+
+    fn set_setting(&self, _profile: usize, _setting_id: u32, _value: u32) -> Result<(), DlssError> {
+        Ok(())
+    }
+
+    fn reload_settings(&self) -> Result<(), DlssError> {
+        self.reload_calls.fetch_add(1, Ordering::SeqCst);
+        Ok(())
+    }
+}
+
+struct MinimalDriver;
+
+impl NvapiDriver for MinimalDriver {
+    fn base_profile(&self) -> Result<usize, DlssError> {
+        Ok(7)
+    }
+
+    fn current_global_profile(&self) -> Result<usize, DlssError> {
+        Ok(7)
+    }
+
+    fn enumerate_profiles(&self) -> Result<Vec<ProfileInfo>, DlssError> {
+        Ok(Vec::new())
+    }
+
+    fn get_setting_detail(
+        &self,
+        _profile: usize,
+        setting_id: u32,
+    ) -> Result<Option<DrsDwordSetting>, DlssError> {
+        Ok(Some(DrsDwordSetting {
+            value: setting_id,
+            location: setting_location::CURRENT_PROFILE,
+        }))
+    }
+
+    fn set_setting(&self, _profile: usize, _setting_id: u32, _value: u32) -> Result<(), DlssError> {
         Ok(())
     }
 }
@@ -217,6 +295,41 @@ fn setting_id_maps_each_kind_to_the_appendix_id() {
     );
 }
 
+#[test]
+fn preset_profile_setting_id_exists_only_for_dlss() {
+    assert_eq!(
+        presets::preset_profile_setting_id(PresetKind::Dlss),
+        Some(SETTING_ID_DLSS_SR_PRESET_PROFILE)
+    );
+    assert_eq!(
+        presets::preset_profile_setting_id(PresetKind::RayReconstruction),
+        None
+    );
+}
+
+#[test]
+fn ffi_real_driver_is_unsupported_or_available_without_panicking() {
+    match game_manager_lib::dlss::nvapi::ffi::real_driver() {
+        Ok(_) => panic!("test-utils builds must not open the live NVAPI driver"),
+        Err(err) => assert!(matches!(err, DlssError::Unsupported)),
+    }
+}
+
+#[test]
+fn real_nvapi_drs_is_unsupported_or_available_without_panicking() {
+    match game_manager_lib::dlss::nvapi::drs::real_nvapi_drs() {
+        Ok(_) => panic!("test-utils builds must not open a live NVAPI DRS session"),
+        Err(err) => assert!(matches!(err, DlssError::Unsupported)),
+    }
+}
+
+#[test]
+fn ffi_default_helpers_delegate_without_custom_overrides() {
+    let driver = MinimalDriver;
+    assert_eq!(driver.get_setting(7, 0x1234).unwrap(), Some(0x1234));
+    driver.reload_settings().unwrap();
+}
+
 // ---------------------------------------------------------------------------
 // Levenshtein + profile matching.
 // ---------------------------------------------------------------------------
@@ -228,6 +341,12 @@ fn levenshtein_is_case_insensitive_and_correct() {
     assert_eq!(levenshtein("", "abc"), 3);
     assert_eq!(levenshtein("Kitten", "sitting"), 3);
     assert_eq!(levenshtein("Cyberpunk", "cyberpunk"), 0);
+}
+
+#[test]
+fn find_app_profile_matches_exact_title_without_exe_check() {
+    let profiles = vec![profile(20, "Cyberpunk 2077", &["cyberpunk2077.exe"])];
+    assert_eq!(find_app_profile(&profiles, "Cyberpunk 2077", &[]), Some(20));
 }
 
 #[test]
@@ -248,27 +367,24 @@ fn find_app_profile_picks_closest_name_with_matching_exe() {
 #[test]
 fn find_app_profile_skips_closest_name_without_exe_match() {
     let profiles = vec![
-        profile(20, "Cyberpunk 2077", &["wrong.exe"]),
-        profile(30, "Cyberpunk Two", &["cyberpunk2077.exe"]),
+        profile(20, "Example Game Pro", &["wrong.exe"]),
+        profile(30, "Totally Different", &["game.exe"]),
     ];
-    let exes = vec!["cyberpunk2077.exe".to_string()];
+    let exes = vec!["game.exe".to_string()];
     // Closest name (20) has no exe match; the next confirmed candidate wins.
-    assert_eq!(
-        find_app_profile(&profiles, "Cyberpunk 2077", &exes),
-        Some(30)
-    );
+    assert_eq!(find_app_profile(&profiles, "Example Game", &exes), Some(30));
 }
 
 #[test]
-fn find_app_profile_returns_none_when_no_exe_matches() {
-    let profiles = vec![profile(20, "Cyberpunk 2077", &["cyberpunk2077.exe"])];
+fn find_app_profile_returns_none_when_no_exe_matches_and_no_title_match() {
+    let profiles = vec![profile(20, "Some Other Game", &["other.exe"])];
     let exes = vec!["different.exe".to_string()];
     assert_eq!(find_app_profile(&profiles, "Cyberpunk 2077", &exes), None);
 }
 
 #[test]
-fn find_app_profile_returns_none_with_no_exes() {
-    let profiles = vec![profile(20, "Cyberpunk 2077", &["cyberpunk2077.exe"])];
+fn find_app_profile_returns_none_with_no_exes_and_no_title_match() {
+    let profiles = vec![profile(20, "Some Other Game", &["other.exe"])];
     assert_eq!(find_app_profile(&profiles, "Cyberpunk 2077", &[]), None);
 }
 
@@ -292,6 +408,17 @@ fn global_preset_get_reads_base_profile_value() {
 }
 
 #[test]
+fn global_preset_get_reads_current_global_profile_not_base() {
+    let driver = FakeDriver::new(1, vec![])
+        .with_current_global_profile(99)
+        .with_setting(1, SETTING_ID_DLSS_SR, 0x4)
+        .with_setting(99, SETTING_ID_DLSS_SR, 0xB);
+    let drs = orchestrator(driver);
+    let value = presets::get_global_preset_with(&drs, PresetKind::Dlss).unwrap();
+    assert_eq!(value, 0xB);
+}
+
+#[test]
 fn global_preset_get_unset_reads_as_default() {
     let drs = orchestrator(FakeDriver::new(1, vec![]));
     let value = presets::get_global_preset_with(&drs, PresetKind::RayReconstruction).unwrap();
@@ -306,6 +433,79 @@ fn global_preset_set_then_get_round_trips() {
     assert_eq!(value, 0xB);
 }
 
+#[test]
+fn global_preset_get_ignores_inherited_base_selection() {
+    let driver = FakeDriver::new(1, vec![])
+        .with_current_global_profile(99)
+        .with_setting(1, SETTING_ID_DLSS_SR, 0x4)
+        .with_base_inherited_setting(99, SETTING_ID_DLSS_SR, 0x4);
+    let drs = orchestrator(driver);
+    let value = presets::get_global_preset_with(&drs, PresetKind::Dlss).unwrap();
+    assert_eq!(value, 0);
+}
+
+#[test]
+fn global_preset_get_recommended_mode_overrides_inherited_selection() {
+    let driver = FakeDriver::new(1, vec![])
+        .with_current_global_profile(99)
+        .with_setting(99, SETTING_ID_DLSS_SR_PRESET_PROFILE, 1)
+        .with_base_inherited_setting(99, SETTING_ID_DLSS_SR, 0x4);
+    let drs = orchestrator(driver);
+    let value = presets::get_global_preset_with(&drs, PresetKind::Dlss).unwrap();
+    assert_eq!(value, PRESET_VALUE_RECOMMENDED);
+}
+
+#[test]
+fn global_preset_get_local_custom_preset_k() {
+    let driver = FakeDriver::new(1, vec![])
+        .with_current_global_profile(99)
+        .with_setting(99, SETTING_ID_DLSS_SR_PRESET_PROFILE, 2)
+        .with_setting(99, SETTING_ID_DLSS_SR, 0xB)
+        .with_base_inherited_setting(99, SETTING_ID_DLSS_SR, 0x4);
+    let drs = orchestrator(driver);
+    let value = presets::get_global_preset_with(&drs, PresetKind::Dlss).unwrap();
+    assert_eq!(value, 0xB);
+}
+
+#[test]
+fn global_preset_set_recommended_writes_profile_mode_and_selection() {
+    let driver = FakeDriver::new(1, vec![]);
+    let drs = orchestrator(driver);
+    presets::set_global_preset_with(&drs, PresetKind::Dlss, PRESET_VALUE_RECOMMENDED).unwrap();
+    let value = presets::get_global_preset_with(&drs, PresetKind::Dlss).unwrap();
+    assert_eq!(value, PRESET_VALUE_RECOMMENDED);
+}
+
+#[test]
+fn global_preset_rr_ignores_inherited_base_selection() {
+    let driver = FakeDriver::new(1, vec![])
+        .with_current_global_profile(99)
+        .with_setting(1, SETTING_ID_DLSS_RR, 0x4)
+        .with_base_inherited_setting(99, SETTING_ID_DLSS_RR, 0x4);
+    let drs = orchestrator(driver);
+    let value = presets::get_global_preset_with(&drs, PresetKind::RayReconstruction).unwrap();
+    assert_eq!(value, 0);
+}
+
+#[test]
+fn global_preset_set_default_clears_dlss_profile_mode_and_selection() {
+    let driver = FakeDriver::new(1, vec![])
+        .with_setting(1, SETTING_ID_DLSS_SR_PRESET_PROFILE, 2)
+        .with_setting(1, SETTING_ID_DLSS_SR, 0xB);
+    let drs = orchestrator(driver);
+    presets::set_global_preset_with(&drs, PresetKind::Dlss, 0).unwrap();
+    let value = presets::get_global_preset_with(&drs, PresetKind::Dlss).unwrap();
+    assert_eq!(value, 0);
+}
+
+#[test]
+fn global_preset_set_rr_writes_direct_selection_without_profile_mode() {
+    let drs = orchestrator(FakeDriver::new(1, vec![]));
+    presets::set_global_preset_with(&drs, PresetKind::RayReconstruction, 0x7).unwrap();
+    let value = presets::get_global_preset_with(&drs, PresetKind::RayReconstruction).unwrap();
+    assert_eq!(value, 0x7);
+}
+
 // ---------------------------------------------------------------------------
 // Per-game preset get/set targets the matched profile.
 // ---------------------------------------------------------------------------
@@ -313,7 +513,9 @@ fn global_preset_set_then_get_round_trips() {
 #[test]
 fn game_preset_get_targets_matched_profile() {
     let profiles = vec![profile(20, "My Game", &["mygame.exe"])];
-    let driver = FakeDriver::new(1, profiles).with_setting(20, SETTING_ID_DLSS_SR, 0x4);
+    let driver = FakeDriver::new(1, profiles)
+        .with_setting(20, SETTING_ID_DLSS_SR_OVERRIDE, 1)
+        .with_setting(20, SETTING_ID_DLSS_SR, 0x4);
     let drs = orchestrator(driver);
     let exes = vec!["mygame.exe".to_string()];
     let preset = presets::get_game_preset_with(&drs, "My Game", &exes, PresetKind::Dlss).unwrap();
@@ -342,6 +544,57 @@ fn game_preset_get_matched_but_unset_reads_default() {
 }
 
 #[test]
+fn game_preset_get_default_when_app_has_no_local_selection() {
+    let profiles = vec![profile(20, "Baldur's Gate 3", &["bg3.exe"])];
+    let driver = FakeDriver::new(1, profiles)
+        .with_current_global_profile(99)
+        .with_setting(20, SETTING_ID_DLSS_SR_OVERRIDE, 1)
+        .with_setting(99, SETTING_ID_DLSS_SR, 0xB);
+    let drs = orchestrator(driver);
+    let exes = vec!["bg3.exe".to_string()];
+    let preset =
+        presets::get_game_preset_with(&drs, "Baldur's Gate 3", &exes, PresetKind::Dlss).unwrap();
+    assert!(preset.available);
+    assert_eq!(preset.value, 0);
+}
+
+#[test]
+fn game_preset_get_default_when_app_has_inherited_selection() {
+    let profiles = vec![profile(20, "Baldur's Gate 3", &["bg3.exe"])];
+    let driver = FakeDriver::new(1, profiles)
+        .with_current_global_profile(99)
+        .with_inherited_setting(20, SETTING_ID_DLSS_SR, 0x4)
+        .with_setting(20, SETTING_ID_DLSS_SR_OVERRIDE, 1)
+        .with_setting(99, SETTING_ID_DLSS_SR, 0x4);
+    let drs = orchestrator(driver);
+    let exes = vec!["bg3.exe".to_string()];
+    let preset =
+        presets::get_game_preset_with(&drs, "Baldur's Gate 3", &exes, PresetKind::Dlss).unwrap();
+    assert!(preset.available);
+    assert_eq!(preset.value, 0);
+}
+
+#[test]
+fn game_preset_get_default_when_app_override_off_despite_inherited_selection() {
+    let profiles = vec![profile(20, "Baldur's Gate 3", &["bg3.exe"])];
+    let driver = FakeDriver::new(1, profiles)
+        .with_current_global_profile(99)
+        .with_inherited_setting(20, SETTING_ID_DLSS_SR, 0x4)
+        .with_setting(20, SETTING_ID_DLSS_SR_OVERRIDE, 0)
+        .with_setting(99, SETTING_ID_DLSS_SR, 0xB);
+    let drs = orchestrator(driver);
+    let exes = vec!["bg3.exe".to_string()];
+    let preset =
+        presets::get_game_preset_with(&drs, "Baldur's Gate 3", &exes, PresetKind::Dlss).unwrap();
+    assert!(preset.available);
+    assert_eq!(preset.value, 0);
+    assert_eq!(
+        override_setting_id(PresetKind::Dlss),
+        SETTING_ID_DLSS_SR_OVERRIDE
+    );
+}
+
+#[test]
 fn game_preset_set_round_trips_on_matched_profile() {
     let profiles = vec![profile(20, "My Game", &["mygame.exe"])];
     let drs = orchestrator(FakeDriver::new(1, profiles));
@@ -364,6 +617,103 @@ fn game_preset_set_no_op_when_no_profile_matches() {
     let applied =
         presets::set_game_preset_with(&drs, "My Game", &exes, PresetKind::Dlss, 0x4).unwrap();
     assert!(!applied);
+}
+
+#[test]
+fn game_preset_set_default_turns_override_off_for_matched_profile() {
+    let profiles = vec![profile(20, "My Game", &["mygame.exe"])];
+    let driver = FakeDriver::new(1, profiles)
+        .with_setting(20, SETTING_ID_DLSS_SR_OVERRIDE, 1)
+        .with_setting(20, SETTING_ID_DLSS_SR, 0x5);
+    let drs = orchestrator(driver);
+    let exes = vec!["mygame.exe".to_string()];
+
+    let applied =
+        presets::set_game_preset_with(&drs, "My Game", &exes, PresetKind::Dlss, 0).unwrap();
+
+    assert!(applied);
+    let preset = presets::get_game_preset_with(&drs, "My Game", &exes, PresetKind::Dlss).unwrap();
+    assert!(preset.available);
+    assert_eq!(preset.value, 0);
+}
+
+#[test]
+fn drs_get_base_setting_reads_from_current_global_profile() {
+    let driver = FakeDriver::new(1, vec![])
+        .with_current_global_profile(9)
+        .with_setting(9, SETTING_ID_DLSS_SR, 0xA)
+        .with_setting(1, SETTING_ID_DLSS_SR, 0x3);
+    let drs = orchestrator(driver);
+
+    let value = drs.get_base_setting(SETTING_ID_DLSS_SR).unwrap();
+
+    assert_eq!(value, Some(0xA));
+}
+
+#[test]
+fn drs_profile_cache_reuses_enumeration_until_reload() {
+    let enumerate_calls = Arc::new(AtomicUsize::new(0));
+    let reload_calls = Arc::new(AtomicUsize::new(0));
+    let profiles = vec![profile(20, "My Game", &["mygame.exe"])];
+    let driver = CountingDriver {
+        profiles,
+        enumerate_calls: enumerate_calls.clone(),
+        reload_calls: reload_calls.clone(),
+    };
+    let drs = DrsOrchestrator::new(Box::new(driver));
+    let exes = vec!["mygame.exe".to_string()];
+
+    assert_eq!(
+        drs.get_app_preset_selection(
+            "My Game",
+            &exes,
+            SETTING_ID_DLSS_SR,
+            SETTING_ID_DLSS_SR_OVERRIDE
+        )
+        .unwrap(),
+        Some(0)
+    );
+    assert_eq!(
+        drs.get_app_preset_selection(
+            "My Game",
+            &exes,
+            SETTING_ID_DLSS_SR,
+            SETTING_ID_DLSS_SR_OVERRIDE
+        )
+        .unwrap(),
+        Some(0)
+    );
+    assert_eq!(enumerate_calls.load(Ordering::SeqCst), 1);
+
+    drs.reload_from_driver().unwrap();
+    assert_eq!(reload_calls.load(Ordering::SeqCst), 1);
+
+    assert_eq!(
+        drs.get_app_preset_selection(
+            "My Game",
+            &exes,
+            SETTING_ID_DLSS_SR,
+            SETTING_ID_DLSS_SR_OVERRIDE
+        )
+        .unwrap(),
+        Some(0)
+    );
+    assert_eq!(enumerate_calls.load(Ordering::SeqCst), 2);
+}
+
+#[test]
+fn shared_nvapi_session_helpers_are_unsupported_in_test_builds() {
+    let err = game_manager_lib::dlss::nvapi::drs::with_nvapi_drs(|drs| {
+        drs.get_base_setting(SETTING_ID_DLSS_SR)
+    })
+    .unwrap_err();
+    assert!(matches!(err, DlssError::Unsupported));
+
+    let err = game_manager_lib::dlss::nvapi::drs::with_nvapi_drs_reloaded(|drs| {
+        drs.get_global_preset_selection(SETTING_ID_DLSS_SR, Some(SETTING_ID_DLSS_SR_PRESET_PROFILE))
+    })
+    .unwrap_err();
+    assert!(matches!(err, DlssError::Unsupported));
 }
 
 // ---------------------------------------------------------------------------
@@ -475,6 +825,98 @@ fn game_identity_includes_exes_found_in_resolved_folder() {
     assert!(exes.iter().any(|exe| exe == "actualgame.exe"));
 }
 
+#[test]
+fn game_identity_uses_folder_override_and_detected_dll_parent_folders() {
+    let state = state();
+    let install = tempfile::TempDir::new().unwrap();
+    let override_folder = tempfile::TempDir::new().unwrap();
+    let detected_folder = tempfile::TempDir::new().unwrap();
+    let nested = detected_folder.path().join("Bin");
+    std::fs::create_dir_all(&nested).unwrap();
+
+    let launcher = install.path().join("launcher.exe");
+    let override_exe = override_folder.path().join("overridegame.exe");
+    let nested_exe = nested.join("detectedgame.exe");
+    let detected_dll = nested.join("nvngx_dlss.dll");
+    let rr_dll = detected_folder.path().join("nvngx_dlssd.dll");
+
+    std::fs::write(&launcher, b"x").unwrap();
+    std::fs::write(&override_exe, b"x").unwrap();
+    std::fs::write(&nested_exe, b"x").unwrap();
+    std::fs::write(&detected_dll, b"x").unwrap();
+    std::fs::write(&rr_dll, b"x").unwrap();
+
+    let id = insert_game(&state, "Override Game", launcher.to_str().unwrap(), None);
+    state
+        .with_db(|conn| {
+            dlss::set_folder_override(conn, id, Some(override_folder.path().to_str().unwrap()))
+        })
+        .unwrap();
+    state.dlss_detection_set(
+        id,
+        DetectionResult {
+            folder_resolved: Some(override_folder.path().to_string_lossy().to_string()),
+            summary: DetectionSummary {
+                super_resolution: Some(DetectedDll {
+                    version: "3.7.0".to_string(),
+                    path: detected_dll.to_string_lossy().to_string(),
+                    md5: None,
+                }),
+                frame_generation: None,
+                ray_reconstruction: Some(DetectedDll {
+                    version: "1.0.0".to_string(),
+                    path: rr_dll.to_string_lossy().to_string(),
+                    md5: None,
+                }),
+            },
+            last_scanned_at: Some("2026-06-20T09:00:00Z".to_string()),
+        },
+    );
+
+    let (_, exes) = game_identity(&state, id).unwrap();
+    assert!(exes.iter().any(|exe| exe == "overridegame.exe"));
+    assert!(exes.iter().any(|exe| exe == "detectedgame.exe"));
+    assert!(exes.iter().any(|exe| exe == "launcher.exe"));
+}
+
+#[test]
+fn game_identity_ignores_missing_folder_override_and_missing_detected_parents() {
+    let state = state();
+    let install = tempfile::TempDir::new().unwrap();
+    let launcher = install.path().join("launcher.exe");
+    std::fs::write(&launcher, b"x").unwrap();
+
+    let id = insert_game(
+        &state,
+        "Missing Paths",
+        launcher.to_str().unwrap(),
+        Some("missing.exe"),
+    );
+    state
+        .with_db(|conn| dlss::set_folder_override(conn, id, Some("Z:/does/not/exist")))
+        .unwrap();
+    state.dlss_detection_set(
+        id,
+        DetectionResult {
+            folder_resolved: None,
+            summary: DetectionSummary {
+                super_resolution: Some(DetectedDll {
+                    version: "3.7.0".to_string(),
+                    path: "Z:/missing/folder/nvngx_dlss.dll".to_string(),
+                    md5: None,
+                }),
+                frame_generation: None,
+                ray_reconstruction: None,
+            },
+            last_scanned_at: None,
+        },
+    );
+
+    let (_, exes) = game_identity(&state, id).unwrap();
+    assert!(exes.iter().any(|exe| exe == "launcher.exe"));
+    assert!(exes.iter().any(|exe| exe == "missing.exe"));
+}
+
 // ---------------------------------------------------------------------------
 // Per-game orchestration that resolves identity from the DB then delegates.
 // ---------------------------------------------------------------------------
@@ -484,7 +926,9 @@ fn get_game_preset_for_resolves_identity_and_matches_profile() {
     let state = state();
     let id = insert_game(&state, "My Game", "C:/Games/MyGame/mygame.exe", None);
     let profiles = vec![profile(20, "My Game", &["mygame.exe"])];
-    let driver = FakeDriver::new(1, profiles).with_setting(20, SETTING_ID_DLSS_SR, 0x6);
+    let driver = FakeDriver::new(1, profiles)
+        .with_setting(20, SETTING_ID_DLSS_SR_OVERRIDE, 1)
+        .with_setting(20, SETTING_ID_DLSS_SR, 0x6);
     let drs = orchestrator(driver);
     let preset = presets::get_game_preset_for(&drs, &state, id, PresetKind::Dlss).unwrap();
     assert!(preset.available);
@@ -501,7 +945,9 @@ fn get_game_preset_for_matches_profile_from_folder_exe() {
     std::fs::write(&actual, b"x").unwrap();
     let id = insert_game(&state, "My Game", launcher.to_str().unwrap(), None);
     let profiles = vec![profile(20, "My Game", &["mygame.exe"])];
-    let driver = FakeDriver::new(1, profiles).with_setting(20, SETTING_ID_DLSS_SR, 0x7);
+    let driver = FakeDriver::new(1, profiles)
+        .with_setting(20, SETTING_ID_DLSS_SR_OVERRIDE, 1)
+        .with_setting(20, SETTING_ID_DLSS_SR, 0x7);
     let drs = orchestrator(driver);
     let preset = presets::get_game_preset_for(&drs, &state, id, PresetKind::Dlss).unwrap();
     assert!(preset.available);
@@ -532,207 +978,33 @@ fn set_game_preset_for_is_noop_success_when_unmatched() {
 // ---------------------------------------------------------------------------
 // Command impls. Tests build with `test-utils`, which forces `real_driver()` to
 // return `Unsupported`, so these NEVER reach the live driver — running them must
-// never mutate real NVIDIA preset state, even on a developer's GPU. The `Ok`
-// arms remain only as defensive no-panic guards.
+// never mutate real NVIDIA preset state, even on a developer's GPU.
 // ---------------------------------------------------------------------------
 
 #[test]
-fn global_get_impl_is_unsupported_or_ok_without_gpu() {
-    // `test-utils` guarantees `Unsupported`; must not panic or touch the driver.
-    match presets::get_global_preset_impl(&state(), PresetKind::Dlss) {
-        Ok(_) => {}
-        Err(err) => assert!(matches!(err, DlssError::Unsupported)),
-    }
+fn global_get_impl_is_unsupported_in_test_builds() {
+    let err = presets::get_global_preset_impl(&state(), PresetKind::Dlss).unwrap_err();
+    assert!(matches!(err, DlssError::Unsupported));
 }
 
 #[test]
-fn global_set_impl_is_unsupported_or_ok_without_gpu() {
-    match presets::set_global_preset_impl(&state(), PresetKind::Dlss, 0x4) {
-        Ok(_) => {}
-        Err(err) => assert!(matches!(err, DlssError::Unsupported | DlssError::Privilege)),
-    }
+fn global_set_impl_is_unsupported_in_test_builds() {
+    let err = presets::set_global_preset_impl(&state(), PresetKind::Dlss, 0x4).unwrap_err();
+    assert!(matches!(err, DlssError::Unsupported));
 }
 
 #[test]
-fn game_get_impl_is_unsupported_or_ok_without_gpu() {
+fn game_get_impl_is_unsupported_in_test_builds() {
     let state = state();
     let id = insert_game(&state, "G", "C:/g/g.exe", None);
-    match presets::get_game_preset_impl(&state, id, PresetKind::RayReconstruction) {
-        Ok(_) => {}
-        Err(err) => assert!(matches!(err, DlssError::Unsupported)),
-    }
+    let err = presets::get_game_preset_impl(&state, id, PresetKind::RayReconstruction).unwrap_err();
+    assert!(matches!(err, DlssError::Unsupported));
 }
 
 #[test]
-fn game_set_impl_is_unsupported_or_ok_without_gpu() {
+fn game_set_impl_is_unsupported_in_test_builds() {
     let state = state();
     let id = insert_game(&state, "G", "C:/g/g.exe", None);
-    match presets::set_game_preset_impl(&state, id, PresetKind::Dlss, 0x4) {
-        Ok(_) => {}
-        Err(err) => assert!(matches!(err, DlssError::Unsupported | DlssError::Privilege)),
-    }
-}
-
-// ---------------------------------------------------------------------------
-// DRS local-vs-inherited setting-location semantics (the root-cause fix).
-//
-// Only values stored *locally* on the queried profile are the effective preset;
-// inherited DWORDs (global / base) must read as Default, matching NVIDIA App.
-// ---------------------------------------------------------------------------
-
-#[test]
-fn inherited_global_selection_reads_as_default_not_the_dword() {
-    // The global profile carries an inherited Preset D (4) but nothing local:
-    // the effective global preset must be Default, not Preset D.
-    let driver =
-        FakeDriver::new(1, vec![]).with_setting_at(1, SETTING_ID_DLSS_SR, 4, SettingLocation::Base);
-    let drs = orchestrator(driver);
-    assert_eq!(
-        presets::get_global_preset_with(&drs, PresetKind::Dlss).unwrap(),
-        0
-    );
-}
-
-#[test]
-fn local_recommended_sentinel_reads_back_as_recommended() {
-    // "NVIDIA recommended" is just the local selection sentinel `0x00FFFFFF`.
-    let driver = FakeDriver::new(1, vec![]).with_setting(1, SETTING_ID_DLSS_SR, PRESET_RECOMMENDED);
-    let drs = orchestrator(driver);
-    assert_eq!(
-        presets::get_global_preset_with(&drs, PresetKind::Dlss).unwrap(),
-        PRESET_RECOMMENDED
-    );
-}
-
-#[test]
-fn local_selection_with_override_on_uses_the_selection() {
-    let driver = FakeDriver::new(1, vec![])
-        .with_setting(1, SETTING_ID_DLSS_SR_OVERRIDE, 1)
-        .with_setting(1, SETTING_ID_DLSS_SR, 11);
-    let drs = orchestrator(driver);
-    assert_eq!(
-        presets::get_global_preset_with(&drs, PresetKind::Dlss).unwrap(),
-        11
-    );
-}
-
-#[test]
-fn per_game_inherited_selection_with_override_on_reads_default() {
-    // The BG3 case: override on, but the selection DWORD is inherited from global.
-    let profiles = vec![profile(20, "My Game", &["mygame.exe"])];
-    let driver = FakeDriver::new(1, profiles)
-        .with_setting(20, SETTING_ID_DLSS_SR_OVERRIDE, 1)
-        .with_setting_at(20, SETTING_ID_DLSS_SR, 4, SettingLocation::Global);
-    let drs = orchestrator(driver);
-    let exes = vec!["mygame.exe".to_string()];
-    let preset = presets::get_game_preset_with(&drs, "My Game", &exes, PresetKind::Dlss).unwrap();
-    assert!(preset.available);
-    assert_eq!(preset.value, 0);
-}
-
-#[test]
-fn per_game_local_override_off_reads_default() {
-    let profiles = vec![profile(20, "My Game", &["mygame.exe"])];
-    let driver = FakeDriver::new(1, profiles)
-        .with_setting(20, SETTING_ID_DLSS_RR_OVERRIDE, 0)
-        .with_setting(20, SETTING_ID_DLSS_RR, 4);
-    let drs = orchestrator(driver);
-    let exes = vec!["mygame.exe".to_string()];
-    let preset =
-        presets::get_game_preset_with(&drs, "My Game", &exes, PresetKind::RayReconstruction)
-            .unwrap();
-    assert_eq!(preset.value, 0);
-}
-
-#[test]
-fn set_default_clears_override_and_round_trips_to_default() {
-    let driver = FakeDriver::new(1, vec![])
-        .with_setting(1, SETTING_ID_DLSS_SR, 11)
-        .with_setting(1, SETTING_ID_DLSS_SR_OVERRIDE, 1);
-    let drs = orchestrator(driver);
-    presets::set_global_preset_with(&drs, PresetKind::Dlss, 0).unwrap();
-    assert_eq!(
-        presets::get_global_preset_with(&drs, PresetKind::Dlss).unwrap(),
-        0
-    );
-}
-
-#[test]
-fn set_recommended_round_trips_to_recommended() {
-    let drs = orchestrator(FakeDriver::new(1, vec![]));
-    presets::set_global_preset_with(&drs, PresetKind::Dlss, PRESET_RECOMMENDED).unwrap();
-    assert_eq!(
-        presets::get_global_preset_with(&drs, PresetKind::Dlss).unwrap(),
-        PRESET_RECOMMENDED
-    );
-}
-
-#[test]
-fn setting_location_decodes_raw_values() {
-    use game_manager_lib::dlss::nvapi::ffi::status;
-
-    assert_eq!(SettingLocation::from_raw(0), SettingLocation::Current);
-    assert_eq!(SettingLocation::from_raw(1), SettingLocation::Global);
-    assert_eq!(SettingLocation::from_raw(2), SettingLocation::Base);
-    assert_eq!(SettingLocation::from_raw(9), SettingLocation::Other(9));
-
-    assert!(SettingLocation::Current.is_local());
-    assert!(!SettingLocation::Global.is_local());
-    assert!(!SettingLocation::Other(9).is_local());
-
-    // A local value yields its value; an inherited one yields `None`.
-    assert_eq!(
-        SettingValue {
-            value: 7,
-            location: SettingLocation::Current,
-        }
-        .local_value(),
-        Some(7)
-    );
-    assert_eq!(
-        SettingValue {
-            value: 7,
-            location: SettingLocation::Base,
-        }
-        .local_value(),
-        None
-    );
-
-    // Both driver "not found" codes mean the setting is absent.
-    assert!(status::is_setting_absent(-165));
-    assert!(status::is_setting_absent(-160));
-    assert!(!status::is_setting_absent(0));
-    assert!(!status::is_setting_absent(-130));
-}
-
-#[test]
-fn game_identity_finds_exes_in_nested_subfolders() {
-    let state = state();
-    let folder = tempfile::TempDir::new().unwrap();
-    let launcher = folder.path().join("launcher.exe");
-    let nested_dir = folder.path().join("bin");
-    std::fs::create_dir_all(&nested_dir).unwrap();
-    std::fs::write(&launcher, b"x").unwrap();
-    std::fs::write(nested_dir.join("nested.exe"), b"x").unwrap();
-
-    let id = insert_game(&state, "Nested Scan", launcher.to_str().unwrap(), None);
-    let (_, exes) = game_identity(&state, id).unwrap();
-    assert!(exes.iter().any(|exe| exe == "launcher.exe"));
-    assert!(exes.iter().any(|exe| exe == "nested.exe"));
-}
-
-#[test]
-fn read_reloads_driver_and_write_saves_once() {
-    // A read reloads driver settings first (so external NVIDIA App / Inspector
-    // edits are observed); a write persists exactly once after its batch.
-    let driver = FakeDriver::new(1, vec![]);
-    let (reloads, saves) = driver.counters();
-    let drs = DrsOrchestrator::new(Box::new(driver));
-
-    presets::get_global_preset_with(&drs, PresetKind::RayReconstruction).unwrap();
-    assert_eq!(reloads.load(Ordering::SeqCst), 1);
-    assert_eq!(saves.load(Ordering::SeqCst), 0);
-
-    presets::set_global_preset_with(&drs, PresetKind::RayReconstruction, 4).unwrap();
-    assert_eq!(saves.load(Ordering::SeqCst), 1);
+    let err = presets::set_game_preset_impl(&state, id, PresetKind::Dlss, 0x4).unwrap_err();
+    assert!(matches!(err, DlssError::Unsupported));
 }

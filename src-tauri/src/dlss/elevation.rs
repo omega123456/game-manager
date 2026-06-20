@@ -3,7 +3,8 @@
 //! `is_elevated` reads the current process token's elevation state.
 //! `relaunch_as_admin` re-runs the current executable with the `runas` verb
 //! (triggering UAC) and exits the current process. The relaunch path drives the
-//! real Win32 shell and never returns, so it is excluded from coverage.
+//! real Win32 shell and never returns, so it is excluded from coverage and
+//! test builds.
 
 use crate::dlss::DlssResult;
 
@@ -50,8 +51,10 @@ pub fn is_elevated() -> bool {
 /// Relaunch the current executable elevated (UAC `runas`) and exit.
 ///
 /// On success this process terminates and does not return. Excluded from
-/// coverage because it drives the real Win32 shell + a process exit.
-#[cfg(all(windows, not(coverage)))]
+/// coverage/test builds because it drives the real Win32 shell + a process
+/// exit. Integration tests run with `test-utils`; they must never relaunch the
+/// test binary, or the relaunched binary recursively runs the same tests.
+#[cfg(all(windows, not(coverage), not(feature = "test-utils")))]
 pub fn relaunch_as_admin() -> DlssResult<()> {
     use std::os::windows::ffi::OsStrExt;
 
@@ -84,8 +87,8 @@ pub fn relaunch_as_admin() -> DlssResult<()> {
     std::process::exit(0);
 }
 
-/// Non-Windows / coverage fallback: relaunch is unsupported.
-#[cfg(any(not(windows), coverage))]
+/// Non-Windows / coverage / test fallback: relaunch is unsupported.
+#[cfg(any(not(windows), coverage, feature = "test-utils"))]
 pub fn relaunch_as_admin() -> DlssResult<()> {
     Err(crate::dlss::DlssError::Unsupported)
 }

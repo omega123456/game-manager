@@ -98,11 +98,12 @@ export function GlobalIndicatorCard(): React.JSX.Element {
 
   const unsupported = indicatorQuery.isError && isUnsupportedIndicatorError(indicatorQuery.error)
   const readError = indicatorQuery.isError && !unsupported
-  const value = indicatorQuery.data
+  const indicatorMode = indicatorQuery.data
+  const selectValue = indicatorMode ?? ''
   const disabled = unsupported || readError || indicatorQuery.isLoading || setIndicator.isPending
 
   async function handleChange(next: string): Promise<void> {
-    if (value === undefined || next === value) {
+    if (indicatorMode === undefined || next === indicatorMode) {
       return
     }
 
@@ -126,7 +127,7 @@ export function GlobalIndicatorCard(): React.JSX.Element {
     }
   }
 
-  const selectedOption = INDICATOR_OPTIONS.find((option) => option.value === value)
+  const selectedOption = INDICATOR_OPTIONS.find((option) => option.value === indicatorMode)
   const helperText = indicatorQuery.isLoading
     ? 'Reading NVIDIA’s current global indicator mode…'
     : readError
@@ -163,7 +164,7 @@ export function GlobalIndicatorCard(): React.JSX.Element {
           <div className="flex items-center gap-2">
             <div className="min-w-0 flex-1">
               <Select
-                value={value}
+                value={selectValue}
                 onValueChange={(next) => void handleChange(next)}
                 disabled={disabled}
               >

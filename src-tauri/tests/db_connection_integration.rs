@@ -20,7 +20,7 @@ fn opens_file_database_and_migrates() {
             |r| r.get(0),
         )
         .unwrap();
-    assert_eq!(tables, 11);
+    assert_eq!(tables, 13);
 }
 
 #[test]

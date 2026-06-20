@@ -12,6 +12,7 @@ import {
   type CancelLaunchIntent,
 } from '@/features/launch/cancel-launch-confirm-dialog'
 import { formatElapsed, formatLoggedPlaytime, phaseLabel } from '@/features/launch/launch-format'
+import { ScriptExecutionPopover } from '@/features/launch/script-execution-popover'
 
 /**
  * The persistent launch lifecycle banner. Mounts in the fixed slot under the
@@ -58,9 +59,10 @@ export function LaunchBanner(): React.JSX.Element {
             className="border-b border-border bg-surface/80 px-6 py-3 backdrop-blur-md"
           >
             {done ? (
-              <DoneRow name={resolvedName} summary={done} />
+              <DoneRow gameId={done.gameId} name={resolvedName} summary={done} />
             ) : (
               <ActiveRow
+                gameId={gameId}
                 phase={phase as ActiveRowPhase}
                 name={resolvedName}
                 detail={detail}
@@ -81,6 +83,7 @@ export function LaunchBanner(): React.JSX.Element {
 type ActiveRowPhase = Exclude<LiveLaunchPhase, 'idle' | 'ended'>
 
 interface ActiveRowProps {
+  gameId: number | null
   phase: ActiveRowPhase
   name: string
   detail: string | null
@@ -91,6 +94,7 @@ interface ActiveRowProps {
 }
 
 function ActiveRow({
+  gameId,
   phase,
   name,
   detail,
@@ -134,6 +138,8 @@ function ActiveRow({
         </span>
       ) : null}
 
+      <ScriptExecutionTrigger gameId={gameId} gameName={name} />
+
       {failedCount > 0 ? <FailureNotice failedCount={failedCount} /> : null}
 
       {showCancel ? (
@@ -162,11 +168,12 @@ function ActiveRow({
 }
 
 interface DoneRowProps {
+  gameId: number
   name: string
   summary: { playtimeSeconds: number; cancelled: boolean }
 }
 
-function DoneRow({ name, summary }: DoneRowProps): React.JSX.Element {
+function DoneRow({ gameId, name, summary }: DoneRowProps): React.JSX.Element {
   return (
     <div className="flex flex-wrap items-center gap-x-4 gap-y-2" data-testid="launch-banner-done">
       <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-primary/30 bg-primary/10 text-primary">
@@ -184,6 +191,7 @@ function DoneRow({ name, summary }: DoneRowProps): React.JSX.Element {
           </>
         )}
       </p>
+      <ScriptExecutionTrigger gameId={gameId} gameName={name} />
     </div>
   )
 }
@@ -200,8 +208,43 @@ function FailureNotice({ failedCount }: FailureNoticeProps): React.JSX.Element {
       role="note"
     >
       <Icon name="warning" className="text-[15px] text-destructive" />
-      {failedCount} {failedCount === 1 ? 'script' : 'scripts'} failed — view details
+      {failedCount} {failedCount === 1 ? 'script' : 'scripts'} failed — open Scripts
     </span>
+  )
+}
+
+interface ScriptExecutionTriggerProps {
+  gameId: number | null
+  gameName: string
+}
+
+function ScriptExecutionTrigger({
+  gameId,
+  gameName,
+}: ScriptExecutionTriggerProps): React.JSX.Element | null {
+  if (gameId === null) {
+    return null
+  }
+
+  return (
+    <ScriptExecutionPopover
+      gameId={gameId}
+      gameName={gameName}
+      trigger={
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="h-8 rounded-full border-border/80 bg-background px-3 text-xs font-semibold text-foreground shadow-sm hover:bg-surface-high"
+          data-testid="launch-banner-scripts"
+          aria-label={`View script execution details for ${gameName}`}
+        >
+          <Icon name="terminal" className="text-[15px]" />
+          Scripts
+          <Icon name="expand_more" className="text-[15px] text-muted-foreground" />
+        </Button>
+      }
+    />
   )
 }
 

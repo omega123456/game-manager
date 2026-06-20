@@ -6,13 +6,14 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use game_manager_lib::commands::launch::run_launch_impl;
-use game_manager_lib::db::repo::{games, scripts, sessions};
+use game_manager_lib::db::repo::{games, launch_runs, scripts, sessions};
 use game_manager_lib::domain::{
-    Interpreter, LaunchPhase, LogLevel, MonitorMode, PhaseConfig, PhaseMode, ScriptKind,
+    Interpreter, LaunchPhase, LaunchRunStatus, LogLevel, MonitorMode, PhaseConfig, PhaseMode,
+    ScriptExecutionStatus, ScriptKind,
 };
 use game_manager_lib::launch::cancel::CancelToken;
 use game_manager_lib::launch::events::{
-    EventSink, LaunchLifecycle, EVENT_ENDED, EVENT_ERROR, EVENT_PHASE,
+    EventSink, LaunchLifecycle, ScriptExecutionUpdated, EVENT_ENDED, EVENT_ERROR, EVENT_PHASE,
 };
 use game_manager_lib::monitor::stub::StubMonitor;
 use game_manager_lib::monitor::Monitor;
@@ -22,11 +23,19 @@ use game_manager_lib::state::AppState;
 #[derive(Default, Clone)]
 struct Recorder {
     events: Arc<Mutex<Vec<(String, LaunchLifecycle)>>>,
+    script_events: Arc<Mutex<Vec<(String, ScriptExecutionUpdated)>>>,
 }
 
 impl EventSink for Recorder {
-    fn emit(&self, event: &str, payload: &LaunchLifecycle) {
+    fn emit_lifecycle(&self, event: &str, payload: &LaunchLifecycle) {
         self.events
+            .lock()
+            .unwrap()
+            .push((event.to_string(), payload.clone()));
+    }
+
+    fn emit_script_execution_updated(&self, event: &str, payload: &ScriptExecutionUpdated) {
+        self.script_events
             .lock()
             .unwrap()
             .push((event.to_string(), payload.clone()));
@@ -72,6 +81,56 @@ impl Recorder {
             .find(|(name, _)| name == EVENT_ENDED)
             .map(|(_, payload)| payload.failed_count)
             .unwrap_or(0)
+    }
+
+    fn script_event_count(&self) -> usize {
+        self.script_events.lock().unwrap().len()
+    }
+}
+
+#[derive(Debug, Clone)]
+struct ScriptEventSnapshot {
+    payload: ScriptExecutionUpdated,
+    run_status: LaunchRunStatus,
+    record_statuses: Vec<ScriptExecutionStatus>,
+}
+
+#[derive(Clone)]
+struct InspectingRecorder {
+    state: Arc<AppState>,
+    snapshots: Arc<Mutex<Vec<ScriptEventSnapshot>>>,
+}
+
+impl InspectingRecorder {
+    fn new(state: Arc<AppState>) -> Self {
+        Self {
+            state,
+            snapshots: Arc::new(Mutex::new(Vec::new())),
+        }
+    }
+
+    fn snapshots(&self) -> Vec<ScriptEventSnapshot> {
+        self.snapshots.lock().unwrap().clone()
+    }
+}
+
+impl EventSink for InspectingRecorder {
+    fn emit_lifecycle(&self, _event: &str, _payload: &LaunchLifecycle) {}
+
+    fn emit_script_execution_updated(&self, _event: &str, payload: &ScriptExecutionUpdated) {
+        let run = self
+            .state
+            .with_db(|conn| launch_runs::get_run(conn, payload.launch_run_id))
+            .expect("ledger write must be committed before update event");
+        self.snapshots.lock().unwrap().push(ScriptEventSnapshot {
+            payload: payload.clone(),
+            run_status: run.status,
+            record_statuses: run
+                .script_records
+                .into_iter()
+                .map(|record| record.status)
+                .collect(),
+        });
     }
 }
 
@@ -206,6 +265,30 @@ async fn runs_all_phases_emits_full_sequence_and_writes_session() {
         .filter(|l| l.message.contains("'Tri' ran"))
         .count();
     assert_eq!(ran_logs, 3, "expected one ran-log per phase");
+
+    let latest_run = state
+        .with_db(|conn| launch_runs::get_latest_run_for_game(conn, game_id))
+        .unwrap()
+        .expect("latest run");
+    assert_eq!(latest_run.status, LaunchRunStatus::Completed);
+    assert_eq!(latest_run.play_session_id, Some(sessions[0].id));
+    assert_eq!(
+        latest_run
+            .script_records
+            .iter()
+            .map(|record| record.status)
+            .collect::<Vec<_>>(),
+        vec![
+            ScriptExecutionStatus::Succeeded,
+            ScriptExecutionStatus::Succeeded,
+            ScriptExecutionStatus::Succeeded
+        ]
+    );
+    assert!(latest_run
+        .script_records
+        .iter()
+        .all(|record| record.started_at.is_some() && record.ended_at.is_some()));
+    assert!(recorder.script_event_count() >= 8);
 }
 
 #[tokio::test]
@@ -313,6 +396,24 @@ async fn failing_script_does_not_halt_pipeline() {
     assert!(logs
         .iter()
         .any(|l| l.level == LogLevel::Error && l.message.contains("'Boom' failed")));
+
+    let latest_run = state
+        .with_db(|conn| launch_runs::get_latest_run_for_game(conn, game_id))
+        .unwrap()
+        .expect("latest run");
+    assert_eq!(latest_run.status, LaunchRunStatus::Completed);
+    assert_eq!(latest_run.failure_count, 1);
+    assert_eq!(
+        latest_run
+            .script_records
+            .iter()
+            .map(|record| record.status)
+            .collect::<Vec<_>>(),
+        vec![
+            ScriptExecutionStatus::Failed,
+            ScriptExecutionStatus::Succeeded
+        ]
+    );
 }
 
 #[tokio::test]
@@ -360,6 +461,17 @@ async fn cancel_before_start_aborts_without_session() {
         .map(|(_, p)| p.clone())
         .unwrap();
     assert_eq!(ended.detail.as_deref(), Some("cancelled"));
+
+    let latest_run = state
+        .with_db(|conn| launch_runs::get_latest_run_for_game(conn, game_id))
+        .unwrap()
+        .expect("latest run");
+    assert_eq!(latest_run.status, LaunchRunStatus::Cancelled);
+    assert!(latest_run.play_session_id.is_none());
+    assert!(latest_run
+        .script_records
+        .iter()
+        .all(|record| record.status == ScriptExecutionStatus::NotReached));
 }
 
 #[tokio::test]
@@ -398,4 +510,153 @@ async fn cancel_aborts_a_pending_end_wait_quickly() {
         .unwrap();
     assert_eq!(sessions.len(), 1);
     assert!(sessions[0].ended_at.is_some());
+
+    let latest_run = state
+        .with_db(|conn| launch_runs::get_latest_run_for_game(conn, game_id))
+        .unwrap()
+        .expect("latest run");
+    assert_eq!(latest_run.status, LaunchRunStatus::Cancelled);
+}
+
+#[tokio::test]
+async fn script_completion_events_are_emitted_after_committed_ledger_updates() {
+    let state = Arc::new(state());
+    let game_id = state
+        .with_db(|conn| games::create(conn, &new_game("CommittedEvents")))
+        .unwrap();
+    let before_script = state
+        .with_db(|conn| {
+            scripts::create(
+                conn,
+                &normal(
+                    "Before One",
+                    inline("Write-Output 'before'"),
+                    none(),
+                    none(),
+                ),
+            )
+        })
+        .unwrap();
+    let after_script = state
+        .with_db(|conn| {
+            scripts::create(
+                conn,
+                &normal("After One", none(), inline("Write-Output 'after'"), none()),
+            )
+        })
+        .unwrap();
+    state
+        .with_db(|conn| games::set_scripts(conn, game_id, &[before_script, after_script]))
+        .unwrap();
+
+    let recorder = InspectingRecorder::new(state.clone());
+    let monitor: Arc<dyn Monitor> = Arc::new(StubMonitor::immediate());
+    run_launch_impl(
+        state.as_ref(),
+        game_id,
+        monitor,
+        &recorder,
+        CancelToken::new(),
+    )
+    .await
+    .unwrap();
+
+    let snapshots = recorder.snapshots();
+    assert!(snapshots
+        .iter()
+        .any(|snapshot| snapshot.payload.game_id == game_id
+            && snapshot
+                .record_statuses
+                .contains(&ScriptExecutionStatus::Running)));
+    assert!(snapshots
+        .iter()
+        .any(|snapshot| snapshot.run_status == LaunchRunStatus::Completed
+            && snapshot
+                .record_statuses
+                .iter()
+                .filter(|status| **status == ScriptExecutionStatus::Succeeded)
+                .count()
+                >= 2));
+    assert!(snapshots
+        .iter()
+        .all(|snapshot| snapshot.payload.launch_run_id > 0));
+    assert!(snapshots
+        .iter()
+        .all(|snapshot| snapshot.payload.game_id == game_id));
+    assert!(
+        snapshots.len() >= 6,
+        "expected seed, running, and completion events"
+    );
+    assert!(
+        snapshots
+            .iter()
+            .filter(|snapshot| snapshot.run_status == LaunchRunStatus::Completed)
+            .count()
+            >= 1
+    );
+}
+
+#[tokio::test]
+async fn same_script_enabled_in_multiple_phases_updates_each_ledger_row_independently() {
+    let state = state();
+    let game_id = state
+        .with_db(|conn| games::create(conn, &new_game("MultiPhaseScript")))
+        .unwrap();
+
+    let script_id = state
+        .with_db(|conn| {
+            scripts::create(
+                conn,
+                &normal(
+                    "Reuse Me",
+                    inline("Write-Output 'before-ok'"),
+                    inline("exit 7"),
+                    none(),
+                ),
+            )
+        })
+        .unwrap();
+    state
+        .with_db(|conn| games::set_scripts(conn, game_id, &[script_id]))
+        .unwrap();
+
+    let recorder = Recorder::default();
+    let monitor: Arc<dyn Monitor> = Arc::new(StubMonitor::immediate());
+    let failed = run_launch_impl(&state, game_id, monitor, &recorder, CancelToken::new())
+        .await
+        .unwrap();
+
+    assert_eq!(failed, 1);
+
+    let latest_run = state
+        .with_db(|conn| launch_runs::get_latest_run_for_game(conn, game_id))
+        .unwrap()
+        .expect("latest run");
+    assert_eq!(latest_run.status, LaunchRunStatus::Completed);
+    assert_eq!(latest_run.failure_count, 1);
+    assert_eq!(
+        latest_run.script_records.len(),
+        2,
+        "one row per enabled phase should be seeded"
+    );
+
+    let before = latest_run
+        .script_records
+        .iter()
+        .find(|record| record.phase == game_manager_lib::domain::ScriptPhase::Before)
+        .expect("before row");
+    assert_eq!(before.script_id, Some(script_id));
+    assert_eq!(before.status, ScriptExecutionStatus::Succeeded);
+    assert!(before.started_at.is_some());
+    assert!(before.ended_at.is_some());
+
+    let after = latest_run
+        .script_records
+        .iter()
+        .find(|record| record.phase == game_manager_lib::domain::ScriptPhase::After)
+        .expect("after row");
+    assert_eq!(after.script_id, Some(script_id));
+    assert_eq!(after.status, ScriptExecutionStatus::Failed);
+    assert!(after.started_at.is_some());
+    assert!(after.ended_at.is_some());
 }

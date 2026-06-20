@@ -1,9 +1,9 @@
 import { useEffect } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 
-import { LAUNCH_EVENTS, onLaunchEvent } from '@/lib/ipc/launch-commands'
+import { LAUNCH_EVENTS, onLaunchEvent, onScriptExecutionUpdated } from '@/lib/ipc/launch-commands'
 import { logFrontend } from '@/lib/app-log-commands'
-import { gameDetailQueryKey } from '@/lib/queries/use-games'
+import { gameDetailQueryKey, latestLaunchRunQueryKey } from '@/lib/queries/use-games'
 import { GAMES_QUERY_KEY, PLAY_NOW_QUERY_KEY } from '@/lib/queries/query-keys'
 import { useGameRunningUi } from '@/features/launch/use-game-running-ui'
 import { isTickingPhase, useLaunchStore } from '@/stores/launch-store'
@@ -57,6 +57,9 @@ export function useLaunchEvents(): void {
       onLaunchEvent(LAUNCH_EVENTS.phase, handle),
       onLaunchEvent(LAUNCH_EVENTS.error, handle),
       onLaunchEvent(LAUNCH_EVENTS.ended, handle),
+      onScriptExecutionUpdated((payload) => {
+        void queryClient.invalidateQueries({ queryKey: latestLaunchRunQueryKey(payload.gameId) })
+      }),
     ])
       .then((fns) => {
         if (cancelled) {

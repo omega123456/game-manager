@@ -406,9 +406,12 @@ pub fn dlss_set_global_indicator(mode: DlssIndicatorMode) -> AppResult<()> {
 }
 
 /// Read the global (base profile) preset value (Phase 3 logic).
+///
+/// `async` so the NVAPI session work (which previously ran on the main/UI thread
+/// and froze the window) is dispatched to the async runtime instead.
 #[cfg(not(coverage))]
 #[tauri::command]
-pub fn dlss_get_global_preset(
+pub async fn dlss_get_global_preset(
     state: tauri::State<'_, AppState>,
     preset_kind: PresetKind,
 ) -> AppResult<u32> {
@@ -418,7 +421,7 @@ pub fn dlss_get_global_preset(
 /// Write the global (base profile) preset value (Phase 3 logic).
 #[cfg(not(coverage))]
 #[tauri::command]
-pub fn dlss_set_global_preset(
+pub async fn dlss_set_global_preset(
     state: tauri::State<'_, AppState>,
     preset_kind: PresetKind,
     value: u32,
@@ -431,9 +434,12 @@ pub fn dlss_set_global_preset(
 }
 
 /// Read the per-game preset state (Phase 3 logic).
+///
+/// `async` so the NVAPI session work (which previously ran on the main/UI thread
+/// and froze the window) is dispatched to the async runtime instead.
 #[cfg(not(coverage))]
 #[tauri::command]
-pub fn dlss_get_game_preset(
+pub async fn dlss_get_game_preset(
     state: tauri::State<'_, AppState>,
     game_id: i64,
     preset_kind: PresetKind,
@@ -448,7 +454,7 @@ pub fn dlss_get_game_preset(
 /// Write the per-game preset value (Phase 3 logic).
 #[cfg(not(coverage))]
 #[tauri::command]
-pub fn dlss_set_game_preset(
+pub async fn dlss_set_game_preset(
     state: tauri::State<'_, AppState>,
     game_id: i64,
     preset_kind: PresetKind,

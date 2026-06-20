@@ -230,6 +230,33 @@ for (const theme of THEMES) {
     await expect(page).toHaveScreenshot(`launch-banner-done-${theme}.png`)
   })
 
+  test(`launch banner scripts popover — ${theme}`, async ({ page }) => {
+    await gotoAppState(page, '#/library?launchRunFixture=active')
+    await setTheme(page, theme)
+    await driveLaunch(page, {
+      gameId: 1,
+      phase: 'playing',
+      failedCount: 1,
+      elapsedSeconds: 95,
+    })
+    await page.getByTestId('launch-banner-scripts').click()
+    await page.getByText('Execution pipeline').waitFor({ state: 'visible' })
+    await scrollRouteOutletToTop(page)
+    await expect(page).toHaveScreenshot(`launch-banner-scripts-popover-${theme}.png`)
+  })
+
+  test(`currently playing hero scripts popover — ${theme}`, async ({ page }) => {
+    await gotoAppState(page, '#/library?launchRunFixture=failed')
+    await setTheme(page, theme)
+    await page.getByTestId('currently-playing-hero').waitFor({ state: 'visible' })
+    await page.getByTestId('hero-scripts').waitFor({ state: 'visible' })
+    await page.getByTestId('hero-scripts').click()
+    await page.getByText('Execution pipeline').waitFor({ state: 'visible' })
+    await waitForLibraryGridImagesSettled(page)
+    await scrollRouteOutletToTop(page)
+    await expect(page).toHaveScreenshot(`currently-playing-hero-scripts-popover-${theme}.png`)
+  })
+
   test(`group manager detail — ${theme}`, async ({ page }) => {
     await gotoApp(page)
     await setTheme(page, theme)

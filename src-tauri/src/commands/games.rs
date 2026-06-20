@@ -8,8 +8,8 @@
 
 use serde::Deserialize;
 
-use crate::db::repo::{games, scripts};
-use crate::domain::{Game, MonitorMode, ResolvedScript, ScriptKind};
+use crate::db::repo::{games, launch_runs, scripts};
+use crate::domain::{Game, LaunchRun, MonitorMode, ResolvedScript, ScriptKind};
 use crate::error::{AppError, AppResult};
 use crate::launch::resolver;
 use crate::state::AppState;
@@ -164,6 +164,11 @@ pub fn get_resolved_scripts_impl(state: &AppState, game_id: i64) -> AppResult<Ve
     state.with_db(|conn| resolver::resolve_for_game(conn, game_id))
 }
 
+/// Read the latest retained launch execution pipeline for a game, if any.
+pub fn get_latest_launch_run_impl(state: &AppState, game_id: i64) -> AppResult<Option<LaunchRun>> {
+    state.with_db(|conn| launch_runs::get_latest_run_for_game(conn, game_id))
+}
+
 /// Thin `#[tauri::command]` wrapper delegating to [`list_games_impl`].
 #[cfg(not(coverage))]
 #[tauri::command]
@@ -253,4 +258,14 @@ pub fn get_resolved_scripts(
     game_id: i64,
 ) -> AppResult<Vec<ResolvedScript>> {
     get_resolved_scripts_impl(&state, game_id)
+}
+
+/// Thin `#[tauri::command]` wrapper delegating to [`get_latest_launch_run_impl`].
+#[cfg(not(coverage))]
+#[tauri::command]
+pub fn get_latest_launch_run(
+    state: tauri::State<'_, AppState>,
+    game_id: i64,
+) -> AppResult<Option<LaunchRun>> {
+    get_latest_launch_run_impl(&state, game_id)
 }

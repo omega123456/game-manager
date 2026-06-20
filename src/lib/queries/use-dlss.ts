@@ -100,7 +100,9 @@ export function useDlssGlobalPresetQuery(kind: PresetKind, enabled: boolean) {
     queryFn: () => getDlssGlobalPreset(kind),
     enabled,
     staleTime: 0,
+    gcTime: 0,
     refetchOnMount: 'always',
+    refetchOnWindowFocus: true,
   })
 }
 
@@ -121,7 +123,9 @@ export function useDlssGamePresetQuery(gameId: number | null, kind: PresetKind, 
     queryFn: () => getDlssGamePreset(gameId as number, kind),
     enabled: enabled && gameId !== null,
     staleTime: 0,
+    gcTime: 0,
     refetchOnMount: 'always',
+    refetchOnWindowFocus: true,
   })
 }
 

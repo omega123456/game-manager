@@ -1,7 +1,13 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { cancelLaunch, launchGame, LAUNCH_EVENTS, onLaunchEvent } from '@/lib/ipc/launch-commands'
-import type { LaunchLifecycle } from '@/types/domain'
+import {
+  cancelLaunch,
+  launchGame,
+  LAUNCH_EVENTS,
+  onLaunchEvent,
+  onScriptExecutionUpdated,
+} from '@/lib/ipc/launch-commands'
+import type { LaunchLifecycle, ScriptExecutionUpdated } from '@/types/domain'
 
 import { ipc } from '../../ipc-mock'
 
@@ -26,6 +32,7 @@ describe('launch-commands', () => {
       phase: 'launch://phase',
       error: 'launch://error',
       ended: 'launch://ended',
+      scriptExecutionUpdated: 'launch://script-execution-updated',
     })
   })
 
@@ -83,6 +90,21 @@ describe('launch-commands', () => {
       await expect(unlisten()).resolves.toBeUndefined()
       handler.mockClear()
       expect(handler).not.toHaveBeenCalled()
+    })
+
+    it('delivers script-execution update payloads to the dedicated handler', async () => {
+      const handler = vi.fn<(payload: ScriptExecutionUpdated) => void>()
+      const unlisten = await onScriptExecutionUpdated(handler)
+      unlisteners.push(unlisten)
+
+      const payload: ScriptExecutionUpdated = {
+        gameId: 7,
+        launchRunId: 41,
+      }
+      await ipc.emit(LAUNCH_EVENTS.scriptExecutionUpdated, payload)
+
+      expect(handler).toHaveBeenCalledTimes(1)
+      expect(handler).toHaveBeenCalledWith(payload)
     })
   })
 })

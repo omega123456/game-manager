@@ -189,28 +189,126 @@ pub enum LaunchPhase {
     Ended,
 }
 
+/// Durable lifecycle status of a persisted launch run.
+///
+/// `strum_macros::Display`/`EnumString` provide the snake_case **DB-string**
+/// conversion (`.to_string()` / `.parse()`), kept entirely separate from the
+/// serde/IPC path (which uses `#[serde(rename_all = "camelCase")]`).
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    Serialize,
+    Deserialize,
+    strum_macros::Display,
+    strum_macros::EnumString,
+)]
+#[serde(rename_all = "camelCase")]
+pub enum LaunchRunStatus {
+    /// The run is still active.
+    #[strum(serialize = "active")]
+    Active,
+    /// The run finished normally.
+    #[strum(serialize = "completed")]
+    Completed,
+    /// The run was cancelled by the user.
+    #[strum(serialize = "cancelled")]
+    Cancelled,
+    /// The run ended abnormally before normal finalization.
+    #[strum(serialize = "incomplete")]
+    Incomplete,
+}
+
 /// One of the three executable script phases used by the resolver/executor.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+///
+/// `strum` provides the snake_case DB-string conversion; serde/IPC stays
+/// camelCase (`on_exit` for the DB vs `onExit` over IPC).
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    Hash,
+    Serialize,
+    Deserialize,
+    strum_macros::Display,
+    strum_macros::EnumString,
+)]
 #[serde(rename_all = "camelCase")]
 pub enum ScriptPhase {
     /// Run before launching the game.
+    #[strum(serialize = "before")]
     Before,
     /// Run after the target process has been detected.
+    #[strum(serialize = "after")]
     After,
     /// Run after the game exits.
+    #[strum(serialize = "on_exit")]
     OnExit,
 }
 
 /// Provenance of a resolved script entry.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+///
+/// `strum` provides the snake_case DB-string conversion; serde/IPC is unchanged.
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    Serialize,
+    Deserialize,
+    strum_macros::Display,
+    strum_macros::EnumString,
+)]
 #[serde(rename_all = "camelCase")]
 pub enum Provenance {
     /// A global script (runs for every game).
+    #[strum(serialize = "global")]
     Global,
     /// Inherited via a group.
+    #[strum(serialize = "group")]
     Group,
     /// Directly assigned to the game.
+    #[strum(serialize = "direct")]
     Direct,
+}
+
+/// Status of one persisted script-execution row in a launch run.
+///
+/// `strum` provides the snake_case DB-string conversion (`not_reached`); serde/IPC
+/// stays camelCase (`notReached`).
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    Serialize,
+    Deserialize,
+    strum_macros::Display,
+    strum_macros::EnumString,
+)]
+#[serde(rename_all = "camelCase")]
+pub enum ScriptExecutionStatus {
+    /// The script is queued but has not started.
+    #[strum(serialize = "pending")]
+    Pending,
+    /// The script is currently running.
+    #[strum(serialize = "running")]
+    Running,
+    /// The script completed successfully.
+    #[strum(serialize = "succeeded")]
+    Succeeded,
+    /// The script completed with a failure.
+    #[strum(serialize = "failed")]
+    Failed,
+    /// The script could not be reached because the run ended early.
+    #[strum(serialize = "not_reached")]
+    NotReached,
 }
 
 /// Provider/source for art candidates and metadata suggestions.
@@ -383,6 +481,69 @@ pub struct ResolvedScript {
     pub order: i64,
     /// Names of required utilities sourced into this entry.
     pub required_utility_names: Vec<String>,
+}
+
+/// One persisted script row within a durable launch run.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LaunchScriptRecord {
+    /// Primary key.
+    pub id: i64,
+    /// Parent launch run id.
+    pub launch_run_id: i64,
+    /// Underlying script id when the script still exists.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub script_id: Option<i64>,
+    /// Snapshotted display name.
+    pub name: String,
+    /// The phase this entry belongs to.
+    pub phase: ScriptPhase,
+    /// Provenance of the resolved entry.
+    pub provenance: Provenance,
+    /// Group name when provenance is `Group`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub group_name: Option<String>,
+    /// 1-based order within the phase.
+    pub order: i64,
+    /// Effective priority at resolve time.
+    pub priority: i64,
+    /// Snapshotted required utility names.
+    pub required_utility_names: Vec<String>,
+    /// Current/final execution status.
+    pub status: ScriptExecutionStatus,
+    /// Start timestamp (RFC 3339), if started.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub started_at: Option<String>,
+    /// End timestamp (RFC 3339), if completed.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ended_at: Option<String>,
+    /// Optional status details.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub details: Option<String>,
+}
+
+/// The latest retained durable launch run for one game.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LaunchRun {
+    /// Primary key.
+    pub id: i64,
+    /// The game this run belongs to.
+    pub game_id: i64,
+    /// Linked play session id once process detection succeeds.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub play_session_id: Option<i64>,
+    /// Current/final lifecycle status.
+    pub status: LaunchRunStatus,
+    /// Run start timestamp (RFC 3339).
+    pub started_at: String,
+    /// Run end timestamp (RFC 3339), if finalized.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ended_at: Option<String>,
+    /// Number of failed script rows in the run.
+    pub failure_count: i64,
+    /// Snapshotted script execution rows in display order.
+    pub script_records: Vec<LaunchScriptRecord>,
 }
 
 /// A selectable cover-art candidate for the Add Game flow.

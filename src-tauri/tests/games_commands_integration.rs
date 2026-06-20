@@ -1,11 +1,15 @@
 //! Games command (`*_impl`) integration tests against an in-memory DB.
 
 use game_manager_lib::commands::games::{
-    create_game_impl, delete_game_impl, get_game_impl, get_play_now_game_impl, list_games_impl,
-    set_game_groups_impl, set_game_scripts_impl, update_game_impl, GameUpsertInput,
+    create_game_impl, delete_game_impl, get_game_impl, get_latest_launch_run_impl,
+    get_play_now_game_impl, list_games_impl, set_game_groups_impl, set_game_scripts_impl,
+    update_game_impl, GameUpsertInput,
 };
-use game_manager_lib::db::repo::{games, groups, scripts, sessions};
-use game_manager_lib::domain::{Interpreter, MonitorMode, PhaseConfig, PhaseMode, ScriptKind};
+use game_manager_lib::db::repo::{games, groups, launch_runs, scripts, sessions};
+use game_manager_lib::domain::{
+    Interpreter, LaunchRunStatus, MonitorMode, PhaseConfig, PhaseMode, Provenance,
+    ScriptExecutionStatus, ScriptKind, ScriptPhase,
+};
 use game_manager_lib::state::AppState;
 
 fn state() -> AppState {
@@ -56,6 +60,23 @@ fn utility_script(name: &str) -> scripts::NewScript {
             inline: Some("function Helper {}".to_string()),
             interpreter: Some(Interpreter::Powershell),
         },
+    }
+}
+
+fn resolved_script(
+    script_id: i64,
+    name: &str,
+    phase: ScriptPhase,
+) -> game_manager_lib::domain::ResolvedScript {
+    game_manager_lib::domain::ResolvedScript {
+        script_id,
+        name: name.to_string(),
+        priority: 5,
+        phase,
+        provenance: Provenance::Direct,
+        group_name: None,
+        order: 1,
+        required_utility_names: Vec::new(),
     }
 }
 
@@ -299,4 +320,60 @@ fn get_play_now_game_skips_orphaned_play_session_rows() {
 fn get_play_now_game_returns_none_without_history() {
     let state = state();
     assert!(get_play_now_game_impl(&state).unwrap().is_none());
+}
+
+#[test]
+fn get_latest_launch_run_returns_none_without_retained_run() {
+    let state = state();
+    let game = create_game_impl(&state, game_input("No Launch Yet")).unwrap();
+    assert!(get_latest_launch_run_impl(&state, game.id)
+        .unwrap()
+        .is_none());
+}
+
+#[test]
+fn get_latest_launch_run_returns_latest_retained_pipeline_for_game() {
+    let state = state();
+    let game = create_game_impl(&state, game_input("With Run")).unwrap();
+    let script_id = state
+        .with_db(|conn| scripts::create(conn, &normal_script("HDR Setup")))
+        .unwrap();
+
+    state
+        .with_db(|conn| {
+            let run = launch_runs::create_run(conn, game.id)?;
+            let records = launch_runs::seed_script_records(
+                conn,
+                run.id,
+                &[resolved_script(script_id, "HDR Setup", ScriptPhase::Before)],
+            )?;
+            launch_runs::update_script_record_status(
+                conn,
+                records[0].id,
+                ScriptExecutionStatus::Succeeded,
+                Some("2026-06-19T09:00:00Z"),
+                Some("2026-06-19T09:00:01Z"),
+                None,
+            )?;
+            launch_runs::set_run_status(
+                conn,
+                run.id,
+                LaunchRunStatus::Completed,
+                0,
+                Some("2026-06-19T09:05:00Z"),
+            )?;
+            Ok(())
+        })
+        .unwrap();
+
+    let latest = get_latest_launch_run_impl(&state, game.id)
+        .unwrap()
+        .expect("latest run");
+    assert_eq!(latest.game_id, game.id);
+    assert_eq!(latest.status, LaunchRunStatus::Completed);
+    assert_eq!(latest.script_records.len(), 1);
+    assert_eq!(
+        latest.script_records[0].status,
+        ScriptExecutionStatus::Succeeded
+    );
 }

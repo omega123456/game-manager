@@ -4,6 +4,7 @@ import {
   createGame,
   deleteGame,
   getGame,
+  getLatestLaunchRun,
   getPlayNowGame,
   getResolvedScripts,
   listGames,
@@ -18,8 +19,17 @@ import {
   GAMES_QUERY_KEY,
   GROUPS_QUERY_KEY,
   PLAY_NOW_QUERY_KEY,
+  SCRIPT_EXECUTION_QUERY_KEY,
 } from '@/lib/queries/query-keys'
+import { useLaunchStore } from '@/stores/launch-store'
 import type { Game } from '@/types/domain'
+
+/**
+ * Sentinel game id baked into query keys while a real id is unavailable. Paired
+ * with `enabled: typeof gameId === 'number'`, the query never runs with it — it
+ * only keeps the key shape stable so React Query doesn't churn cache entries.
+ */
+const DISABLED_GAME_ID = -1
 
 export function gameDetailQueryKey(id: number) {
   return [...GAMES_QUERY_KEY, id] as const
@@ -27,6 +37,10 @@ export function gameDetailQueryKey(id: number) {
 
 export function resolvedScriptsQueryKey(gameId: number) {
   return [...gameDetailQueryKey(gameId), 'resolved-scripts'] as const
+}
+
+export function latestLaunchRunQueryKey(gameId: number) {
+  return [...SCRIPT_EXECUTION_QUERY_KEY, 'latest-run', gameId] as const
 }
 
 /** Load the full game library. */
@@ -40,7 +54,7 @@ export function useGamesQuery() {
 /** Load a single game when an id is available. */
 export function useGameQuery(id: number | null | undefined) {
   return useQuery({
-    queryKey: gameDetailQueryKey(id ?? -1),
+    queryKey: gameDetailQueryKey(id ?? DISABLED_GAME_ID),
     queryFn: () => getGame(id as number),
     enabled: typeof id === 'number',
   })
@@ -57,10 +71,35 @@ export function usePlayNowGameQuery() {
 /** Load the resolved execution entries for a game when an id is available. */
 export function useResolvedScriptsQuery(gameId: number | null | undefined) {
   return useQuery({
-    queryKey: resolvedScriptsQueryKey(gameId ?? -1),
+    queryKey: resolvedScriptsQueryKey(gameId ?? DISABLED_GAME_ID),
     queryFn: () => getResolvedScripts(gameId as number),
     enabled: typeof gameId === 'number',
   })
+}
+
+/** Load the latest retained launch run for a game when an id is available. */
+export function useLatestLaunchRunQuery(gameId: number | null | undefined) {
+  const activeLaunchGameId = useLaunchStore((state) =>
+    state.phase === 'idle' ? null : state.gameId
+  )
+
+  const query = useQuery({
+    queryKey: latestLaunchRunQueryKey(gameId ?? DISABLED_GAME_ID),
+    queryFn: () => getLatestLaunchRun(gameId as number),
+    enabled: typeof gameId === 'number',
+  })
+
+  const isFreshLaunchForGame =
+    typeof gameId === 'number' && activeLaunchGameId === gameId && query.data?.status !== 'active'
+
+  if (isFreshLaunchForGame) {
+    return {
+      ...query,
+      data: null,
+    }
+  }
+
+  return query
 }
 
 function invalidateGames(queryClient: ReturnType<typeof useQueryClient>, gameId?: number) {
@@ -74,6 +113,7 @@ function invalidateGames(queryClient: ReturnType<typeof useQueryClient>, gameId?
   if (typeof gameId === 'number') {
     void queryClient.invalidateQueries({ queryKey: gameDetailQueryKey(gameId) })
     void queryClient.invalidateQueries({ queryKey: resolvedScriptsQueryKey(gameId) })
+    void queryClient.invalidateQueries({ queryKey: latestLaunchRunQueryKey(gameId) })
   }
 }
 

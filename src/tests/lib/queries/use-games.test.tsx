@@ -1,15 +1,17 @@
 import type { ReactNode } from 'react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { renderHook, waitFor } from '@testing-library/react'
-import { describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it } from 'vitest'
 
 import {
   gameDetailQueryKey,
+  latestLaunchRunQueryKey,
   resolvedScriptsQueryKey,
   useCreateGameMutation,
   useDeleteGameMutation,
   useGameQuery,
   useGamesQuery,
+  useLatestLaunchRunQuery,
   usePlayNowGameQuery,
   useResolvedScriptsQuery,
   useSetGameGroupsMutation,
@@ -18,6 +20,7 @@ import {
 } from '@/lib/queries/use-games'
 import { useGroupsQuery } from '@/lib/queries/use-groups'
 import { GAMES_QUERY_KEY, GROUPS_QUERY_KEY, PLAY_NOW_QUERY_KEY } from '@/lib/queries/query-keys'
+import { useLaunchStore } from '@/stores/launch-store'
 import { ipc } from '../../ipc-mock'
 
 const GAME_ROW = {
@@ -53,6 +56,10 @@ function createWrapper() {
   }
 }
 
+beforeEach(() => {
+  useLaunchStore.getState().reset()
+})
+
 describe('useGamesQuery', () => {
   it('loads the game library', async () => {
     ipc.override('list_games', () => [GAME_ROW])
@@ -82,6 +89,84 @@ describe('useResolvedScriptsQuery', () => {
     const { result } = renderHook(() => useResolvedScriptsQuery(3), { wrapper: wrapper() })
     await waitFor(() => expect(result.current.isSuccess).toBe(true))
     expect(result.current.data).toEqual([{ scriptId: 3, name: 'HDR', phase: 'before' }])
+  })
+})
+
+describe('useLatestLaunchRunQuery', () => {
+  it('loads the latest launch run when an id is provided', async () => {
+    ipc.override('get_latest_launch_run', () => ({
+      id: 22,
+      gameId: 3,
+      playSessionId: 5,
+      status: 'active',
+      startedAt: '2026-06-19T10:00:00Z',
+      failureCount: 0,
+      scriptRecords: [
+        {
+          id: 1,
+          launchRunId: 22,
+          scriptId: 11,
+          name: 'HDR Toggle',
+          phase: 'before',
+          provenance: 'global',
+          order: 1,
+          priority: 8,
+          requiredUtilityNames: ['SaveLib'],
+          status: 'running',
+          startedAt: '2026-06-19T10:00:02Z',
+        },
+      ],
+    }))
+    const { result } = renderHook(() => useLatestLaunchRunQuery(3), { wrapper: wrapper() })
+    await waitFor(() => expect(result.current.isSuccess).toBe(true))
+    expect(result.current.data).toEqual({
+      id: 22,
+      gameId: 3,
+      playSessionId: 5,
+      status: 'active',
+      startedAt: '2026-06-19T10:00:00Z',
+      failureCount: 0,
+      scriptRecords: [
+        {
+          id: 1,
+          launchRunId: 22,
+          scriptId: 11,
+          name: 'HDR Toggle',
+          phase: 'before',
+          provenance: 'global',
+          order: 1,
+          priority: 8,
+          requiredUtilityNames: ['SaveLib'],
+          status: 'running',
+          startedAt: '2026-06-19T10:00:02Z',
+        },
+      ],
+    })
+    expect(ipc.calls('get_latest_launch_run')).toEqual([{ gameId: 3 }])
+  })
+
+  it('stays idle without an id', () => {
+    const { result } = renderHook(() => useLatestLaunchRunQuery(undefined), { wrapper: wrapper() })
+    expect(result.current.fetchStatus).toBe('idle')
+    expect(result.current.data).toBeUndefined()
+  })
+
+  it('hides a previous retained run while a fresh launch for the same game is active', async () => {
+    ipc.override('get_latest_launch_run', () => ({
+      id: 9,
+      gameId: 3,
+      status: 'completed',
+      startedAt: '2026-06-19T10:00:00Z',
+      endedAt: '2026-06-19T10:05:00Z',
+      failureCount: 0,
+      scriptRecords: [],
+    }))
+    useLaunchStore.getState().startPreparing(3, 'Alan Wake 2')
+
+    const { result } = renderHook(() => useLatestLaunchRunQuery(3), { wrapper: wrapper() })
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true))
+    expect(result.current.data).toBeNull()
   })
 })
 
@@ -187,6 +272,7 @@ describe('game mutations', () => {
     client.setQueryData(GAMES_QUERY_KEY, [GAME_ROW])
     client.setQueryData(gameDetailQueryKey(1), GAME_ROW)
     client.setQueryData(resolvedScriptsQueryKey(1), [])
+    client.setQueryData(latestLaunchRunQueryKey(1), null)
 
     const mutation = renderHook(() => useSetGameScriptsMutation(), { wrapper: Wrapper })
     await mutation.result.current.mutateAsync({ gameId: 1, scriptIds: [8] })
@@ -194,6 +280,7 @@ describe('game mutations', () => {
     expect(client.getQueryData(GAMES_QUERY_KEY)).toEqual([{ ...GAME_ROW, scriptIds: [8] }])
     expect(client.getQueryData(gameDetailQueryKey(1))).toEqual({ ...GAME_ROW, scriptIds: [8] })
     expect(client.getQueryState(resolvedScriptsQueryKey(1))?.isInvalidated).toBe(true)
+    expect(client.getQueryState(latestLaunchRunQueryKey(1))?.isInvalidated).toBe(true)
   })
 
   it('invalidates the play-now cache on game delete', async () => {

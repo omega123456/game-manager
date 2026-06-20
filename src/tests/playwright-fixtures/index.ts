@@ -15,6 +15,7 @@ import { artFixtures } from './art'
 import { dialogFixtures } from './dialog'
 import { groupsFixtures } from './groups'
 import { launchFixtures } from './launch'
+import { launchRunFixtures } from './launch-runs'
 import { logsFixtures } from './logs'
 import { dlssFixtures } from './dlss'
 
@@ -33,6 +34,7 @@ export const FIXTURE_REGISTRY: Record<string, PlaywrightFixtureHandler> = {
   ...groupsFixtures,
   ...scriptsFixtures,
   ...launchFixtures,
+  ...launchRunFixtures,
   ...dlssFixtures,
   // Settings domain (reads/writes) — registered from settings.ts.
   ...settingsFixtures,

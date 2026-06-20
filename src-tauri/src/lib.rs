@@ -22,6 +22,28 @@ use std::path::{Path, PathBuf};
 #[cfg(not(coverage))]
 use state::AppState;
 
+#[cfg(not(coverage))]
+fn run_maintenance(conn: &rusqlite::Connection, phase: &str) {
+    if let Err(err) = logging::run_retention(conn) {
+        tracing::warn!(category = "logging", "{phase} retention failed: {err}");
+    }
+    match db::repo::launch_runs::cleanup_old_runs(conn) {
+        Ok(removed) if removed > 0 => {
+            tracing::info!(
+                category = "launch",
+                "{phase} cleanup pruned {removed} stale launch run(s)"
+            );
+        }
+        Ok(_) => {}
+        Err(err) => {
+            tracing::warn!(
+                category = "launch",
+                "{phase} launch-run cleanup failed: {err}"
+            );
+        }
+    }
+}
+
 /// Directory for SQLite, cached art, and other app data.
 ///
 /// In debug builds (`pnpm tauri dev`, `cargo build`), uses a sibling folder with
@@ -138,10 +160,7 @@ pub fn run() {
                 }
             };
 
-            // Prune expired logs on startup.
-            if let Err(err) = logging::run_retention(&conn) {
-                tracing::warn!(category = "logging", "startup retention failed: {err}");
-            }
+            run_maintenance(&conn, "startup");
 
             app.manage(AppState::new_with_app_data_dir(conn, app_data_dir.clone()));
 
@@ -157,9 +176,7 @@ pub fn run() {
                 std::thread::sleep(std::time::Duration::from_secs(24 * 60 * 60));
                 match db::connection::open(&db_path) {
                     Ok(conn) => {
-                        if let Err(err) = logging::run_retention(&conn) {
-                            tracing::warn!(category = "logging", "daily retention failed: {err}");
-                        }
+                        run_maintenance(&conn, "daily");
                     }
                     Err(err) => {
                         tracing::warn!(category = "logging", "daily retention open failed: {err}");
@@ -181,6 +198,7 @@ pub fn run() {
             commands::games::set_game_groups,
             commands::games::set_game_scripts,
             commands::games::get_resolved_scripts,
+            commands::games::get_latest_launch_run,
             commands::groups::list_groups,
             commands::groups::get_group,
             commands::groups::create_group,
