@@ -9,6 +9,7 @@ import {
   getDlssCatalog,
   getDlssGlobalIndicator,
   getDlssGamePreset,
+  getDlssScanStatus,
   getDlssGameState,
   getDlssGlobalPreset,
   getDlssPresetOptions,
@@ -17,6 +18,7 @@ import {
   onDlssApplyProgress,
   onDlssDownloadProgress,
   onDlssLibraryScanned,
+  onDlssScanProgress,
   saveDlssGame,
   scanDlssGame,
   scanDlssLibrary,
@@ -34,19 +36,33 @@ import {
   DLSS_GLOBAL_INDICATOR_QUERY_KEY,
   DLSS_GLOBAL_PRESET_QUERY_KEY,
   DLSS_PRESET_OPTIONS_QUERY_KEY,
+  DLSS_SCAN_STATUS_QUERY_KEY,
   DLSS_STATES_QUERY_KEY,
   DLSS_SUPPORT_QUERY_KEY,
   GAMES_QUERY_KEY,
 } from '@/lib/queries/query-keys'
+import { useToastStore } from '@/stores/toast-store'
 import type {
   ApplyResult,
   BatchApplyResult,
   DlssIndicatorMode,
   DllType,
+  DlssScanProgress,
   DownloadProgress,
+  GameDlssState,
   PresetKind,
   SaveGameDlss,
 } from '@/types/dlss'
+
+declare global {
+  interface Window {
+    /**
+     * Deterministic test hook (only installed under `VITE_PLAYWRIGHT`): drives a
+     * single library-scan-progress payload so E2E can screenshot the toast.
+     */
+    __gmDlssScan__?: (payload: DlssScanProgress) => void
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Queries
@@ -57,6 +73,14 @@ export function useDlssSupportQuery() {
   return useQuery({
     queryKey: DLSS_SUPPORT_QUERY_KEY,
     queryFn: getDlssSupport,
+  })
+}
+
+/** Whether the full-library DLSS scan is currently running. */
+export function useDlssScanStatusQuery() {
+  return useQuery({
+    queryKey: DLSS_SCAN_STATUS_QUERY_KEY,
+    queryFn: getDlssScanStatus,
   })
 }
 
@@ -153,43 +177,113 @@ export function useInvalidateDlss() {
   }
 }
 
+/** Upsert a single game's freshly scanned state into the cached states list. */
+function upsertGameState(prev: GameDlssState[] | undefined, next: GameDlssState): GameDlssState[] {
+  const list = prev ? prev.slice() : []
+  const index = list.findIndex((state) => state.gameId === next.gameId)
+  if (index >= 0) {
+    list[index] = next
+  } else {
+    list.push(next)
+  }
+  return list
+}
+
 /**
- * Subscribe (once) to the backend's startup library-scan-complete event and
- * refresh the DLSS state + games queries when it fires, so library pills appear
- * as soon as the session detection cache is populated (no restart needed).
+ * Subscribe (once) to the backend's startup library-scan events.
+ *
+ * Two channels drive the library DLSS pills:
+ * - `dlss://scan-progress` fires once per game as it is scanned. Each event
+ *   upserts that game's state directly into the cached states list (so pills
+ *   appear gradually, not all at once) and drives a non-blocking progress toast
+ *   showing `scanned/total`.
+ * - `dlss://library-scanned` fires once the scan finishes; it dismisses the
+ *   toast and invalidates the DLSS + games queries so the cache reconciles with
+ *   the authoritative backend snapshot (no restart needed).
  */
 export function useDlssLibraryScanSync(): void {
   const queryClient = useQueryClient()
+  const pushToast = useToastStore((state) => state.push)
+  const updateToast = useToastStore((state) => state.update)
+  const dismissToast = useToastStore((state) => state.dismiss)
 
   useEffect(() => {
-    let unlisten: (() => void) | undefined
+    const unlisteners: Array<() => void> = []
     let cancelled = false
+    // Id of the active scan-progress toast, or null when none is showing.
+    let toastId: number | null = null
 
-    void onDlssLibraryScanned(() => {
-      void queryClient.invalidateQueries({ queryKey: DLSS_STATES_QUERY_KEY })
-      void queryClient.invalidateQueries({ queryKey: DLSS_GAME_STATE_QUERY_KEY })
-      void queryClient.invalidateQueries({ queryKey: DLSS_APPLICABLE_QUERY_KEY })
-      void queryClient.invalidateQueries({ queryKey: GAMES_QUERY_KEY })
-    })
-      .then((fn) => {
-        if (cancelled) {
-          fn()
-          return
-        }
-        unlisten = fn
-      })
-      .catch((error: unknown) => {
-        logFrontend('warn', 'Failed to subscribe to DLSS library-scan events.', {
-          category: 'dlss.events',
-          details: error instanceof Error ? error.message : String(error),
+    const register = (pending: Promise<() => void>): void => {
+      pending
+        .then((fn) => {
+          if (cancelled) {
+            fn()
+            return
+          }
+          unlisteners.push(fn)
         })
+        .catch((error: unknown) => {
+          logFrontend('warn', 'Failed to subscribe to DLSS library-scan events.', {
+            category: 'dlss.events',
+            details: error instanceof Error ? error.message : String(error),
+          })
+        })
+    }
+
+    const handleScanProgress = ({ scanned, total, state }: DlssScanProgress): void => {
+      // Render this game's pills immediately by patching the cached list.
+      queryClient.setQueryData<GameDlssState[]>(DLSS_STATES_QUERY_KEY, (prev) =>
+        upsertGameState(prev, state)
+      )
+      // Surface / advance the non-blocking progress toast.
+      if (toastId === null) {
+        toastId = pushToast({
+          tone: 'info',
+          title: 'Scanning DLSS…',
+          description: 'Detecting installed DLSS versions across your library.',
+          persistent: true,
+          progress: { current: scanned, total },
+        })
+      } else {
+        updateToast(toastId, { progress: { current: scanned, total } })
+      }
+    }
+
+    register(onDlssScanProgress(handleScanProgress))
+
+    // Deterministic E2E driver — only under the Playwright web build.
+    if (import.meta.env.VITE_PLAYWRIGHT === 'true') {
+      window.__gmDlssScan__ = handleScanProgress
+    }
+
+    register(
+      onDlssLibraryScanned(() => {
+        if (toastId !== null) {
+          dismissToast(toastId)
+          toastId = null
+        }
+        void queryClient.invalidateQueries({ queryKey: DLSS_SCAN_STATUS_QUERY_KEY })
+        void queryClient.invalidateQueries({ queryKey: DLSS_STATES_QUERY_KEY })
+        void queryClient.invalidateQueries({ queryKey: DLSS_GAME_STATE_QUERY_KEY })
+        void queryClient.invalidateQueries({ queryKey: DLSS_APPLICABLE_QUERY_KEY })
+        void queryClient.invalidateQueries({ queryKey: GAMES_QUERY_KEY })
       })
+    )
 
     return () => {
       cancelled = true
-      unlisten?.()
+      if (toastId !== null) {
+        dismissToast(toastId)
+        toastId = null
+      }
+      for (const unlisten of unlisteners) {
+        unlisten()
+      }
+      if (import.meta.env.VITE_PLAYWRIGHT === 'true') {
+        delete window.__gmDlssScan__
+      }
     }
-  }, [queryClient])
+  }, [queryClient, pushToast, updateToast, dismissToast])
 }
 
 // ---------------------------------------------------------------------------

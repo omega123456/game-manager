@@ -1,6 +1,7 @@
 import { test, expect } from '@playwright/test'
 
 import {
+  driveDlssScan,
   driveLaunch,
   gotoApp,
   gotoAppState,
@@ -42,6 +43,25 @@ for (const theme of THEMES) {
     await waitForLibraryGridImagesSettled(page)
     await scrollRouteOutletToTop(page)
     await expect(page).toHaveScreenshot(`update-available-toast-${theme}.png`)
+  })
+
+  test(`dlss scan progress toast — ${theme}`, async ({ page }) => {
+    await gotoApp(page)
+    await setTheme(page, theme)
+    await driveDlssScan(page, {
+      scanned: 12,
+      total: 40,
+      state: {
+        gameId: 1,
+        stale: false,
+        superResolution: { version: '3.7.10', path: 'D:\\Games\\Alan Wake 2\\nvngx_dlss.dll' },
+      },
+    })
+    await page.getByRole('progressbar').waitFor({ state: 'visible' })
+    await page.getByText('12 / 40').waitFor({ state: 'visible' })
+    await waitForLibraryGridImagesSettled(page)
+    await scrollRouteOutletToTop(page)
+    await expect(page).toHaveScreenshot(`dlss-scan-progress-toast-${theme}.png`)
   })
 
   test(`logs page — ${theme}`, async ({ page }) => {
@@ -384,6 +404,15 @@ for (const theme of THEMES) {
     await page.getByText('No DLSS-compatible games detected').waitFor({ state: 'visible' })
     await scrollRouteOutletToTop(page)
     await expect(page).toHaveScreenshot(`dlss-empty-state-${theme}.png`)
+  })
+
+  test(`dlss waiting for startup scan — ${theme}`, async ({ page }) => {
+    await gotoAppState(page, '#/dlss?dlssFixture=scanning')
+    await setTheme(page, theme)
+    await page.getByTestId('dlss-loading').waitFor({ state: 'visible' })
+    await page.getByText('Waiting for DLSS scan to finish…').waitFor({ state: 'visible' })
+    await scrollRouteOutletToTop(page)
+    await expect(page).toHaveScreenshot(`dlss-waiting-for-startup-scan-${theme}.png`)
   })
 
   test(`dlss elevation banner — ${theme}`, async ({ page }) => {

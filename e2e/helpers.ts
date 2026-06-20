@@ -6,7 +6,32 @@ export type Theme = (typeof THEMES)[number]
 declare global {
   interface Window {
     __gmLaunch__?: (payload: LaunchLifecyclePayload) => void
+    __gmDlssScan__?: (payload: DlssScanProgressPayload) => void
   }
+}
+
+/** A library-scan-progress payload shape for deterministic E2E driving. */
+export interface DlssScanProgressPayload {
+  scanned: number
+  total: number
+  state: {
+    gameId: number
+    stale: boolean
+    superResolution?: { version: string; path: string }
+  }
+}
+
+/**
+ * Push a DLSS library-scan-progress payload straight into the scan-sync hook via
+ * the `__gmDlssScan__` test hook installed under `VITE_PLAYWRIGHT`, then wait for
+ * the resulting progress toast to appear. Deterministic — no Tauri event runtime.
+ */
+export async function driveDlssScan(page: Page, payload: DlssScanProgressPayload): Promise<void> {
+  await page.waitForFunction(() => typeof window.__gmDlssScan__ === 'function')
+  await page.evaluate((p) => {
+    window.__gmDlssScan__?.(p)
+  }, payload)
+  await page.getByText('Scanning DLSS…').waitFor({ state: 'visible' })
 }
 
 /** Navigate to the app and wait for the root shell to mount. */

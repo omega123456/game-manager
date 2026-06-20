@@ -1,4 +1,4 @@
-import { screen, waitFor } from '@testing-library/react'
+import { screen } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 
 import { DlssManagementPage } from '@/features/dlss/dlss-management-page'
@@ -40,6 +40,7 @@ const POPULATED: GameDlssState[] = [
 describe('DlssManagementPage', () => {
   it('renders the header and both cards when populated', async () => {
     ipc.override('dlss_get_support', () => ({ nvapiAvailable: true, isElevated: true }))
+    ipc.override('dlss_get_scan_status', () => ({ scanning: false }))
     ipc.override('dlss_get_catalog', () => CATALOG)
     ipc.override('dlss_list_game_states', () => POPULATED)
     ipc.override('dlss_get_global_indicator', () => 'off')
@@ -53,21 +54,35 @@ describe('DlssManagementPage', () => {
     expect(await screen.findByText('Global Indicator')).toBeInTheDocument()
   })
 
-  it('triggers a scan-if-stale on mount', async () => {
+  it('shows the waiting skeleton while the startup scan is still running', async () => {
     ipc.override('dlss_get_support', () => ({ nvapiAvailable: true, isElevated: true }))
+    ipc.override('dlss_get_scan_status', () => ({ scanning: true }))
     ipc.override('dlss_get_catalog', () => CATALOG)
-    ipc.override('dlss_list_game_states', () => [{ gameId: 1, stale: true }])
-    ipc.override('dlss_scan_library', () => POPULATED)
+    ipc.override('dlss_list_game_states', () => POPULATED)
     renderWithProviders(<DlssManagementPage />, { route: '/dlss' })
 
-    await waitFor(() => expect(ipc.calls('dlss_scan_library')).toHaveLength(1))
+    expect(await screen.findByTestId('dlss-loading')).toBeInTheDocument()
+    expect(await screen.findByText('Waiting for DLSS scan to finish…')).toBeInTheDocument()
+    expect(ipc.calls('dlss_scan_library')).toHaveLength(0)
+  })
+
+  it('renders cached states without rescanning when the startup scan is idle', async () => {
+    ipc.override('dlss_get_support', () => ({ nvapiAvailable: true, isElevated: true }))
+    ipc.override('dlss_get_scan_status', () => ({ scanning: false }))
+    ipc.override('dlss_get_catalog', () => CATALOG)
+    ipc.override('dlss_list_game_states', () => POPULATED)
+    ipc.override('dlss_get_global_indicator', () => 'off')
+    renderWithProviders(<DlssManagementPage />, { route: '/dlss' })
+
+    expect(await screen.findByText('Global Overrides')).toBeInTheDocument()
+    expect(ipc.calls('dlss_scan_library')).toHaveLength(0)
   })
 
   it('shows the empty state when no games have DLSS', async () => {
     ipc.override('dlss_get_support', () => ({ nvapiAvailable: true, isElevated: true }))
+    ipc.override('dlss_get_scan_status', () => ({ scanning: false }))
     ipc.override('dlss_get_catalog', () => CATALOG)
     ipc.override('dlss_list_game_states', () => [])
-    ipc.override('dlss_scan_library', () => [])
     renderWithProviders(<DlssManagementPage />, { route: '/dlss' })
 
     expect(await screen.findByText('No DLSS-compatible games detected')).toBeInTheDocument()
@@ -75,6 +90,7 @@ describe('DlssManagementPage', () => {
 
   it('shows the elevation banner when not elevated', async () => {
     ipc.override('dlss_get_support', () => ({ nvapiAvailable: true, isElevated: false }))
+    ipc.override('dlss_get_scan_status', () => ({ scanning: false }))
     ipc.override('dlss_get_catalog', () => CATALOG)
     ipc.override('dlss_list_game_states', () => POPULATED)
     renderWithProviders(<DlssManagementPage />, { route: '/dlss' })
@@ -84,6 +100,7 @@ describe('DlssManagementPage', () => {
 
   it('shows the unsupported presets callout when NVAPI is missing', async () => {
     ipc.override('dlss_get_support', () => ({ nvapiAvailable: false, isElevated: true }))
+    ipc.override('dlss_get_scan_status', () => ({ scanning: false }))
     ipc.override('dlss_get_catalog', () => CATALOG)
     ipc.override('dlss_list_game_states', () => POPULATED)
     renderWithProviders(<DlssManagementPage />, { route: '/dlss' })

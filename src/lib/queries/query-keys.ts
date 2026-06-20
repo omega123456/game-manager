@@ -6,6 +6,7 @@ export const GROUPS_QUERY_KEY = ['groups'] as const
 
 export const DLSS_QUERY_KEY = ['dlss'] as const
 export const DLSS_SUPPORT_QUERY_KEY = [...DLSS_QUERY_KEY, 'support'] as const
+export const DLSS_SCAN_STATUS_QUERY_KEY = [...DLSS_QUERY_KEY, 'scan-status'] as const
 export const DLSS_CATALOG_QUERY_KEY = [...DLSS_QUERY_KEY, 'catalog'] as const
 export const DLSS_STATES_QUERY_KEY = [...DLSS_QUERY_KEY, 'states'] as const
 export const DLSS_GAME_STATE_QUERY_KEY = [...DLSS_QUERY_KEY, 'game-state'] as const

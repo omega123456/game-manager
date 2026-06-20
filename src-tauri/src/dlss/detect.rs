@@ -356,11 +356,44 @@ pub fn scan_game_impl(state: &AppState, game_id: i64) -> DlssResult<GameDlssStat
     scan_game_with(state, game_id, &catalog, &reader)
 }
 
+/// Receives per-game progress as a library scan proceeds, so callers can stream
+/// each game's freshly scanned state (and a `scanned`/`total` count) to the UI
+/// instead of waiting for the whole library to finish.
+///
+/// This is a testability + decoupling seam: the runtime path emits a Tauri event
+/// per game, while tests inject a fake that records the calls.
+pub trait ScanProgressSink: Send + Sync {
+    /// Called once per game after it is scanned. `scanned` is 1-based and
+    /// includes this game; `total` is the full library size.
+    fn on_game(&self, scanned: u32, total: u32, state: &GameDlssState);
+}
+
+/// A [`ScanProgressSink`] that drops every update — used by callers (and tests)
+/// that do not need streamed progress.
+pub struct NoopScanProgress;
+
+impl ScanProgressSink for NoopScanProgress {
+    fn on_game(&self, _scanned: u32, _total: u32, _state: &GameDlssState) {}
+}
+
 /// Re-scan every game and return the refreshed states.
 pub fn scan_library_with(
     state: &AppState,
     catalog: &crate::domain::DllCatalog,
     reader: &dyn FileVersionReader,
+) -> DlssResult<Vec<GameDlssState>> {
+    scan_library_with_progress(state, catalog, reader, &NoopScanProgress)
+}
+
+/// Re-scan every game, reporting each completed game to `progress`, and return
+/// the refreshed states. The per-game `scanned` counter advances for every game
+/// processed (so it reaches `total` even when some scans fail); `progress` is
+/// only notified for games that scanned successfully (the only ones with state).
+pub fn scan_library_with_progress(
+    state: &AppState,
+    catalog: &crate::domain::DllCatalog,
+    reader: &dyn FileVersionReader,
+    progress: &dyn ScanProgressSink,
 ) -> DlssResult<Vec<GameDlssState>> {
     let games = state
         .with_db(crate::db::repo::games::list)
@@ -369,10 +402,16 @@ pub fn scan_library_with(
     // counting toward the applicable totals (the cache is the source of truth).
     let live_ids: std::collections::HashSet<i64> = games.iter().map(|game| game.id).collect();
     state.dlss_detection_retain(&live_ids);
+    let total = games.len() as u32;
+    let mut scanned: u32 = 0;
     let mut states = Vec::with_capacity(games.len());
     for game in games {
+        scanned += 1;
         match scan_game_with(state, game.id, catalog, reader) {
-            Ok(state) => states.push(state),
+            Ok(game_state) => {
+                progress.on_game(scanned, total, &game_state);
+                states.push(game_state);
+            }
             Err(err) => {
                 tracing::warn!(category = "dlss", "scan of game {} failed: {err}", game.id);
             }
@@ -383,13 +422,23 @@ pub fn scan_library_with(
 
 /// Re-scan every applicable game and return the refreshed states.
 pub fn scan_library_impl(state: &AppState) -> DlssResult<Vec<GameDlssState>> {
+    scan_library_impl_with_progress(state, &NoopScanProgress)
+}
+
+/// Re-scan every applicable game, streaming per-game progress to `progress`, and
+/// return the refreshed states. The runtime startup path passes a Tauri-backed
+/// sink so library pills can render as each game completes.
+pub fn scan_library_impl_with_progress(
+    state: &AppState,
+    progress: &dyn ScanProgressSink,
+) -> DlssResult<Vec<GameDlssState>> {
     tracing::debug!(
         category = "dlss",
         "dlss_scan_library: starting full library scan"
     );
     let catalog = load_catalog(state)?;
     let reader = RealFileVersionReader;
-    let states = scan_library_with(state, &catalog, &reader)?;
+    let states = scan_library_with_progress(state, &catalog, &reader, progress)?;
     tracing::debug!(
         category = "dlss",
         games_scanned = states.len(),

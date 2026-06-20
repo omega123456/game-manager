@@ -8,6 +8,11 @@ description = "Allows the frontend to query DLSS support (NVAPI + elevation) via
 commands.allow = ["dlss_get_support"]
 
 [[permission]]
+identifier = "allow-dlss-get-scan-status"
+description = "Allows the frontend to query whether a DLSS library scan is running via dlss_get_scan_status."
+commands.allow = ["dlss_get_scan_status"]
+
+[[permission]]
 identifier = "allow-dlss-get-catalog"
 description = "Allows the frontend to fetch the DLSS version catalog via dlss_get_catalog."
 commands.allow = ["dlss_get_catalog"]

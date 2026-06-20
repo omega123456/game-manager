@@ -22,8 +22,8 @@ use crate::dlss::{download, manifest};
 #[cfg(not(coverage))]
 use crate::domain::{BatchApplyResult, DllCatalog, GamePresetState};
 use crate::domain::{
-    DllType, DlssIndicatorMode, DlssSupport, GameDlssState, PresetKind, PresetOption,
-    SaveGameDllSelection, SaveGameDlss,
+    DllType, DlssIndicatorMode, DlssScanStatus, DlssSupport, GameDlssState, PresetKind,
+    PresetOption, SaveGameDllSelection, SaveGameDlss,
 };
 use crate::error::AppResult;
 use crate::state::AppState;
@@ -35,10 +35,10 @@ pub const EVENT_APPLY_PROGRESS: &str = "dlss://apply-progress";
 /// Tauri event emitted once the startup library scan finishes, so the frontend
 /// can refetch the (session-only) detection that drives the library pills.
 pub const EVENT_LIBRARY_SCANNED: &str = "dlss://library-scanned";
-
-#[cfg(not(coverage))]
-static LIBRARY_SCAN_RUNNING: std::sync::atomic::AtomicBool =
-    std::sync::atomic::AtomicBool::new(false);
+/// Tauri event emitted once per game during the startup library scan, carrying
+/// that game's freshly scanned state plus a `scanned`/`total` count, so the
+/// frontend can render pills gradually and show a progress indicator.
+pub const EVENT_SCAN_PROGRESS: &str = "dlss://scan-progress";
 
 #[cfg(not(coverage))]
 fn emit_library_scanned(app: &tauri::AppHandle) {
@@ -55,14 +55,9 @@ fn emit_library_scanned(app: &tauri::AppHandle) {
 /// Run the blocking filesystem/hash scan away from Tauri's command executor.
 #[cfg(not(coverage))]
 async fn scan_library_blocking(app: tauri::AppHandle) -> AppResult<Vec<GameDlssState>> {
-    use std::sync::atomic::Ordering;
+    use tauri::Manager;
 
-    if LIBRARY_SCAN_RUNNING
-        .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
-        .is_err()
-    {
-        use tauri::Manager;
-
+    if !app.state::<AppState>().dlss_scan_begin() {
         tracing::debug!(
             category = "dlss",
             "dlss library scan already running; returning cached state"
@@ -76,11 +71,15 @@ async fn scan_library_blocking(app: tauri::AppHandle) -> AppResult<Vec<GameDlssS
         use tauri::Manager;
 
         let state = scan_app.state::<AppState>();
-        detect::scan_library_impl(&state).map_err(crate::error::AppError::from)
+        let progress = TauriScanProgressSink {
+            app: scan_app.clone(),
+        };
+        detect::scan_library_impl_with_progress(&state, &progress)
+            .map_err(crate::error::AppError::from)
     })
     .await;
 
-    LIBRARY_SCAN_RUNNING.store(false, Ordering::Release);
+    app.state::<AppState>().dlss_scan_finish();
     let result = result.map_err(|err| {
         crate::error::AppError::other(format!("dlss library scan task failed: {err}"))
     })?;
@@ -119,6 +118,13 @@ pub fn get_support_impl() -> DlssSupport {
         "dlss_get_support"
     );
     support
+}
+
+/// Read whether a full-library DLSS scan is currently in progress.
+pub fn get_scan_status_impl(state: &AppState) -> DlssScanStatus {
+    DlssScanStatus {
+        scanning: state.dlss_scan_is_running(),
+    }
 }
 
 /// Read the cached DLSS state for `game_id`.
@@ -251,11 +257,40 @@ impl ApplyProgressSink for TauriDlssSink {
     }
 }
 
+/// A [`detect::ScanProgressSink`] backed by a Tauri `AppHandle` — emits one
+/// [`EVENT_SCAN_PROGRESS`] per game as the startup library scan proceeds.
+#[cfg(not(coverage))]
+struct TauriScanProgressSink {
+    app: tauri::AppHandle,
+}
+
+#[cfg(not(coverage))]
+impl detect::ScanProgressSink for TauriScanProgressSink {
+    fn on_game(&self, scanned: u32, total: u32, state: &GameDlssState) {
+        use tauri::Emitter;
+        let payload = crate::domain::DlssScanProgress {
+            scanned,
+            total,
+            state: state.clone(),
+        };
+        if let Err(err) = self.app.emit(EVENT_SCAN_PROGRESS, payload) {
+            tracing::warn!(category = "dlss", "emit scan progress failed: {err}");
+        }
+    }
+}
+
 /// NVAPI availability + elevation state.
 #[cfg(not(coverage))]
 #[tauri::command]
 pub fn dlss_get_support() -> DlssSupport {
     get_support_impl()
+}
+
+/// Read whether the full-library DLSS scan is currently running.
+#[cfg(not(coverage))]
+#[tauri::command]
+pub fn dlss_get_scan_status(state: tauri::State<'_, AppState>) -> DlssScanStatus {
+    get_scan_status_impl(&state)
 }
 
 /// Resolve the version catalog (cached, or refreshed from upstream).

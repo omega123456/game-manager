@@ -10,6 +10,7 @@ import {
   getDlssCatalog,
   getDlssGlobalIndicator,
   getDlssGamePreset,
+  getDlssScanStatus,
   getDlssGameState,
   getDlssGlobalPreset,
   getDlssPresetOptions,
@@ -18,6 +19,7 @@ import {
   onDlssApplyProgress,
   onDlssDownloadProgress,
   onDlssLibraryScanned,
+  onDlssScanProgress,
   relaunchElevated,
   saveDlssGame,
   scanDlssGame,
@@ -27,7 +29,7 @@ import {
   setDlssGamePreset,
   setDlssGlobalPreset,
 } from '@/lib/ipc/dlss-commands'
-import type { ApplyResult, DownloadProgress } from '@/types/dlss'
+import type { ApplyResult, DlssScanProgress, DownloadProgress } from '@/types/dlss'
 
 import { ipc } from '../../ipc-mock'
 
@@ -37,12 +39,18 @@ describe('dlss-commands', () => {
       downloadProgress: 'dlss://download-progress',
       applyProgress: 'dlss://apply-progress',
       libraryScanned: 'dlss://library-scanned',
+      scanProgress: 'dlss://scan-progress',
     })
   })
 
   it('reads support', async () => {
     ipc.override('dlss_get_support', () => ({ nvapiAvailable: true, isElevated: false }))
     await expect(getDlssSupport()).resolves.toEqual({ nvapiAvailable: true, isElevated: false })
+  })
+
+  it('reads the scan status', async () => {
+    ipc.override('dlss_get_scan_status', () => ({ scanning: true }))
+    await expect(getDlssScanStatus()).resolves.toEqual({ scanning: true })
   })
 
   it('reads catalog forwarding refresh', async () => {
@@ -176,6 +184,18 @@ describe('dlss-commands', () => {
       unlisteners.push(await onDlssLibraryScanned(handler))
       await ipc.emit(DLSS_EVENTS.libraryScanned, null)
       expect(handler).toHaveBeenCalled()
+    })
+
+    it('delivers scan progress payloads', async () => {
+      const handler = vi.fn<(p: DlssScanProgress) => void>()
+      unlisteners.push(await onDlssScanProgress(handler))
+      const payload: DlssScanProgress = {
+        scanned: 3,
+        total: 10,
+        state: { gameId: 1, stale: false },
+      }
+      await ipc.emit(DLSS_EVENTS.scanProgress, payload)
+      expect(handler).toHaveBeenCalledWith(payload)
     })
   })
 })

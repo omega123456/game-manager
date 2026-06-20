@@ -6,7 +6,9 @@ import type {
   BatchApplyResult,
   DllCatalog,
   DlssIndicatorMode,
+  DlssScanStatus,
   DllType,
+  DlssScanProgress,
   DlssSupport,
   DownloadProgress,
   GameDlssState,
@@ -30,11 +32,18 @@ export const DLSS_EVENTS = {
   applyProgress: 'dlss://apply-progress',
   /** Emitted once the startup library scan finishes (session detection ready). */
   libraryScanned: 'dlss://library-scanned',
+  /** Per-game progress during the startup library scan (pills appear gradually). */
+  scanProgress: 'dlss://scan-progress',
 } as const
 
 /** NVAPI availability + elevation state. */
 export function getDlssSupport(): Promise<DlssSupport> {
   return invoke<DlssSupport>('dlss_get_support')
+}
+
+/** Whether the full-library DLSS scan is currently running. */
+export function getDlssScanStatus(): Promise<DlssScanStatus> {
+  return invoke<DlssScanStatus>('dlss_get_scan_status')
 }
 
 /** Resolve the version catalog (cached, or refreshed from upstream). */
@@ -169,4 +178,11 @@ export function onDlssApplyProgress(handler: (payload: ApplyResult) => void): Pr
 /** Subscribe to the startup library-scan-complete event. Returns the unlisten function. */
 export function onDlssLibraryScanned(handler: () => void): Promise<UnlistenFn> {
   return listen<unknown>(DLSS_EVENTS.libraryScanned, () => handler())
+}
+
+/** Subscribe to per-game library-scan progress events. Returns the unlisten function. */
+export function onDlssScanProgress(
+  handler: (payload: DlssScanProgress) => void
+): Promise<UnlistenFn> {
+  return listen<DlssScanProgress>(DLSS_EVENTS.scanProgress, (e) => handler(e.payload))
 }

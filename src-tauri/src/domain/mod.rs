@@ -819,6 +819,28 @@ pub struct GameDlssState {
     pub stale: bool,
 }
 
+/// Streamed progress for the startup library scan: emitted once per game as the
+/// scan completes it, so the frontend can render that game's DLSS pills (and a
+/// `scanned`/`total` progress indicator) gradually rather than all at once.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DlssScanProgress {
+    /// Number of games scanned so far (1-based, includes this one).
+    pub scanned: u32,
+    /// Total number of games in the library being scanned.
+    pub total: u32,
+    /// The freshly scanned state for this game.
+    pub state: GameDlssState,
+}
+
+/// Whether the session-wide DLSS library scan is currently running.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DlssScanStatus {
+    /// `true` while the startup or manual full-library scan is in flight.
+    pub scanning: bool,
+}
+
 /// Live per-game preset state for one kind (fetched only when the tab is open).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]

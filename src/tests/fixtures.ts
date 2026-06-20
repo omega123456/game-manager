@@ -88,6 +88,7 @@ export const IPC_FIXTURES: Record<string, IpcHandler> = {
   // --- DLSS. Phase 4 frontend; defaults keep the harness quiet until tests
   //     override specific flows. Catalog/state reads return empty/minimal. ---
   dlss_get_support: () => ({ nvapiAvailable: false, isElevated: true }),
+  dlss_get_scan_status: () => ({ scanning: false }),
   dlss_get_catalog: () => ({
     superResolution: [],
     frameGeneration: [],

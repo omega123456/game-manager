@@ -4,7 +4,12 @@ import { AnimatePresence, motion } from 'motion/react'
 import { Button } from '@/components/ui/button'
 import { Icon } from '@/components/ui/icon'
 import { cn } from '@/lib/utils'
-import { useToastStore, type ToastAction, type ToastTone } from '@/stores/toast-store'
+import {
+  useToastStore,
+  type ToastAction,
+  type ToastProgress,
+  type ToastTone,
+} from '@/stores/toast-store'
 
 const TONE_ICON: Record<ToastTone, string> = {
   info: 'info',
@@ -50,6 +55,7 @@ export function Toaster(): React.JSX.Element {
             description={toast.description}
             persistent={toast.persistent}
             action={toast.action}
+            progress={toast.progress}
             onDismiss={() => dismiss(toast.id)}
           />
         ))}
@@ -64,6 +70,7 @@ interface ToastItemProps {
   description?: string
   persistent?: boolean
   action?: ToastAction
+  progress?: ToastProgress
   onDismiss: () => void
 }
 
@@ -73,6 +80,7 @@ function ToastItem({
   description,
   persistent,
   action,
+  progress,
   onDismiss,
 }: ToastItemProps): React.JSX.Element {
   React.useEffect(() => {
@@ -101,6 +109,7 @@ function ToastItem({
       <div className="min-w-0 flex-1">
         <p className="text-sm font-medium">{title}</p>
         {description ? <p className="mt-1 text-sm text-muted-foreground">{description}</p> : null}
+        {progress ? <ToastProgressBar progress={progress} /> : null}
         {action ? (
           <Button type="button" size="sm" className="mt-3" onClick={action.onClick}>
             {action.label}
@@ -116,5 +125,30 @@ function ToastItem({
         <Icon name="close" className="text-[18px]" />
       </button>
     </motion.div>
+  )
+}
+
+/** A thin determinate progress bar plus a `current / total` count. */
+function ToastProgressBar({ progress }: { progress: ToastProgress }): React.JSX.Element {
+  const { current, total } = progress
+  const percent = total > 0 ? Math.min(100, Math.max(0, (current / total) * 100)) : 0
+  return (
+    <div className="mt-2">
+      <div
+        className="h-1.5 w-full overflow-hidden rounded-full bg-surface-high"
+        role="progressbar"
+        aria-valuemin={0}
+        aria-valuemax={total}
+        aria-valuenow={current}
+      >
+        <div
+          className="h-full rounded-full bg-primary transition-[width] duration-200"
+          style={{ width: `${percent}%` }}
+        />
+      </div>
+      <p className="mt-1 text-right text-xs tabular-nums text-muted-foreground">
+        {current} / {total}
+      </p>
+    </div>
   )
 }

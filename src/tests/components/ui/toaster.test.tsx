@@ -36,6 +36,27 @@ describe('Toaster + toast helpers', () => {
     await waitFor(() => expect(screen.queryByText('Created')).not.toBeInTheDocument())
   })
 
+  it('renders a determinate progress bar and live-updates it', () => {
+    render(<Toaster />)
+    let id = 0
+    act(() => {
+      id = useToastStore.getState().push({
+        tone: 'info',
+        title: 'Scanning DLSS…',
+        persistent: true,
+        progress: { current: 3, total: 10 },
+      })
+    })
+    const bar = screen.getByRole('progressbar')
+    expect(bar).toHaveAttribute('aria-valuenow', '3')
+    expect(bar).toHaveAttribute('aria-valuemax', '10')
+    expect(screen.getByText('3 / 10')).toBeInTheDocument()
+
+    act(() => useToastStore.getState().update(id, { progress: { current: 7, total: 10 } }))
+    expect(screen.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '7')
+    expect(screen.getByText('7 / 10')).toBeInTheDocument()
+  })
+
   it('renders an action button that invokes its handler', async () => {
     const user = userEvent.setup()
     const onClick = vi.fn()

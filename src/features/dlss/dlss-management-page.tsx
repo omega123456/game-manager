@@ -1,9 +1,9 @@
-import * as React from 'react'
+import type * as React from 'react'
 
-import { logFrontend } from '@/lib/app-log-commands'
 import {
   useDlssCatalogQuery,
   useDlssGameStatesQuery,
+  useDlssScanStatusQuery,
   useDlssSupportQuery,
   useScanDlssLibraryMutation,
 } from '@/lib/queries/use-dlss'
@@ -15,7 +15,11 @@ import { DlssElevationBanner } from './dlss-elevation-banner'
 import { DlssEmptyState } from './dlss-empty-state'
 
 /** Skeleton shown while the catalog / library scan is in flight. */
-function DlssPageSkeleton(): React.JSX.Element {
+function DlssPageSkeleton({
+  message = 'Scanning library for DLSS…',
+}: {
+  message?: string
+}): React.JSX.Element {
   return (
     <div className="space-y-6" data-testid="dlss-loading">
       <div className="space-y-4 rounded-xl border border-border bg-surface-low p-6">
@@ -24,46 +28,28 @@ function DlssPageSkeleton(): React.JSX.Element {
         <div className="h-10 w-full animate-pulse rounded bg-surface-high" />
         <div className="h-10 w-full animate-pulse rounded bg-surface-high" />
       </div>
-      <p className="text-sm text-muted-foreground">Scanning library for DLSS…</p>
+      <p className="text-sm text-muted-foreground">{message}</p>
     </div>
   )
 }
 
 /**
  * DLSS Management page content: header, optional elevation banner, Global
- * Overrides, and Global Presets. Triggers a scan-if-stale on mount and shows
- * loading / empty states.
+ * Overrides, and Global Presets. Reuses the startup scan cache and waits for it
+ * to finish if still in progress.
  */
 export function DlssManagementPage(): React.JSX.Element {
   const supportQuery = useDlssSupportQuery()
+  const scanStatusQuery = useDlssScanStatusQuery()
   const catalogQuery = useDlssCatalogQuery()
   const statesQuery = useDlssGameStatesQuery()
   const scanLibrary = useScanDlssLibraryMutation()
 
-  // Re-scan the whole library every time this page is opened so games added or
-  // deleted since the last scan are (re)counted — detection is session-only and
-  // intentionally not relied on as a cache here. The ref guards against duplicate
-  // runs within a single mount; navigating away and back remounts and re-scans.
-  const scanned = React.useRef(false)
-  React.useEffect(() => {
-    if (scanned.current) {
-      return
-    }
-    scanned.current = true
-    logFrontend('debug', 'DLSS management opened — rescanning library', {
-      category: 'dlss.scan',
-    })
-    scanLibrary.mutate()
-  }, [scanLibrary])
-
   const isElevated = supportQuery.data?.isElevated ?? true
   const nvapiAvailable = supportQuery.data?.nvapiAvailable ?? false
-
-  // Only block on the genuine first-load of the catalog/state queries. The
-  // on-open library rescan runs in the background and refreshes counts in place
-  // (via query invalidation) — it must not flip the whole page back to a
-  // skeleton, which looks like the page is stuck while re-reading DLLs.
-  const loading = catalogQuery.isLoading || statesQuery.isLoading
+  const scanning = scanStatusQuery.data?.scanning ?? false
+  const waitingForScan = scanStatusQuery.isLoading || scanning
+  const loading = catalogQuery.isLoading || statesQuery.isLoading || waitingForScan
   const states = statesQuery.data ?? []
   const hasGames = states.some(
     (state) => state.superResolution || state.frameGeneration || state.rayReconstruction
@@ -82,7 +68,9 @@ export function DlssManagementPage(): React.JSX.Element {
         {!isElevated ? <DlssElevationBanner /> : null}
 
         {loading ? (
-          <DlssPageSkeleton />
+          <DlssPageSkeleton
+            message={waitingForScan ? 'Waiting for DLSS scan to finish…' : undefined}
+          />
         ) : (
           <>
             {catalogQuery.data ? <GlobalOverridesCard catalog={catalogQuery.data} /> : null}

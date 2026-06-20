@@ -7,6 +7,7 @@
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 
 use rusqlite::Connection;
@@ -47,6 +48,8 @@ pub struct AppState {
     /// session is kept in memory, and the remote manifest refresh is attempted
     /// at most once per process lifetime.
     dlss_catalog: Mutex<Option<DlssCatalogSessionCache>>,
+    /// Whether a full-library DLSS scan is currently in progress.
+    dlss_scan_running: AtomicBool,
 }
 
 impl AppState {
@@ -83,6 +86,7 @@ impl AppState {
             prioritizer,
             dlss_detection: Mutex::new(HashMap::new()),
             dlss_catalog: Mutex::new(None),
+            dlss_scan_running: AtomicBool::new(false),
         }
     }
 
@@ -279,6 +283,24 @@ impl AppState {
                 );
             }
         }
+    }
+
+    /// Mark the DLSS library scan as running, returning whether this call
+    /// started a new scan.
+    pub fn dlss_scan_begin(&self) -> bool {
+        self.dlss_scan_running
+            .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
+            .is_ok()
+    }
+
+    /// Mark the DLSS library scan as finished.
+    pub fn dlss_scan_finish(&self) {
+        self.dlss_scan_running.store(false, Ordering::Release);
+    }
+
+    /// Whether a DLSS library scan is currently in progress.
+    pub fn dlss_scan_is_running(&self) -> bool {
+        self.dlss_scan_running.load(Ordering::Acquire)
     }
 }
 

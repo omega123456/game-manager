@@ -222,6 +222,7 @@ pub fn run() {
             commands::launch::launch_game,
             commands::launch::cancel_launch,
             commands::dlss::dlss_get_support,
+            commands::dlss::dlss_get_scan_status,
             commands::dlss::dlss_get_catalog,
             commands::dlss::dlss_get_game_state,
             commands::dlss::dlss_list_game_states,

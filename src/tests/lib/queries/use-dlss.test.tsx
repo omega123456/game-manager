@@ -1,6 +1,6 @@
 import { act, renderHook, waitFor } from '@testing-library/react'
 import { QueryClientProvider } from '@tanstack/react-query'
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ReactNode } from 'react'
 
 import { createQueryClient } from '@/lib/query-client'
@@ -14,6 +14,7 @@ import {
   useDlssDownloadProgress,
   useDlssGlobalIndicatorQuery,
   useDlssGamePresetQuery,
+  useDlssScanStatusQuery,
   useDlssGameStateQuery,
   useDlssGlobalPresetQuery,
   useDlssLibraryScanSync,
@@ -29,8 +30,13 @@ import {
   useSetDlssGlobalPresetMutation,
 } from '@/lib/queries/use-dlss'
 import { DLSS_EVENTS } from '@/lib/ipc/dlss-commands'
-import { DLSS_GLOBAL_INDICATOR_QUERY_KEY } from '@/lib/queries/query-keys'
-import type { DllCatalog } from '@/types/dlss'
+import {
+  DLSS_GLOBAL_INDICATOR_QUERY_KEY,
+  DLSS_SCAN_STATUS_QUERY_KEY,
+  DLSS_STATES_QUERY_KEY,
+} from '@/lib/queries/query-keys'
+import { useToastStore } from '@/stores/toast-store'
+import type { DllCatalog, GameDlssState } from '@/types/dlss'
 
 import { ipc } from '../../ipc-mock'
 
@@ -91,6 +97,12 @@ describe('use-dlss queries', () => {
     ipc.override('dlss_get_global_indicator', () => 'allDlssDlls')
     const { result } = renderHook(() => useDlssGlobalIndicatorQuery(), { wrapper })
     await waitFor(() => expect(result.current.data).toBe('allDlssDlls'))
+  })
+
+  it('loads the scan status', async () => {
+    ipc.override('dlss_get_scan_status', () => ({ scanning: true }))
+    const { result } = renderHook(() => useDlssScanStatusQuery(), { wrapper })
+    await waitFor(() => expect(result.current.data?.scanning).toBe(true))
   })
 })
 
@@ -236,6 +248,10 @@ describe('useDlssApplyProgress', () => {
 })
 
 describe('useDlssLibraryScanSync', () => {
+  beforeEach(() => {
+    useToastStore.setState({ toasts: [] })
+  })
+
   it('invalidates DLSS + games queries when the library-scanned event fires', async () => {
     const client = createQueryClient()
     const invalidateSpy = vi.spyOn(client, 'invalidateQueries')
@@ -245,6 +261,48 @@ describe('useDlssLibraryScanSync', () => {
     renderHook(() => useDlssLibraryScanSync(), { wrapper: scanWrapper })
 
     await ipc.emit(DLSS_EVENTS.libraryScanned, null)
-    await waitFor(() => expect(invalidateSpy).toHaveBeenCalled())
+    await waitFor(() =>
+      expect(invalidateSpy).toHaveBeenCalledWith({
+        queryKey: DLSS_SCAN_STATUS_QUERY_KEY,
+      })
+    )
+  })
+
+  it('upserts states into the cache and drives a progress toast as games scan', async () => {
+    const client = createQueryClient()
+    function scanWrapper({ children }: { children: ReactNode }) {
+      return <QueryClientProvider client={client}>{children}</QueryClientProvider>
+    }
+    renderHook(() => useDlssLibraryScanSync(), { wrapper: scanWrapper })
+
+    const stateOne: GameDlssState = {
+      gameId: 1,
+      superResolution: { version: '3.7', path: 'a' },
+      stale: false,
+    }
+    await ipc.emit(DLSS_EVENTS.scanProgress, { scanned: 1, total: 2, state: stateOne })
+
+    await waitFor(() =>
+      expect(client.getQueryData<GameDlssState[]>(DLSS_STATES_QUERY_KEY)).toHaveLength(1)
+    )
+    // A persistent progress toast appears with the running count.
+    await waitFor(() => expect(useToastStore.getState().toasts).toHaveLength(1))
+    expect(useToastStore.getState().toasts[0]).toMatchObject({
+      persistent: true,
+      progress: { current: 1, total: 2 },
+    })
+
+    // Second game: the same toast advances (no new toast) and the cache grows.
+    const stateTwo: GameDlssState = { gameId: 2, stale: false }
+    await ipc.emit(DLSS_EVENTS.scanProgress, { scanned: 2, total: 2, state: stateTwo })
+    await waitFor(() =>
+      expect(client.getQueryData<GameDlssState[]>(DLSS_STATES_QUERY_KEY)).toHaveLength(2)
+    )
+    expect(useToastStore.getState().toasts).toHaveLength(1)
+    expect(useToastStore.getState().toasts[0].progress).toEqual({ current: 2, total: 2 })
+
+    // Completion dismisses the toast.
+    await ipc.emit(DLSS_EVENTS.libraryScanned, null)
+    await waitFor(() => expect(useToastStore.getState().toasts).toHaveLength(0))
   })
 })

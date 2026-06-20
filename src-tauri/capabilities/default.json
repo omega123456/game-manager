@@ -44,6 +44,7 @@
     "allow-launch-game",
     "allow-cancel-launch",
     "allow-dlss-get-support",
+    "allow-dlss-get-scan-status",
     "allow-dlss-get-catalog",
     "allow-dlss-get-game-state",
     "allow-dlss-list-game-states",

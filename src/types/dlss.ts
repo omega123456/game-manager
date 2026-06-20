@@ -116,6 +116,22 @@ export interface DlssSupport {
   isElevated: boolean
 }
 
+/** Whether the full-library DLSS scan is currently in progress. */
+export interface DlssScanStatus {
+  scanning: boolean
+}
+
+/**
+ * Per-game progress for the startup library scan (`dlss://scan-progress`).
+ * Emitted once per game as it is scanned so the UI can render that game's pills
+ * gradually and surface a `scanned`/`total` progress indicator.
+ */
+export interface DlssScanProgress {
+  scanned: number
+  total: number
+  state: GameDlssState
+}
+
 /** Download-progress event payload (`dlss://download-progress`). */
 export interface DownloadProgress {
   dllType: DllType

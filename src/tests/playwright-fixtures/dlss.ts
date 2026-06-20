@@ -11,6 +11,7 @@ import type {
   DllCatalog,
   DllVersion,
   DlssIndicatorMode,
+  DlssScanStatus,
   DlssSupport,
   GameDlssState,
   GamePresetState,
@@ -166,6 +167,7 @@ type DlssScenario =
   | 'mid-apply'
   | 'batch-failures'
   | 'elevation-toast'
+  | 'scanning'
   | 'loading'
 
 function getDlssScenario(): DlssScenario {
@@ -182,6 +184,7 @@ function getDlssScenario(): DlssScenario {
     case 'mid-apply':
     case 'batch-failures':
     case 'elevation-toast':
+    case 'scanning':
     case 'loading':
       return value
     default:
@@ -214,6 +217,10 @@ export const dlssFixtures: Record<string, PlaywrightFixtureHandler> = {
       default:
         return DLSS_SUPPORT
     }
+  },
+  dlss_get_scan_status: () => {
+    const status: DlssScanStatus = { scanning: getDlssScenario() === 'scanning' }
+    return status
   },
   dlss_get_catalog: () => (getDlssScenario() === 'loading' ? pending<DllCatalog>() : DLSS_CATALOG),
   dlss_get_game_state: (args) =>
