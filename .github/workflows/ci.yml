@@ -23,6 +23,10 @@ on:
 jobs:
   rust-windows:
     runs-on: windows-latest
+    env:
+      CARGO_REGISTRIES_CRATES_IO_PROTOCOL: sparse
+      CARGO_NET_RETRY: 10
+      CARGO_HTTP_MULTIPLEXING: "false"
     steps:
       - uses: actions/checkout@v4
 

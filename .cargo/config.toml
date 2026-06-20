@@ -1,3 +1,14 @@
+[registries.crates-io]
+protocol = "sparse"
+
+[net]
+retry = 10
+git-fetch-with-cli = true
+
+[http]
+multiplexing = false
+timeout = 120
+
 # Rust integration tests and llvm-cov settings (invoked via pnpm test:rust / test:rust:coverage).
 # Run from the repository root.
 # Requires cargo-nextest: https://nexte.st/book/installing.html (e.g. cargo install cargo-nextest).
