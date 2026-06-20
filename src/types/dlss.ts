@@ -70,6 +70,11 @@ export interface GameDlssState {
   frameGeneration?: DetectedDll
   rayReconstruction?: DetectedDll
   lastScannedAt?: string
+  /**
+   * Per-game DLSS Super Resolution preset value (NVAPI), read during the scan.
+   * `undefined` when unavailable; `0` is Default. Drives the pill preset letter.
+   */
+  srPreset?: number
   /** Whether the cached state is stale and should be re-scanned. */
   stale: boolean
 }

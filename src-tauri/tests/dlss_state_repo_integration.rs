@@ -71,6 +71,7 @@ fn cache_detection(
                 ray_reconstruction: rr,
             },
             last_scanned_at: Some("2026-06-17T12:00:00Z".to_string()),
+            sr_preset: None,
         },
     );
 }

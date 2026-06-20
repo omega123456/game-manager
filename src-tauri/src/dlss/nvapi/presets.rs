@@ -355,6 +355,36 @@ pub fn get_game_preset_impl(
     with_nvapi_drs_reloaded(|drs| get_game_preset_for(drs, state, game_id, kind))
 }
 
+/// Collapse a per-game preset read into the optional value cached behind the
+/// library pill: `Some(value)` only when a matching driver profile exists; an
+/// unmatched profile or any NVAPI error (no driver / `Unsupported` under
+/// `test-utils`) becomes `None`. Pure so the mapping is testable without a GPU.
+pub fn sr_preset_for_pill(result: DlssResult<GamePresetState>) -> Option<u32> {
+    match result {
+        Ok(preset) if preset.available => Some(preset.value),
+        Ok(_) => None,
+        Err(err) => {
+            tracing::debug!(
+                category = "dlss",
+                error = %err,
+                "scan-time SR preset read unavailable; pill letter omitted"
+            );
+            None
+        }
+    }
+}
+
+/// Read a game's Super Resolution preset for the library pill. Delegates to the
+/// shared [`get_game_preset_impl`] (which reloads the DRS database first, so the
+/// pill reflects presets changed elsewhere), then collapses the result via
+/// [`sr_preset_for_pill`]. Safe to call from the background scan thread — any
+/// NVAPI error (including `Unsupported` under `test-utils`) becomes `None`, so
+/// the read never hits a real driver in tests. The surrounding mapping is
+/// exercised against a mocked driver via [`get_game_preset_for`] + this helper.
+pub fn read_game_sr_preset(state: &AppState, game_id: i64) -> Option<u32> {
+    sr_preset_for_pill(get_game_preset_impl(state, game_id, PresetKind::Dlss))
+}
+
 /// Write the per-game preset value (no-op when no profile matches).
 pub fn set_game_preset_impl(
     state: &AppState,

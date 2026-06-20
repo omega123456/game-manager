@@ -282,6 +282,7 @@ export function useSetDlssGlobalIndicatorMutation() {
 /** Set the per-game preset value for a kind. */
 export function useSetDlssGamePresetMutation() {
   const queryClient = useQueryClient()
+  const invalidate = useInvalidateDlss()
   return useMutation({
     mutationFn: ({ gameId, kind, value }: { gameId: number; kind: PresetKind; value: number }) =>
       setDlssGamePreset(gameId, kind, value),
@@ -289,6 +290,9 @@ export function useSetDlssGamePresetMutation() {
       void queryClient.invalidateQueries({
         queryKey: [...DLSS_GAME_PRESET_QUERY_KEY, gameId, kind],
       })
+      // A preset change can alter the cached SR preset behind the library pills,
+      // so refresh the detection states / games like a DLL change does.
+      invalidate()
     },
   })
 }

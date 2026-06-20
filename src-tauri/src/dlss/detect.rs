@@ -215,6 +215,9 @@ pub struct DetectionResult {
     pub summary: DetectionSummary,
     /// Timestamp of the scan (RFC 3339).
     pub last_scanned_at: Option<String>,
+    /// Per-game DLSS SR preset (NVAPI) read at scan time, when available.
+    /// `None` when SR is undetected, NVAPI is absent, or no profile matches.
+    pub sr_preset: Option<u32>,
 }
 
 /// The per-type detection results for one folder scan.
@@ -247,6 +250,7 @@ pub fn build_game_state(
             frame_generation: det.summary.frame_generation,
             ray_reconstruction: det.summary.ray_reconstruction,
             last_scanned_at: det.last_scanned_at,
+            sr_preset: det.sr_preset,
             stale: false,
         },
         None => GameDlssState {
@@ -306,6 +310,15 @@ pub fn scan_game_with(
         "dlss dll scan: detection result"
     );
 
+    // Read the per-game SR preset (NVAPI) only when an SR DLL is present; the
+    // preset is meaningless without it. Any NVAPI failure collapses to `None`,
+    // so this stays safe on the background scan thread and under `test-utils`.
+    let sr_preset = if summary.super_resolution.is_some() {
+        crate::dlss::nvapi::presets::read_game_sr_preset(state, game_id)
+    } else {
+        None
+    };
+
     let now = chrono::Utc::now().to_rfc3339();
     let resolved = folder.as_ref().map(|f| f.to_string_lossy().to_string());
     // Detection is session-only: cache it in memory, never in the DB.
@@ -315,6 +328,7 @@ pub fn scan_game_with(
             folder_resolved: resolved.clone(),
             summary: summary.clone(),
             last_scanned_at: Some(now.clone()),
+            sr_preset,
         },
     );
     Ok(GameDlssState {
@@ -325,6 +339,7 @@ pub fn scan_game_with(
         frame_generation: summary.frame_generation,
         ray_reconstruction: summary.ray_reconstruction,
         last_scanned_at: Some(now),
+        sr_preset,
         stale: false,
     })
 }

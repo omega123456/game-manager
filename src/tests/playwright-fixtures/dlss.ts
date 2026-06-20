@@ -60,14 +60,17 @@ export const DLSS_GAME_STATES: GameDlssState[] = [
   {
     gameId: 1,
     folderResolved: 'D:\\Games\\Elden Ring',
+    // Latest SR (3.7.10) + a non-default SR preset → green pill with "(E)".
     superResolution: { version: '3.7.10', path: 'D:\\Games\\Elden Ring\\nvngx_dlss.dll' },
     frameGeneration: { version: '1.1.0', path: 'D:\\Games\\Elden Ring\\nvngx_dlssg.dll' },
+    srPreset: 5,
     lastScannedAt: '2026-06-17T00:00:00.000Z',
     stale: false,
   },
   {
     gameId: 2,
     folderResolved: 'D:\\Games\\Cyber Nova 2077',
+    // Outdated SR (3.5.10) + Default preset → amber pill, no letter.
     superResolution: { version: '3.5.10', path: 'D:\\Games\\Cyber Nova 2077\\nvngx_dlss.dll' },
     rayReconstruction: {
       version: '3.5.0',

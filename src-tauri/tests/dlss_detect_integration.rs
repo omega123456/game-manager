@@ -207,10 +207,14 @@ fn scan_game_with_persists_state() {
         result.folder_resolved.as_deref(),
         Some(game_dir.path().to_string_lossy().as_ref())
     );
+    // NVAPI is unavailable under `test-utils`, so the scan-time SR preset read
+    // safely falls back to `None` (never touches a real driver).
+    assert!(result.sr_preset.is_none());
 
     // Cached in the session (in-memory) detection store, never in the DB.
     let cached = st.dlss_detection_get(game_id).unwrap();
     assert_eq!(cached.summary.super_resolution.unwrap().version, "3.7");
+    assert!(cached.sr_preset.is_none());
 }
 
 #[test]
@@ -611,9 +615,11 @@ fn build_game_state_hydrates_detected_fields_when_present() {
                 ray_reconstruction: None,
             },
             last_scanned_at: Some("2026-06-20T12:00:00Z".into()),
+            sr_preset: Some(5),
         }),
     );
     assert!(!state.stale);
+    assert_eq!(state.sr_preset, Some(5));
     assert_eq!(state.game_id, 7);
     assert_eq!(state.folder_override.as_deref(), Some("D:/Games/Y"));
     assert_eq!(state.folder_resolved.as_deref(), Some("D:/Games/Y"));
@@ -695,6 +701,7 @@ fn scan_library_with_prunes_deleted_cache_entries_and_keeps_scanning_after_failu
             folder_resolved: Some("stale".into()),
             summary: detect::DetectionSummary::default(),
             last_scanned_at: Some("2026-06-20T00:00:00Z".into()),
+            sr_preset: None,
         },
     );
 

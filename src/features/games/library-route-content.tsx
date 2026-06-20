@@ -2,7 +2,11 @@ import { useMemo, useState } from 'react'
 
 import { useGamesQuery } from '@/lib/queries/use-games'
 import { useGroupsQuery } from '@/lib/queries/use-groups'
-import { useDlssGameStatesQuery } from '@/lib/queries/use-dlss'
+import {
+  useDlssCatalogQuery,
+  useDlssGameStatesQuery,
+  useDlssPresetOptionsQuery,
+} from '@/lib/queries/use-dlss'
 import { useUiStore } from '@/stores/ui-store'
 import { useLaunchStore } from '@/stores/launch-store'
 import { AddGameWizard } from '@/features/games/add-game-wizard'
@@ -46,6 +50,8 @@ export function LibraryRouteContent(): React.JSX.Element {
   const gamesQuery = useGamesQuery()
   const groupsQuery = useGroupsQuery()
   const dlssStatesQuery = useDlssGameStatesQuery()
+  const dlssCatalogQuery = useDlssCatalogQuery()
+  const dlssSrPresetOptionsQuery = useDlssPresetOptionsQuery('dlss')
   const activeLaunchGameId = useLaunchStore((s) => (s.phase === 'idle' ? null : s.gameId))
   const activeLaunchElapsed = useLaunchStore((s) => s.elapsedSeconds)
   const normalizedSearch = searchQuery.trim().toLocaleLowerCase()
@@ -132,6 +138,8 @@ export function LibraryRouteContent(): React.JSX.Element {
                   isPlaying={activeLaunchGameId === game.id}
                   elapsedSeconds={activeLaunchGameId === game.id ? activeLaunchElapsed : 0}
                   dlssState={dlssStateByGameId.get(game.id)}
+                  dlssCatalog={dlssCatalogQuery.data}
+                  dlssSrPresetOptions={dlssSrPresetOptionsQuery.data}
                 />
               ))}
             </div>

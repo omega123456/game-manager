@@ -450,7 +450,11 @@ for (const theme of THEMES) {
     await page.getByTestId('library-grid').waitFor({ state: 'visible' })
     await page.getByTestId('dlss-pills').first().waitFor({ state: 'visible' })
     await waitForLibraryGridImagesSettled(page)
-    await scrollRouteOutletToTop(page)
-    await expect(page).toHaveScreenshot(`library-cards-dlss-pills-${theme}.png`)
+    // Frame a single card so the (below-the-fold) DLSS pills are captured. Alan
+    // Wake 2 carries a latest SR pill with a preset letter "(E)" plus an outdated
+    // FG pill — exercising both the green/amber color-coding and the letter.
+    const card = page.locator('article:has([aria-label="Open Alan Wake 2"])')
+    await card.scrollIntoViewIfNeeded()
+    await expect(card).toHaveScreenshot(`library-cards-dlss-pills-${theme}.png`)
   })
 }

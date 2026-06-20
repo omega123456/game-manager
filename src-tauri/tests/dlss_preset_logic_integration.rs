@@ -25,7 +25,7 @@ use game_manager_lib::dlss::nvapi::presets::{
     self, game_identity, override_setting_id, setting_id,
 };
 use game_manager_lib::dlss::DlssError;
-use game_manager_lib::domain::{DetectedDll, MonitorMode, PresetKind};
+use game_manager_lib::domain::{DetectedDll, GamePresetState, MonitorMode, PresetKind};
 use game_manager_lib::state::AppState;
 
 // ---------------------------------------------------------------------------
@@ -870,6 +870,7 @@ fn game_identity_uses_folder_override_and_detected_dll_parent_folders() {
                 }),
             },
             last_scanned_at: Some("2026-06-20T09:00:00Z".to_string()),
+            sr_preset: None,
         },
     );
 
@@ -909,6 +910,7 @@ fn game_identity_ignores_missing_folder_override_and_missing_detected_parents() 
                 ray_reconstruction: None,
             },
             last_scanned_at: None,
+            sr_preset: None,
         },
     );
 
@@ -1007,4 +1009,78 @@ fn game_set_impl_is_unsupported_in_test_builds() {
     let id = insert_game(&state, "G", "C:/g/g.exe", None);
     let err = presets::set_game_preset_impl(&state, id, PresetKind::Dlss, 0x4).unwrap_err();
     assert!(matches!(err, DlssError::Unsupported));
+}
+
+#[test]
+fn sr_preset_for_pill_maps_each_outcome() {
+    // A matched profile yields its value (even Default = 0).
+    assert_eq!(
+        presets::sr_preset_for_pill(Ok(GamePresetState {
+            available: true,
+            value: 5,
+        })),
+        Some(5)
+    );
+    // No matched profile → no letter.
+    assert_eq!(
+        presets::sr_preset_for_pill(Ok(GamePresetState {
+            available: false,
+            value: 0,
+        })),
+        None
+    );
+    // Any NVAPI error (e.g. no driver) collapses to None.
+    assert_eq!(
+        presets::sr_preset_for_pill(Err(DlssError::Unsupported)),
+        None
+    );
+}
+
+#[test]
+fn read_game_sr_preset_is_none_in_test_builds() {
+    // NVAPI is unavailable under `test-utils`, so the real-session entry never
+    // reaches a driver and safely yields None (the production scan path).
+    let state = state();
+    let id = insert_game(&state, "G", "C:/g/g.exe", None);
+    assert_eq!(presets::read_game_sr_preset(&state, id), None);
+}
+
+#[test]
+fn sr_preset_pill_value_reflects_matched_profile_over_mock_driver() {
+    // The surrounding functionality of the pill read, exercised against a MOCKED
+    // driver: a matched SR profile with a custom preset surfaces that value.
+    let state = state();
+    let id = insert_game(&state, "My Game", "C:/Games/MyGame/mygame.exe", None);
+    let profiles = vec![profile(20, "My Game", &["mygame.exe"])];
+    let driver = FakeDriver::new(1, profiles)
+        .with_setting(20, SETTING_ID_DLSS_SR_OVERRIDE, 1)
+        .with_setting(20, SETTING_ID_DLSS_SR, 0x5);
+    let drs = orchestrator(driver);
+
+    let value = presets::sr_preset_for_pill(presets::get_game_preset_for(
+        &drs,
+        &state,
+        id,
+        PresetKind::Dlss,
+    ));
+    assert_eq!(value, Some(0x5));
+}
+
+#[test]
+fn sr_preset_pill_value_is_none_without_matched_profile() {
+    // No driver profile matches the game → the pill shows no preset letter.
+    let state = state();
+    let id = insert_game(&state, "My Game", "C:/Games/MyGame/mygame.exe", None);
+    let drs = orchestrator(FakeDriver::new(
+        1,
+        vec![profile(20, "Other", &["other.exe"])],
+    ));
+
+    let value = presets::sr_preset_for_pill(presets::get_game_preset_for(
+        &drs,
+        &state,
+        id,
+        PresetKind::Dlss,
+    ));
+    assert_eq!(value, None);
 }

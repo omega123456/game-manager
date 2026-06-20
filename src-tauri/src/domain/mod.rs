@@ -782,7 +782,11 @@ pub struct DetectedDll {
     pub md5: Option<String>,
 }
 
-/// Per-game detection state — cached, cheap, and free of any NVAPI work.
+/// Per-game detection state — cached in memory and recomputed on every launch.
+///
+/// Detection itself is filesystem-only; the optional `sr_preset` is the one
+/// NVAPI-sourced field, read during the (background) scan so the library pills
+/// can show the per-game Super Resolution preset without a live read per card.
 #[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GameDlssState {
@@ -806,6 +810,11 @@ pub struct GameDlssState {
     /// Timestamp of the last scan (RFC 3339), if ever scanned.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub last_scanned_at: Option<String>,
+    /// Per-game DLSS Super Resolution preset value (NVAPI), read during the scan
+    /// when SR is detected and a matching driver profile exists. `None` when
+    /// unavailable; `0` is Default. Drives the preset letter on the library pill.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sr_preset: Option<u32>,
     /// Whether the cached state is stale and should be re-scanned.
     pub stale: bool,
 }

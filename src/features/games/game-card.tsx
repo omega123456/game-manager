@@ -1,7 +1,7 @@
 import { useState } from 'react'
 
 import type { Game, Group } from '@/types/domain'
-import type { GameDlssState } from '@/types/dlss'
+import type { DllCatalog, GameDlssState, PresetOption } from '@/types/dlss'
 import { Icon } from '@/components/ui/icon'
 import { cn } from '@/lib/utils'
 import { DlssPills } from '@/features/dlss/dlss-pills'
@@ -20,6 +20,10 @@ export interface GameCardProps {
   elapsedSeconds?: number
   /** Cached DLSS detection state, used to render version pills. */
   dlssState?: GameDlssState
+  /** Version catalog, used to color the DLSS pills by freshness. */
+  dlssCatalog?: DllCatalog
+  /** Bundled SR preset options, used to render the SR pill's preset letter. */
+  dlssSrPresetOptions?: PresetOption[]
 }
 
 export function GameCard({
@@ -29,6 +33,8 @@ export function GameCard({
   isPlaying = false,
   elapsedSeconds = 0,
   dlssState,
+  dlssCatalog,
+  dlssSrPresetOptions,
 }: GameCardProps): React.JSX.Element {
   const meta = getLibraryMeta(game.totalPlaytimeSeconds, game.lastPlayedAt)
   const coverUrl = toCoverImageUrl(game.imagePath)
@@ -63,7 +69,12 @@ export function GameCard({
               <span className="font-mono tabular-nums">{formatElapsed(elapsedSeconds)}</span>
             </span>
           ) : null}
-          <DlssPills state={dlssState} hasPlayingPip={isPlaying} />
+          <DlssPills
+            state={dlssState}
+            hasPlayingPip={isPlaying}
+            catalog={dlssCatalog}
+            srPresetOptions={dlssSrPresetOptions}
+          />
           {coverUrl && !coverFailed ? (
             <img
               src={coverUrl}

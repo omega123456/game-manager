@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 
 import { GameCard } from '@/features/games/game-card'
 import type { Game, Group } from '@/types/domain'
+import type { DllCatalog, PresetOption } from '@/types/dlss'
 
 const GROUPS: Group[] = [
   { id: 1, name: 'HDR Games', scriptIds: [], gameIds: [] },
@@ -118,6 +119,46 @@ describe('GameCard', () => {
   it('renders no pills when DLSS state is absent', () => {
     render(<GameCard game={BASE_GAME} groups={GROUPS} />)
     expect(screen.queryByTestId('dlss-pills')).not.toBeInTheDocument()
+  })
+
+  it('forwards the catalog and SR preset options to the pills', () => {
+    const catalog: DllCatalog = {
+      superResolution: [
+        {
+          type: 'superResolution',
+          version: '3.7.10',
+          versionNumber: 3710,
+          label: '3.7.10',
+          md5: 'm',
+          zipMd5: 'z',
+          downloadUrl: 'https://example.test/x.zip',
+          fileSizeBytes: 1,
+          zipSizeBytes: 1,
+          isSignatureValid: true,
+          isDownloaded: true,
+        },
+      ],
+      frameGeneration: [],
+      rayReconstruction: [],
+      source: 'static',
+    }
+    const presetOptions: PresetOption[] = [{ value: 5, name: 'Preset E', deprecated: false }]
+    render(
+      <GameCard
+        game={BASE_GAME}
+        groups={GROUPS}
+        dlssState={{
+          gameId: 1,
+          superResolution: { version: '3.7.10', path: 'a' },
+          srPreset: 5,
+          stale: false,
+        }}
+        dlssCatalog={catalog}
+        dlssSrPresetOptions={presetOptions}
+      />
+    )
+    const sr = screen.getByText(/SR 3\.7 \(E\)/)
+    expect(sr).toHaveClass('text-success')
   })
 
   it('removes a broken cover image instead of showing the browser fallback', async () => {
