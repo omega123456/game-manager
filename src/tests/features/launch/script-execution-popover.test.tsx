@@ -159,6 +159,7 @@ describe('ScriptExecutionPopover', () => {
     expect(within(beforeRow).getByText('Auto-Save Manager')).toBeInTheDocument()
     expect(within(beforeRow).getByText('Succeeded')).toBeInTheDocument()
     expect(screen.getByTestId('script-execution-status-1')).toHaveClass('text-emerald-700')
+    expect(screen.getByTestId('script-execution-icon-1')).toHaveClass('text-emerald-700')
     expect(within(beforeRow).getByText('Direct · Requires SaveLib')).toBeInTheDocument()
     expect(within(beforeRow).getByText('check_circle')).toBeInTheDocument()
 
@@ -166,6 +167,7 @@ describe('ScriptExecutionPopover', () => {
     expect(within(afterRow).getByText('HDR Toggle')).toBeInTheDocument()
     expect(within(afterRow).getByText('Running')).toBeInTheDocument()
     expect(screen.getByTestId('script-execution-status-2')).toHaveClass('text-primary')
+    expect(screen.getByTestId('script-execution-icon-2')).toHaveClass('text-primary')
     expect(
       within(afterRow).getByText('Group: Display Tools · No utilities required')
     ).toBeInTheDocument()
@@ -176,6 +178,7 @@ describe('ScriptExecutionPopover', () => {
     expect(within(exitRow).getByText('Restore HDR')).toBeInTheDocument()
     expect(within(exitRow).getByText('Pending')).toBeInTheDocument()
     expect(screen.getByTestId('script-execution-status-3')).toHaveClass('text-amber-700')
+    expect(screen.getByTestId('script-execution-icon-3')).toHaveClass('text-amber-700')
     expect(within(exitRow).getByText('Global · Requires Cleanup')).toBeInTheDocument()
     expect(within(exitRow).getByText('radio_button_unchecked')).toBeInTheDocument()
   })
@@ -213,6 +216,7 @@ describe('ScriptExecutionPopover', () => {
     expect(await screen.findByText('Retained session')).toBeInTheDocument()
     expect(screen.getByText('1 script · 1 failed')).toBeInTheDocument()
     expect(screen.getByTestId('script-execution-status-9')).toHaveClass('text-destructive')
+    expect(screen.getByTestId('script-execution-icon-9')).toHaveClass('text-destructive')
     expect(screen.getByTestId('script-phase-before')).toHaveTextContent('Validate mods')
     expect(screen.getByTestId('script-phase-after')).toHaveTextContent(
       'No scripts queued after process detection.'

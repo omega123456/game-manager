@@ -10,11 +10,18 @@ export interface PhaseMeta {
   icon: string
 }
 
+/** Material Symbols glyph per editor phase key — shared with launch execution UI. */
+export const PHASE_ICONS = {
+  beforeLaunch: 'play_arrow',
+  afterLaunch: 'bolt',
+  onExit: 'logout',
+} as const satisfies Record<PhaseKey, string>
+
 /** Phase metadata in execution order, used by both the editor and the list. */
 export const PHASES: readonly PhaseMeta[] = [
-  { key: 'beforeLaunch', label: 'Before Launch', icon: 'play_arrow' },
-  { key: 'afterLaunch', label: 'After Process Detected', icon: 'stop' },
-  { key: 'onExit', label: 'On Exit', icon: 'logout' },
+  { key: 'beforeLaunch', label: 'Before Launch', icon: PHASE_ICONS.beforeLaunch },
+  { key: 'afterLaunch', label: 'After Process Detected', icon: PHASE_ICONS.afterLaunch },
+  { key: 'onExit', label: 'On Exit', icon: PHASE_ICONS.onExit },
 ] as const
 
 /** Human-readable label for a script kind. */

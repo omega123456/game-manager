@@ -105,6 +105,7 @@ describe('phaseMeta', () => {
     expect(SCRIPT_EXECUTION_PHASE_ORDER).toEqual(['before', 'after', 'onExit'])
     expect(phaseMeta('before').label).toBe('Before launch')
     expect(phaseMeta('after').label).toBe('After process detected')
+    expect(phaseMeta('after').icon).toBe('bolt')
     expect(phaseMeta('onExit').label).toBe('On exit')
   })
 })

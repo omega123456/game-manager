@@ -1,3 +1,4 @@
+import { PHASE_ICONS } from '@/features/scripts/script-form-types'
 import type {
   LaunchRun,
   LaunchScriptRecord,
@@ -37,7 +38,7 @@ export const SCRIPT_EXECUTION_PHASES: Record<ScriptPhase, ScriptExecutionPhaseMe
   after: {
     phase: 'after',
     label: 'After process detected',
-    icon: 'bolt',
+    icon: PHASE_ICONS.afterLaunch,
     emptyLabel: 'No scripts queued after process detection.',
   },
   onExit: {

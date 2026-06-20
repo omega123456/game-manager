@@ -19,7 +19,7 @@ import {
   statusMeta,
 } from './script-execution-format'
 
-function statusBadgeClassName(status: LaunchScriptRecord['status']): string {
+function statusToneClassName(status: LaunchScriptRecord['status']): string {
   switch (status) {
     case 'succeeded':
       return 'border-emerald-500/25 bg-emerald-500/12 text-emerald-700 dark:text-emerald-300'
@@ -55,8 +55,20 @@ function ScriptExecutionRow({ record }: { record: LaunchScriptRecord }): React.J
     >
       <div className="flex items-start justify-between gap-3">
         <div className="flex min-w-0 items-start gap-3">
-          <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-border/80 bg-surface-high/70 text-muted-foreground">
-            <Icon name={status.icon} className="text-[18px]" />
+          <span
+            className={cn(
+              'mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full border',
+              statusToneClassName(record.status)
+            )}
+            data-testid={`script-execution-icon-${record.id}`}
+          >
+            <Icon
+              name={status.icon}
+              className={cn(
+                'text-[18px]',
+                record.status === 'running' && 'motion-safe:animate-spin'
+              )}
+            />
           </span>
           <div className="min-w-0 space-y-1">
             <p className="truncate text-sm font-semibold text-foreground">{record.name}</p>
@@ -74,7 +86,7 @@ function ScriptExecutionRow({ record }: { record: LaunchScriptRecord }): React.J
             variant="outline"
             className={cn(
               'px-2 py-1 text-[11px] font-medium uppercase tracking-[0.18em]',
-              statusBadgeClassName(record.status)
+              statusToneClassName(record.status)
             )}
             data-testid={`script-execution-status-${record.id}`}
           >
