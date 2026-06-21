@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 
 import { useGamesQuery } from '@/lib/queries/use-games'
 import { useGroupsQuery } from '@/lib/queries/use-groups'
@@ -11,13 +11,20 @@ import { useUiStore } from '@/stores/ui-store'
 import { useLaunchStore } from '@/stores/launch-store'
 import { AddGameWizard } from '@/features/games/add-game-wizard'
 import { CurrentlyPlayingHero } from '@/features/games/currently-playing-hero'
-import { GameCard } from '@/features/games/game-card'
 import { GameDetailModal } from '@/features/games/game-detail-modal'
+import { LibraryGrid } from '@/features/games/library-grid'
 import { LibraryToolbar } from '@/features/games/library-toolbar'
 import { LibraryEmptyState, LibraryLoadingState } from '@/features/games/library-states'
 import type { LibrarySortKey } from '@/features/games/library-types'
-import type { Game } from '@/types/domain'
+import type { Game, Group } from '@/types/domain'
 import type { GameDlssState } from '@/types/dlss'
+
+/**
+ * Stable empty-array fallback for the groups query. A fresh `?? []` allocation
+ * on every render would give each `GameCard` a new `groups` reference, defeating
+ * its `React.memo` and forcing idle cards to re-render on the 1 Hz launch tick.
+ */
+const EMPTY_GROUPS: Group[] = []
 
 function compareByRecent(a: Game, b: Game): number {
   const left = a.lastPlayedAt ? new Date(a.lastPlayedAt).getTime() : 0
@@ -53,7 +60,6 @@ export function LibraryRouteContent(): React.JSX.Element {
   const dlssCatalogQuery = useDlssCatalogQuery()
   const dlssSrPresetOptionsQuery = useDlssPresetOptionsQuery('dlss')
   const activeLaunchGameId = useLaunchStore((s) => (s.phase === 'idle' ? null : s.gameId))
-  const activeLaunchElapsed = useLaunchStore((s) => s.elapsedSeconds)
   const normalizedSearch = searchQuery.trim().toLocaleLowerCase()
 
   const visibleGames = useMemo(() => {
@@ -96,11 +102,14 @@ export function LibraryRouteContent(): React.JSX.Element {
     return map
   }, [dlssStatesQuery.data])
 
-  const openAddGame = () => setActiveOverlay('wizard')
-  const openGame = (gameId: number) => {
-    setSelectedGameId(gameId)
-    setActiveOverlay('detail')
-  }
+  const openAddGame = useCallback(() => setActiveOverlay('wizard'), [setActiveOverlay])
+  const openGame = useCallback(
+    (gameId: number) => {
+      setSelectedGameId(gameId)
+      setActiveOverlay('detail')
+    },
+    [setSelectedGameId, setActiveOverlay]
+  )
 
   return (
     <>
@@ -111,7 +120,7 @@ export function LibraryRouteContent(): React.JSX.Element {
           visibleCount={visibleGames.length}
           searchQuery={searchQuery}
           sortKey={sortKey}
-          groups={groupsQuery.data ?? []}
+          groups={groupsQuery.data ?? EMPTY_GROUPS}
           groupFilter={groupFilter}
           onGroupFilterChange={setGroupFilter}
           onSortChange={setSortKey}
@@ -125,24 +134,15 @@ export function LibraryRouteContent(): React.JSX.Element {
             <LibraryEmptyState hasSearch={normalizedSearch.length > 0} onAddGame={openAddGame} />
           ) : null}
           {!gamesQuery.isLoading && visibleGames.length > 0 ? (
-            <div
-              className="grid gap-4 [grid-template-columns:repeat(auto-fill,220px)]"
-              data-testid="library-grid"
-            >
-              {visibleGames.map((game) => (
-                <GameCard
-                  key={game.id}
-                  game={game}
-                  groups={groupsQuery.data ?? []}
-                  onOpen={openGame}
-                  isPlaying={activeLaunchGameId === game.id}
-                  elapsedSeconds={activeLaunchGameId === game.id ? activeLaunchElapsed : 0}
-                  dlssState={dlssStateByGameId.get(game.id)}
-                  dlssCatalog={dlssCatalogQuery.data}
-                  dlssSrPresetOptions={dlssSrPresetOptionsQuery.data}
-                />
-              ))}
-            </div>
+            <LibraryGrid
+              games={visibleGames}
+              groups={groupsQuery.data ?? EMPTY_GROUPS}
+              onOpen={openGame}
+              activeLaunchGameId={activeLaunchGameId}
+              dlssStateByGameId={dlssStateByGameId}
+              dlssCatalog={dlssCatalogQuery.data}
+              dlssSrPresetOptions={dlssSrPresetOptionsQuery.data}
+            />
           ) : null}
         </section>
       </div>

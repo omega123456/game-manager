@@ -17,12 +17,69 @@ beforeEach(() => {
 // Polyfills for jsdom
 // ---------------------------------------------------------------------------
 
-if (typeof globalThis.ResizeObserver === 'undefined') {
-  globalThis.ResizeObserver = class ResizeObserver {
-    observe() {}
-    unobserve() {}
-    disconnect() {}
-  } as unknown as typeof globalThis.ResizeObserver
+// A ResizeObserver that synchronously invokes its callback on `observe`, so
+// consumers that rely on the initial measurement (e.g. `@tanstack/react-virtual`)
+// receive the polyfilled element dimensions in jsdom instead of a stale 0×0 rect.
+globalThis.ResizeObserver = class ResizeObserver {
+  private readonly callback: ResizeObserverCallback
+  constructor(callback: ResizeObserverCallback) {
+    this.callback = callback
+  }
+  observe(target: Element): void {
+    this.callback(
+      [{ target, contentRect: target.getBoundingClientRect() } as ResizeObserverEntry],
+      this as unknown as ResizeObserver
+    )
+  }
+  unobserve(): void {}
+  disconnect(): void {}
+} as unknown as typeof globalThis.ResizeObserver
+
+// jsdom reports zero layout dimensions, which leaves `@tanstack/react-virtual`
+// with an empty viewport (no rows rendered). Give every element a deterministic
+// non-zero size so the grid virtualizer measures a usable window: a wide content
+// width (so the column count derives) and a tall viewport (so modest datasets
+// render fully while large datasets still windowed).
+const VIRTUAL_TEST_WIDTH = 1200
+const VIRTUAL_TEST_HEIGHT = 2400
+Object.defineProperty(HTMLElement.prototype, 'clientWidth', {
+  configurable: true,
+  get() {
+    return VIRTUAL_TEST_WIDTH
+  },
+})
+Object.defineProperty(HTMLElement.prototype, 'clientHeight', {
+  configurable: true,
+  get() {
+    return VIRTUAL_TEST_HEIGHT
+  },
+})
+Object.defineProperty(HTMLElement.prototype, 'offsetWidth', {
+  configurable: true,
+  get() {
+    return VIRTUAL_TEST_WIDTH
+  },
+})
+Object.defineProperty(HTMLElement.prototype, 'offsetHeight', {
+  configurable: true,
+  get() {
+    return VIRTUAL_TEST_HEIGHT
+  },
+})
+Element.prototype.getBoundingClientRect = function getBoundingClientRect(): DOMRect {
+  const width = VIRTUAL_TEST_WIDTH
+  const height = VIRTUAL_TEST_HEIGHT
+  return {
+    width,
+    height,
+    top: 0,
+    left: 0,
+    right: width,
+    bottom: height,
+    x: 0,
+    y: 0,
+    toJSON: () => ({}),
+  } as DOMRect
 }
 
 if (typeof window.matchMedia === 'undefined') {

@@ -109,6 +109,8 @@ function SidebarLaunchCard(): React.JSX.Element | null {
             src={coverUrl}
             alt=""
             aria-hidden="true"
+            loading="lazy"
+            decoding="async"
             className="absolute inset-0 h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
             onError={() => {
               if (coverUrl) {

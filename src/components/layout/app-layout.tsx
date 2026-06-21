@@ -1,6 +1,8 @@
+import { useRef } from 'react'
 import { Outlet } from 'react-router-dom'
 
 import { Sidebar } from '@/components/layout/sidebar'
+import { ScrollContainerProvider } from '@/components/layout/scroll-container-context'
 import { TopBar } from '@/components/layout/top-bar'
 import { LaunchBanner } from '@/features/launch/launch-banner'
 import { useLaunchEvents } from '@/features/launch/use-launch-events'
@@ -16,6 +18,8 @@ export function AppLayout(): React.JSX.Element {
   useLaunchEvents()
   useDlssLibraryScanSync()
 
+  const mainRef = useRef<HTMLElement | null>(null)
+
   return (
     <div
       data-testid="app-root"
@@ -26,8 +30,10 @@ export function AppLayout(): React.JSX.Element {
       </div>
       <TopBar />
       <LaunchBanner />
-      <main className="overflow-y-auto" data-testid="route-outlet">
-        <Outlet />
+      <main ref={mainRef} className="overflow-y-auto" data-testid="route-outlet">
+        <ScrollContainerProvider scrollRef={mainRef}>
+          <Outlet />
+        </ScrollContainerProvider>
       </main>
     </div>
   )

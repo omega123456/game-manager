@@ -111,6 +111,8 @@ function HeroCard({
           src={coverUrl}
           alt=""
           aria-hidden
+          loading="lazy"
+          decoding="async"
           className="absolute inset-0 h-full w-full scale-105 object-cover blur-md"
           onError={handleCoverError}
         />
@@ -126,8 +128,10 @@ function HeroCard({
         <div className="flex flex-col gap-4 sm:flex-row sm:items-end">
           {showCover ? (
             <img
-              src={coverUrl ?? undefined}
+              src={coverUrl}
               alt={`${displayName} cover art`}
+              loading="lazy"
+              decoding="async"
               className="hidden aspect-3/4 w-32 shrink-0 rounded-[1.1rem] border border-border object-cover shadow-lg sm:block"
               onError={handleCoverError}
             />

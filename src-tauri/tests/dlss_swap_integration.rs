@@ -6,17 +6,19 @@
 
 use std::path::Path;
 
-use game_manager_lib::db::connection::open_in_memory;
-use game_manager_lib::db::repo::games::{self, NewGame};
+use game_manager_lib::db::repo::games;
 use game_manager_lib::dlss::detect::{DetectionResult, DetectionSummary};
 use game_manager_lib::dlss::storage;
 use game_manager_lib::dlss::swap::{
     apply_to_all_impl, apply_to_game_impl, count_applicable_impl, ApplyProgressSink,
     NoopApplyProgressSink, SwapTarget,
 };
-use game_manager_lib::domain::{DetectedDll, DllType, MonitorMode};
+use game_manager_lib::domain::{DetectedDll, DllType};
 use game_manager_lib::state::AppState;
 use tempfile::TempDir;
+
+mod common;
+use common::{new_game, state_with_app_data};
 
 /// A recording apply-progress sink.
 struct Recorder {
@@ -26,21 +28,6 @@ struct Recorder {
 impl ApplyProgressSink for Recorder {
     fn emit(&self, result: &game_manager_lib::domain::ApplyResult) {
         self.seen.lock().unwrap().push(result.game_id);
-    }
-}
-
-fn state_with_app_data(dir: &Path) -> AppState {
-    AppState::new_with_app_data_dir(open_in_memory().unwrap(), dir.to_path_buf())
-}
-
-fn new_game(launch_target: &str) -> NewGame {
-    NewGame {
-        name: "Test Game".into(),
-        launch_target: launch_target.into(),
-        monitor_mode: MonitorMode::Tree,
-        monitor_process_name: None,
-        arguments: None,
-        image_path: None,
     }
 }
 

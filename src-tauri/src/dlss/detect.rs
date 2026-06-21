@@ -41,9 +41,11 @@ pub fn md5_hex(bytes: &[u8]) -> String {
     let mut hasher = Md5::new();
     hasher.update(bytes);
     let digest = hasher.finalize();
+    use std::fmt::Write as _;
     let mut out = String::with_capacity(digest.len() * 2);
     for byte in digest {
-        out.push_str(&format!("{byte:02x}"));
+        // write! into a String is infallible.
+        write!(out, "{byte:02x}").unwrap();
     }
     out
 }
@@ -136,13 +138,21 @@ pub fn resolve_folder(folder_override: Option<&str>, launch_target: &str) -> Opt
     None
 }
 
-/// Recursively find the on-disk path of `dll_type`'s NGX DLL beneath `root`.
+/// Recursively find the on-disk paths of all three NGX DLLs beneath `root` in a
+/// **single** traversal.
 ///
-/// Returns the first match found (depth-first). Symlinks are not followed.
-pub fn find_dll(root: &Path, dll_type: DllType) -> Option<PathBuf> {
-    let filename = dll_type.dll_filename();
+/// Returns an array indexed positionally by [`DllType::ALL`] (SR, FG, RR); each
+/// slot holds the first match found for that type (depth-first). Symlinks are
+/// not followed and filename matching is case-insensitive. The walk short-
+/// circuits once all three types are found.
+pub fn find_all_dlls(root: &Path) -> [Option<PathBuf>; 3] {
+    let mut found: [Option<PathBuf>; 3] = [None, None, None];
+    let mut remaining = DllType::ALL.len();
     let mut stack = vec![root.to_path_buf()];
     while let Some(dir) = stack.pop() {
+        if remaining == 0 {
+            break;
+        }
         let entries = match std::fs::read_dir(&dir) {
             Ok(entries) => entries,
             Err(_) => continue,
@@ -155,18 +165,36 @@ pub fn find_dll(root: &Path, dll_type: DllType) -> Option<PathBuf> {
             };
             if file_type.is_dir() {
                 stack.push(path);
-            } else if file_type.is_file()
-                && path
-                    .file_name()
-                    .and_then(|name| name.to_str())
-                    .map(|name| name.eq_ignore_ascii_case(filename))
-                    .unwrap_or(false)
-            {
-                return Some(path);
+            } else if file_type.is_file() {
+                let Some(name) = path.file_name().and_then(|name| name.to_str()) else {
+                    continue;
+                };
+                for (idx, dll_type) in DllType::ALL.into_iter().enumerate() {
+                    if found[idx].is_none() && name.eq_ignore_ascii_case(dll_type.dll_filename()) {
+                        found[idx] = Some(path.clone());
+                        remaining -= 1;
+                        break;
+                    }
+                }
             }
         }
     }
-    None
+    found
+}
+
+/// Recursively find the on-disk path of `dll_type`'s NGX DLL beneath `root`.
+///
+/// Returns the first match found (depth-first). Symlinks are not followed.
+/// Thin wrapper over [`find_all_dlls`] for single-type callers.
+pub fn find_dll(root: &Path, dll_type: DllType) -> Option<PathBuf> {
+    let idx = DllType::ALL
+        .into_iter()
+        .position(|t| t == dll_type)
+        .expect("DllType::ALL covers every variant");
+    find_all_dlls(root)
+        .into_iter()
+        .nth(idx)
+        .expect("idx is a valid index into the fixed-size find_all_dlls result")
 }
 
 /// Detect every NGX DLL beneath `folder`, matching MD5s against `catalog`.
@@ -181,11 +209,12 @@ pub fn detect_in_folder(
     reader: &dyn FileVersionReader,
 ) -> DlssResult<DetectionSummary> {
     let mut summary = DetectionSummary::default();
-    for dll_type in DllType::ALL {
-        let Some(path) = find_dll(folder, dll_type) else {
+    let found = find_all_dlls(folder);
+    for (idx, dll_type) in DllType::ALL.into_iter().enumerate() {
+        let Some(path) = found[idx].as_ref() else {
             continue;
         };
-        let identity = reader.read(&path)?;
+        let identity = reader.read(path)?;
         let version = match manifest::find_by_md5(catalog, dll_type, &identity.md5) {
             Some(found) => found.version.clone(),
             None => crate::dlss::display_version(&identity.file_version),
@@ -262,28 +291,41 @@ pub fn build_game_state(
     }
 }
 
-/// Scan a single game with a caller-supplied reader and catalog, caching the
-/// result in memory. The runtime entry points ([`scan_game_impl`]) wrap this with
-/// the real reader and the resolved catalog; tests call it with a fake reader.
-pub fn scan_game_with(
-    state: &AppState,
+/// The DB-free, NVAPI-free product of the per-game detection core: the resolved
+/// install folder (as a display string, if any) plus the per-type detection
+/// summary. The stateful orchestration tail ([`finish_game_scan`]) turns this
+/// into a cached [`DetectionResult`] + IPC [`GameDlssState`].
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct CoreDetection {
+    /// The install folder the scan resolved/used, if any.
+    pub folder_resolved: Option<String>,
+    /// The per-type detected DLLs from the single-pass walk.
+    pub summary: DetectionSummary,
+}
+
+/// Pure per-game detection: resolve the install folder from the already-loaded
+/// override + launch target, run the single-pass walk, read identities, and
+/// match the catalog — with **no** [`AppState`] access and **no** NVAPI.
+///
+/// This is the parallel-safe, fake-reader-testable unit. It borrows only the
+/// catalog and reader (both `Send + Sync`) plus owned per-game inputs, so it can
+/// run on a worker thread with no DB lock contention. The stateful tail
+/// (NVAPI SR-preset read, cache write, `GameDlssState` assembly) lives in
+/// [`finish_game_scan`].
+pub fn detect_game_core(
     game_id: i64,
+    game_name: &str,
+    launch_target: &str,
+    folder_override: Option<&str>,
     catalog: &crate::domain::DllCatalog,
     reader: &dyn FileVersionReader,
-) -> DlssResult<GameDlssState> {
-    let game = state
-        .with_db(|conn| crate::db::repo::games::get(conn, game_id))
-        .map_err(DlssError::from)?;
-    let folder_override = state
-        .with_db(|conn| crate::db::repo::dlss::get_folder_override(conn, game_id))
-        .map_err(DlssError::from)?;
-
-    let folder = resolve_folder(folder_override.as_deref(), &game.launch_target);
+) -> DlssResult<CoreDetection> {
+    let folder = resolve_folder(folder_override, launch_target);
     tracing::debug!(
         category = "dlss",
         game_id,
-        game_name = %game.name,
-        launch_target = %game.launch_target,
+        game_name,
+        launch_target,
         folder_override = ?folder_override,
         resolved_folder = ?folder.as_ref().map(|path| path.to_string_lossy().to_string()),
         "dlss dll scan: resolved install folder"
@@ -309,6 +351,29 @@ pub fn scan_game_with(
             .map(|dll| (&dll.version, dll.path.as_str())),
         "dlss dll scan: detection result"
     );
+    Ok(CoreDetection {
+        folder_resolved: folder.as_ref().map(|f| f.to_string_lossy().to_string()),
+        summary,
+    })
+}
+
+/// Stateful orchestration tail wrapping [`detect_game_core`]'s pure result: read
+/// the per-game SR preset via NVAPI (only when SR is present), write the
+/// session-only detection into [`AppState`]'s in-memory cache, and assemble the
+/// IPC [`GameDlssState`].
+///
+/// This is the side-effecting half; it must run on a serialized path (NVAPI is
+/// not thread-safe). Under `test-utils` the NVAPI read collapses to `None`.
+pub fn finish_game_scan(
+    state: &AppState,
+    game_id: i64,
+    folder_override: Option<String>,
+    core: CoreDetection,
+) -> GameDlssState {
+    let CoreDetection {
+        folder_resolved,
+        summary,
+    } = core;
 
     // Read the per-game SR preset (NVAPI) only when an SR DLL is present; the
     // preset is meaningless without it. Any NVAPI failure collapses to `None`,
@@ -320,28 +385,57 @@ pub fn scan_game_with(
     };
 
     let now = chrono::Utc::now().to_rfc3339();
-    let resolved = folder.as_ref().map(|f| f.to_string_lossy().to_string());
     // Detection is session-only: cache it in memory, never in the DB.
     state.dlss_detection_set(
         game_id,
         DetectionResult {
-            folder_resolved: resolved.clone(),
+            folder_resolved: folder_resolved.clone(),
             summary: summary.clone(),
             last_scanned_at: Some(now.clone()),
             sr_preset,
         },
     );
-    Ok(GameDlssState {
+    GameDlssState {
         game_id,
         folder_override,
-        folder_resolved: resolved,
+        folder_resolved,
         super_resolution: summary.super_resolution,
         frame_generation: summary.frame_generation,
         ray_reconstruction: summary.ray_reconstruction,
         last_scanned_at: Some(now),
         sr_preset,
         stale: false,
-    })
+    }
+}
+
+/// Scan a single game with a caller-supplied reader and catalog, caching the
+/// result in memory. The runtime entry points ([`scan_game_impl`]) wrap this with
+/// the real reader and the resolved catalog; tests call it with a fake reader.
+///
+/// Loads the one game + its folder override from the DB, then delegates to the
+/// shared pure core ([`detect_game_core`]) + orchestration ([`finish_game_scan`]).
+pub fn scan_game_with(
+    state: &AppState,
+    game_id: i64,
+    catalog: &crate::domain::DllCatalog,
+    reader: &dyn FileVersionReader,
+) -> DlssResult<GameDlssState> {
+    let game = state
+        .with_db(|conn| crate::db::repo::games::get(conn, game_id))
+        .map_err(DlssError::from)?;
+    let folder_override = state
+        .with_db(|conn| crate::db::repo::dlss::get_folder_override(conn, game_id))
+        .map_err(DlssError::from)?;
+
+    let core = detect_game_core(
+        game_id,
+        &game.name,
+        &game.launch_target,
+        folder_override.as_deref(),
+        catalog,
+        reader,
+    )?;
+    Ok(finish_game_scan(state, game_id, folder_override, core))
 }
 
 /// Re-scan a single game's folder and persist the detected versions.
@@ -398,25 +492,126 @@ pub fn scan_library_with_progress(
     let games = state
         .with_db(crate::db::repo::games::list)
         .map_err(DlssError::from)?;
+    // Bulk-load every folder override once (8c): this replaces the per-game
+    // `games::get` + `get_folder_override` lock acquisitions that the loop used
+    // to do, leaving the per-game work entirely DB-free (the precondition for
+    // 8b's parallel producer region).
+    let overrides: std::collections::HashMap<i64, String> = state
+        .with_db(crate::db::repo::dlss::list_folder_overrides)
+        .map_err(DlssError::from)?
+        .into_iter()
+        .collect();
     // Drop cached detections for games that no longer exist so deleted games stop
     // counting toward the applicable totals (the cache is the source of truth).
     let live_ids: std::collections::HashSet<i64> = games.iter().map(|game| game.id).collect();
     state.dlss_detection_retain(&live_ids);
     let total = games.len() as u32;
-    let mut scanned: u32 = 0;
-    let mut states = Vec::with_capacity(games.len());
-    for game in games {
-        scanned += 1;
-        match scan_game_with(state, game.id, catalog, reader) {
-            Ok(game_state) => {
-                progress.on_game(scanned, total, &game_state);
-                states.push(game_state);
-            }
-            Err(err) => {
-                tracing::warn!(category = "dlss", "scan of game {} failed: {err}", game.id);
-            }
-        }
+
+    // 8b: parallelize the DB-free, I/O-bound per-game core across a bounded pool
+    // of scoped producer threads, draining results into a single serialized
+    // consumer that runs the stateful tail (NVAPI + cache write + progress emit).
+    //
+    // Producers borrow only `&catalog`/`&reader` (both `Send + Sync`) and the
+    // pre-loaded `games`/`overrides` (shared-immutable); they pull the next game
+    // index from a shared atomic cursor and emit their pure-core result over a
+    // channel. They never touch `&AppState` or the DB. The consumer (this thread)
+    // owns `&AppState` and runs every stateful side effect serially, so no NVAPI
+    // mutex and no atomic progress counter are needed.
+    if games.is_empty() {
+        return Ok(Vec::new());
     }
+
+    /// The result of one game's pure core, tagged with its source index so the
+    /// consumer can store states in deterministic (pre-parallel) order.
+    struct CoreResult {
+        source_index: usize,
+        game_id: i64,
+        folder_override: Option<String>,
+        core: CoreDetection,
+    }
+
+    let cursor = std::sync::atomic::AtomicUsize::new(0);
+    let (tx, rx) = std::sync::mpsc::channel::<CoreResult>();
+
+    let worker_count = std::thread::available_parallelism()
+        .map(std::num::NonZeroUsize::get)
+        .unwrap_or(1)
+        .min(8)
+        .min(games.len());
+
+    // Slots store each game's final state at its source index for deterministic
+    // ordering even though producers complete out of order (KD-9).
+    let mut slots: Vec<Option<GameDlssState>> = (0..games.len()).map(|_| None).collect();
+    let mut scanned: u32 = 0;
+
+    std::thread::scope(|scope| {
+        // Spawn the bounded producer pool. Each producer loops: claim the next
+        // index via the atomic cursor, run the pure core, and emit the result.
+        for _ in 0..worker_count {
+            let tx = tx.clone();
+            let cursor = &cursor;
+            let games = &games;
+            let overrides = &overrides;
+            scope.spawn(move || loop {
+                let idx = cursor.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                let Some(game) = games.get(idx) else {
+                    break;
+                };
+                let folder_override = overrides.get(&game.id).cloned();
+                // Pure, DB-free per-game core (8a single-pass walk inside).
+                match detect_game_core(
+                    game.id,
+                    &game.name,
+                    &game.launch_target,
+                    folder_override.as_deref(),
+                    catalog,
+                    reader,
+                ) {
+                    Ok(core) => {
+                        // A closed receiver only happens if the consumer panicked;
+                        // stop the worker rather than spinning.
+                        if tx
+                            .send(CoreResult {
+                                source_index: idx,
+                                game_id: game.id,
+                                folder_override,
+                                core,
+                            })
+                            .is_err()
+                        {
+                            break;
+                        }
+                    }
+                    Err(err) => {
+                        tracing::warn!(category = "dlss", "scan of game {} failed: {err}", game.id);
+                    }
+                }
+            });
+        }
+        // Drop the original sender so the channel closes once all producers finish.
+        drop(tx);
+
+        // Single serialized consumer: drains results as producers emit them and
+        // runs each game's stateful tail (NVAPI read + cache write + assembly +
+        // progress emit) on this one thread. `scanned` is a plain monotonic count.
+        for CoreResult {
+            source_index,
+            game_id,
+            folder_override,
+            core,
+        } in rx
+        {
+            let game_state = finish_game_scan(state, game_id, folder_override, core);
+            scanned += 1;
+            progress.on_game(scanned, total, &game_state);
+            slots[source_index] = Some(game_state);
+        }
+    });
+
+    // Collect successfully-scanned states in deterministic source order; games
+    // whose pure core failed leave a `None` slot and are skipped (matching the
+    // sequential path's `continue`-on-error behavior).
+    let states = slots.into_iter().flatten().collect();
     Ok(states)
 }
 

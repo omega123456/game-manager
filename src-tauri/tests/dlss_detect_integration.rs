@@ -5,32 +5,14 @@
 //! fake [`FileVersionReader`] (no real signed DLLs needed).
 
 use std::collections::HashMap;
-use std::path::{Path, PathBuf};
 
-use game_manager_lib::db::connection::open_in_memory;
-use game_manager_lib::db::repo::games::{self, NewGame};
+use game_manager_lib::db::repo::games;
 use game_manager_lib::dlss::detect::{self, DllIdentity, FileVersionReader, RealFileVersionReader};
-use game_manager_lib::domain::{CatalogSource, DllCatalog, DllType, DllVersion, MonitorMode};
-use game_manager_lib::state::AppState;
+use game_manager_lib::domain::{CatalogSource, DllCatalog, DllType, DllVersion};
 use tempfile::TempDir;
 
-/// A fake reader mapping known absolute paths to canned identities.
-struct FakeReader {
-    map: HashMap<PathBuf, DllIdentity>,
-}
-
-impl FileVersionReader for FakeReader {
-    fn read(&self, path: &Path) -> game_manager_lib::dlss::DlssResult<DllIdentity> {
-        self.map
-            .get(path)
-            .cloned()
-            .ok_or_else(|| game_manager_lib::dlss::DlssError::Io("no identity".into()))
-    }
-}
-
-fn state_with_app_data(dir: &Path) -> AppState {
-    AppState::new_with_app_data_dir(open_in_memory().unwrap(), dir.to_path_buf())
-}
+mod common;
+use common::{new_game, state_with_app_data, FakeReader};
 
 fn catalog_with(version: DllVersion) -> DllCatalog {
     let dll_type = version.dll_type;
@@ -62,17 +44,6 @@ fn sr_version(md5: &str) -> DllVersion {
         zip_size_bytes: 1,
         is_signature_valid: true,
         is_downloaded: false,
-    }
-}
-
-fn new_game(launch_target: &str) -> NewGame {
-    NewGame {
-        name: "Test Game".into(),
-        launch_target: launch_target.into(),
-        monitor_mode: MonitorMode::Tree,
-        monitor_process_name: None,
-        arguments: None,
-        image_path: None,
     }
 }
 
@@ -751,6 +722,157 @@ fn clear_cancelled_clears_a_pending_download_cancel() {
     assert!(is_cancel_pending(DllType::SuperResolution, "3.7"));
     clear_cancelled(DllType::SuperResolution, "3.7");
     assert!(!is_cancel_pending(DllType::SuperResolution, "3.7"));
+}
+
+#[test]
+fn find_all_dlls_single_pass_returns_each_type_first_match() {
+    let dir = TempDir::new().unwrap();
+    let nested = dir.path().join("bin");
+    std::fs::create_dir_all(&nested).unwrap();
+    let sr = dir.path().join("nvngx_dlss.dll");
+    let fg = nested.join("nvngx_dlssg.dll");
+    let rr = nested.join("nvngx_dlssd.dll");
+    std::fs::write(&sr, b"sr").unwrap();
+    std::fs::write(&fg, b"fg").unwrap();
+    std::fs::write(&rr, b"rr").unwrap();
+
+    // Single traversal yields all three positionally (SR, FG, RR).
+    let found = detect::find_all_dlls(dir.path());
+    assert_eq!(found[0], Some(sr));
+    assert_eq!(found[1], Some(fg));
+    assert_eq!(found[2], Some(rr));
+}
+
+#[test]
+fn find_all_dlls_none_present_returns_all_none() {
+    let dir = TempDir::new().unwrap();
+    std::fs::write(dir.path().join("readme.txt"), b"x").unwrap();
+    let found = detect::find_all_dlls(dir.path());
+    assert_eq!(found, [None, None, None]);
+}
+
+#[test]
+fn find_all_dlls_first_match_wins_per_type() {
+    // Two SR DLLs in different subdirs; first depth-first match wins, and the
+    // result is stable (the walk returns exactly one path for the type).
+    let dir = TempDir::new().unwrap();
+    let a = dir.path().join("a");
+    let b = dir.path().join("b");
+    std::fs::create_dir_all(&a).unwrap();
+    std::fs::create_dir_all(&b).unwrap();
+    std::fs::write(a.join("nvngx_dlss.dll"), b"x").unwrap();
+    std::fs::write(b.join("nvngx_dlss.dll"), b"x").unwrap();
+
+    let found = detect::find_all_dlls(dir.path());
+    let chosen = found[0].as_ref().expect("an SR dll should be found");
+    assert!(chosen.ends_with("nvngx_dlss.dll"));
+    // find_dll delegates to the same single pass and agrees.
+    assert_eq!(
+        detect::find_dll(dir.path(), DllType::SuperResolution).as_ref(),
+        Some(chosen)
+    );
+}
+
+#[test]
+fn detect_game_core_is_pure_and_resolves_via_override() {
+    // The pure core needs no AppState: only a fake reader, catalog, and the
+    // already-loaded per-game inputs (override + launch target).
+    let dir = TempDir::new().unwrap();
+    let dll = dir.path().join("nvngx_dlss.dll");
+    let bytes = b"core-dll";
+    std::fs::write(&dll, bytes).unwrap();
+    let md5 = detect::md5_hex(bytes);
+
+    let catalog = catalog_with(sr_version(&md5));
+    let mut map = HashMap::new();
+    map.insert(
+        dll,
+        DllIdentity {
+            md5,
+            file_version: "3.7.0.0".into(),
+        },
+    );
+    let reader = FakeReader { map };
+
+    let core = detect::detect_game_core(
+        1,
+        "Game",
+        "steam://run/1",
+        Some(dir.path().to_str().unwrap()),
+        &catalog,
+        &reader,
+    )
+    .unwrap();
+    assert_eq!(
+        core.folder_resolved.as_deref(),
+        Some(dir.path().to_string_lossy().as_ref())
+    );
+    assert_eq!(core.summary.super_resolution.unwrap().version, "3.7");
+}
+
+#[test]
+fn detect_game_core_no_folder_is_empty() {
+    let catalog = catalog_with(sr_version("abc"));
+    let reader = FakeReader {
+        map: HashMap::new(),
+    };
+    let core =
+        detect::detect_game_core(1, "Game", "steam://run/1", None, &catalog, &reader).unwrap();
+    assert!(core.folder_resolved.is_none());
+    assert_eq!(core.summary, detect::DetectionSummary::default());
+}
+
+#[test]
+fn scan_library_uses_bulk_overrides_for_each_game() {
+    // Two games: one resolves its folder via a stored override (URI launch
+    // target, no exe parent), the other has no override and a URI target. The
+    // library scan must reuse the already-loaded games + bulk overrides and
+    // still detect the override-resolved game's DLL.
+    let app_data = TempDir::new().unwrap();
+    let game_dir = TempDir::new().unwrap();
+    let st = state_with_app_data(app_data.path());
+
+    let dll = game_dir.path().join("nvngx_dlss.dll");
+    let bytes = b"bulk-dll";
+    std::fs::write(&dll, bytes).unwrap();
+    let md5 = detect::md5_hex(bytes);
+
+    let with_override = st
+        .with_db(|c| games::create(c, &new_game("steam://run/1")))
+        .unwrap();
+    st.with_db(|c| {
+        game_manager_lib::db::repo::dlss::set_folder_override(
+            c,
+            with_override,
+            Some(game_dir.path().to_str().unwrap()),
+        )
+    })
+    .unwrap();
+    st.with_db(|c| games::create(c, &new_game("steam://run/2")))
+        .unwrap();
+
+    let catalog = catalog_with(sr_version(&md5));
+    let mut map = HashMap::new();
+    map.insert(
+        dll,
+        DllIdentity {
+            md5,
+            file_version: "3.7.0.0".into(),
+        },
+    );
+    let reader = FakeReader { map };
+
+    let states = detect::scan_library_with(&st, &catalog, &reader).unwrap();
+    assert_eq!(states.len(), 2);
+    let overridden = states.iter().find(|s| s.game_id == with_override).unwrap();
+    assert_eq!(
+        overridden.folder_override.as_deref(),
+        Some(game_dir.path().to_string_lossy().as_ref())
+    );
+    assert_eq!(overridden.super_resolution.as_ref().unwrap().version, "3.7");
+    let plain = states.iter().find(|s| s.game_id != with_override).unwrap();
+    assert!(plain.super_resolution.is_none());
+    assert!(plain.folder_override.is_none());
 }
 
 #[test]

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { memo, useState } from 'react'
 
 import type { Game, Group } from '@/types/domain'
 import type { DllCatalog, GameDlssState, PresetOption } from '@/types/dlss'
@@ -7,7 +7,7 @@ import { cn } from '@/lib/utils'
 import { DlssPills } from '@/features/dlss/dlss-pills'
 import { GameCardGroups } from '@/features/games/game-card-groups'
 import { getLibraryMeta } from '@/features/games/library-format'
-import { formatElapsed } from '@/features/launch/launch-format'
+import { PlayingPipTimer } from '@/features/games/playing-pip-timer'
 import { toCoverImageUrl } from '@/lib/asset-url'
 
 export interface GameCardProps {
@@ -16,8 +16,6 @@ export interface GameCardProps {
   onOpen?: (gameId: number) => void
   /** True when this game is the active launch session. */
   isPlaying?: boolean
-  /** Live elapsed seconds for the active session (only meaningful when playing). */
-  elapsedSeconds?: number
   /** Cached DLSS detection state, used to render version pills. */
   dlssState?: GameDlssState
   /** Version catalog, used to color the DLSS pills by freshness. */
@@ -26,12 +24,11 @@ export interface GameCardProps {
   dlssSrPresetOptions?: PresetOption[]
 }
 
-export function GameCard({
+function GameCardComponent({
   game,
   groups,
   onOpen,
   isPlaying = false,
-  elapsedSeconds = 0,
   dlssState,
   dlssCatalog,
   dlssSrPresetOptions,
@@ -39,6 +36,7 @@ export function GameCard({
   const meta = getLibraryMeta(game.totalPlaytimeSeconds, game.lastPlayedAt)
   const coverUrl = toCoverImageUrl(game.imagePath)
   const [failedCoverUrl, setFailedCoverUrl] = useState<string | null>(null)
+  const [coverLoaded, setCoverLoaded] = useState(false)
   const coverFailed = coverUrl !== null && failedCoverUrl === coverUrl
 
   return (
@@ -65,8 +63,7 @@ export function GameCard({
                 className="h-2 w-2 rounded-full bg-secondary motion-safe:animate-pulse"
                 aria-hidden
               />
-              Playing ·{' '}
-              <span className="font-mono tabular-nums">{formatElapsed(elapsedSeconds)}</span>
+              Playing · <PlayingPipTimer />
             </span>
           ) : null}
           <DlssPills
@@ -79,11 +76,26 @@ export function GameCard({
             <img
               src={coverUrl}
               alt={`${game.name} cover art`}
-              className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.03]"
-              onError={() => {
-                if (coverUrl) {
-                  setFailedCoverUrl(coverUrl)
+              loading="lazy"
+              decoding="async"
+              className={cn(
+                'h-full w-full object-cover transition-[transform,opacity] duration-300 group-hover:scale-[1.03]',
+                coverLoaded ? 'opacity-100' : 'opacity-0'
+              )}
+              ref={(node) => {
+                // Cached/already-decoded images may never fire `onLoad`, which
+                // would leave the cover stuck at opacity-0. Reveal immediately
+                // when the element is already complete on attach.
+                if (node?.complete) {
+                  setCoverLoaded(true)
                 }
+              }}
+              onLoad={() => setCoverLoaded(true)}
+              onError={() => {
+                // The img only renders when `coverUrl` is non-null (see the
+                // `coverUrl && !coverFailed` guard above), so this always
+                // records a real URL as failed.
+                setFailedCoverUrl(coverUrl)
               }}
             />
           ) : null}
@@ -115,3 +127,5 @@ export function GameCard({
     </article>
   )
 }
+
+export const GameCard = memo(GameCardComponent)
