@@ -86,6 +86,12 @@ const config: Config = {
         mono: ['JetBrains Mono', 'ui-monospace', 'monospace'],
         label: ['Geist', 'Inter', 'system-ui', 'sans-serif'],
       },
+      maxHeight: {
+        popover: 'var(--radix-popover-content-available-height)',
+      },
+      width: {
+        popover: 'min(26rem, calc(100vw - 2rem))',
+      },
       borderRadius: {
         sm: 'calc(var(--radius) - 4px)',
         md: 'calc(var(--radius) - 2px)',

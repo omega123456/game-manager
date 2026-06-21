@@ -172,8 +172,8 @@ function ScriptExecutionContent({
   const grouped = groupScriptRecordsByPhase(records)
 
   return (
-    <div className="w-[min(26rem,calc(100vw-2rem))] space-y-4 rounded-2xl border border-border/80 bg-popover/95 p-4 text-popover-foreground shadow-[0_18px_60px_-24px_hsl(var(--primary)/0.35)] backdrop-blur-xl">
-      <header className="space-y-1">
+    <div className="flex max-h-popover w-popover flex-col rounded-2xl border border-border/80 bg-popover/95 text-popover-foreground shadow-[0_18px_60px_-24px_hsl(var(--primary)/0.35)] backdrop-blur-xl">
+      <header className="space-y-1 border-b border-border/60 p-4">
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-2">
             <span className="flex h-9 w-9 items-center justify-center rounded-full border border-border/80 bg-primary/10 text-primary">
@@ -198,31 +198,33 @@ function ScriptExecutionContent({
         <p className="text-sm text-muted-foreground">{viewMeta.summary}</p>
       </header>
 
-      {isLoading ? (
-        <div
-          className="rounded-xl border border-border/70 bg-surface/60 px-3 py-4 text-sm text-muted-foreground"
-          data-testid="script-execution-loading"
-        >
-          Loading script execution details…
-        </div>
-      ) : null}
+      <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-4">
+        {isLoading ? (
+          <div
+            className="rounded-xl border border-border/70 bg-surface/60 px-3 py-4 text-sm text-muted-foreground"
+            data-testid="script-execution-loading"
+          >
+            Loading script execution details…
+          </div>
+        ) : null}
 
-      {isError ? (
-        <div
-          className="rounded-xl border border-destructive/40 bg-destructive/10 px-3 py-4 text-sm text-foreground"
-          data-testid="script-execution-error"
-        >
-          {errorMessage}
-        </div>
-      ) : null}
+        {isError ? (
+          <div
+            className="rounded-xl border border-destructive/40 bg-destructive/10 px-3 py-4 text-sm text-foreground"
+            data-testid="script-execution-error"
+          >
+            {errorMessage}
+          </div>
+        ) : null}
 
-      {!isLoading && !isError ? (
-        <div className="space-y-4">
-          {SCRIPT_EXECUTION_PHASE_ORDER.map((phase) => (
-            <ScriptPhaseSection key={phase} phase={phaseMeta(phase)} records={grouped[phase]} />
-          ))}
-        </div>
-      ) : null}
+        {!isLoading && !isError ? (
+          <div className="space-y-4">
+            {SCRIPT_EXECUTION_PHASE_ORDER.map((phase) => (
+              <ScriptPhaseSection key={phase} phase={phaseMeta(phase)} records={grouped[phase]} />
+            ))}
+          </div>
+        ) : null}
+      </div>
     </div>
   )
 }
@@ -249,6 +251,7 @@ export function ScriptExecutionPopover({
       <PopoverContent
         align={align}
         sideOffset={sideOffset}
+        collisionPadding={16}
         className="w-auto rounded-2xl border-none bg-transparent p-0 shadow-none"
       >
         <ScriptExecutionContent
