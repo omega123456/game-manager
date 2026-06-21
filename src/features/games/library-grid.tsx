@@ -118,6 +118,11 @@ export function LibraryGrid({
               className="absolute left-0 top-0 grid w-full gap-4"
               style={{
                 transform: `translateY(${virtualRow.start - scrollMargin}px)`,
+                // Each virtualized row band is measured at its content height, so
+                // the within-grid `gap-4` only spaces cards horizontally. Add a
+                // bottom padding equal to GAP so the measured row height includes
+                // the inter-row gap and consecutive rows aren't flush.
+                paddingBottom: `${GAP}px`,
                 // JS is authoritative for column count: mirror the measured
                 // `columns` so CSS auto-fill can't independently fit one more/
                 // fewer track (sub-pixel rounding / scrollbar) and diverge from
