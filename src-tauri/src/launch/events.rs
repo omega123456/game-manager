@@ -26,6 +26,12 @@ pub const EVENT_SCRIPT_EXECUTION_UPDATED: &str = "launch://script-execution-upda
 pub struct LaunchLifecycle {
     /// The game being launched.
     pub game_id: i64,
+    /// The durable launch run this event belongs to. Lets consumers tell apart
+    /// a stale event from an earlier run of the same game from the current one
+    /// (e.g. a rapid re-launch before the previous run's `ended` event is consumed).
+    /// Absent only for a terminal failure emitted before any run row was created.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub run_id: Option<i64>,
     /// The current lifecycle phase.
     pub phase: LaunchPhase,
     /// Optional human-readable detail (e.g. progress `2/3`, cancel/failure note).

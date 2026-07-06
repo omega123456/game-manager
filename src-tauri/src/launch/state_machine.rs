@@ -48,6 +48,7 @@ impl Lifecycle<'_> {
             EVENT_PHASE,
             &LaunchLifecycle {
                 game_id: self.game_id,
+                run_id: Some(self.run_id),
                 phase,
                 detail,
                 failed_count: self.failed_count,
@@ -61,6 +62,7 @@ impl Lifecycle<'_> {
             EVENT_ERROR,
             &LaunchLifecycle {
                 game_id: self.game_id,
+                run_id: Some(self.run_id),
                 phase,
                 detail: Some(detail),
                 failed_count: self.failed_count,
@@ -74,6 +76,7 @@ impl Lifecycle<'_> {
             EVENT_ENDED,
             &LaunchLifecycle {
                 game_id: self.game_id,
+                run_id: Some(self.run_id),
                 phase: LaunchPhase::Ended,
                 detail,
                 failed_count: self.failed_count,

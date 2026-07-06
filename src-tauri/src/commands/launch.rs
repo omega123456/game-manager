@@ -154,6 +154,7 @@ fn emit_terminal_launch_failure(
         EVENT_ERROR,
         &LaunchLifecycle {
             game_id,
+            run_id: None,
             phase: LaunchPhase::Ended,
             detail: Some(detail.clone()),
             failed_count,
@@ -164,6 +165,7 @@ fn emit_terminal_launch_failure(
         EVENT_ENDED,
         &LaunchLifecycle {
             game_id,
+            run_id: None,
             phase: LaunchPhase::Ended,
             detail: Some(detail),
             failed_count,

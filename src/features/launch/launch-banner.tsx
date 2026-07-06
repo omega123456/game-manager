@@ -104,7 +104,7 @@ function ActiveRow({
   confirmIntent,
 }: ActiveRowProps): React.JSX.Element {
   const [confirmOpen, setConfirmOpen] = useState(false)
-  const showCounter = phase === 'waitingForProcess' || phase === 'playing'
+  const showCounter = phase === 'playing'
   const showCancel = phase === 'waitingForProcess' || phase === 'playing'
   const spinning = phase === 'before' || phase === 'waitingForProcess' || phase === 'onExit'
 

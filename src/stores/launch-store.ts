@@ -20,6 +20,13 @@ export interface LaunchDoneSummary {
 export interface LaunchState {
   /** The game id currently being launched/played, or null when idle. */
   gameId: number | null
+  /**
+   * The durable launch run currently being tracked, or null when idle or
+   * before the backend's first event has arrived. Used to reject stale
+   * events from an earlier run of the same game (e.g. a rapid relaunch that
+   * outraces that earlier run's `ended` event).
+   */
+  runId: number | null
   /** Best-effort display name for the active game (set on optimistic start). */
   gameName: string | null
   /** Current live phase (`idle` when no launch is active). */
@@ -54,6 +61,7 @@ export interface LaunchState {
 
 const IDLE = {
   gameId: null,
+  runId: null,
   gameName: null,
   phase: 'idle' as LiveLaunchPhase,
   detail: null,
@@ -63,9 +71,14 @@ const IDLE = {
   done: null,
 }
 
-/** Phases during which the local elapsed counter should be running. */
+/**
+ * Phases during which the local elapsed counter should be running. Ticking
+ * starts only once the game process has been detected and the
+ * After-Process-Detected scripts begin (the `playing` phase) — not during
+ * `waitingForProcess`, since the game isn't actually running yet.
+ */
 export function isTickingPhase(phase: LiveLaunchPhase): boolean {
-  return phase === 'waitingForProcess' || phase === 'playing'
+  return phase === 'playing'
 }
 
 /** True while a game process is active — used to throttle UI churn during play. */
@@ -95,6 +108,22 @@ export const useLaunchStore = create<LaunchState>((set, get) => ({
         return state
       }
 
+      // Ignore a stale event from an EARLIER run of the SAME game — e.g. a
+      // rapid relaunch that starts (and opens a new, higher runId) before the
+      // prior run's `ended` event is consumed. Without this, that straggling
+      // `ended` would reset the store to idle while the new run's scripts are
+      // still executing, silently defeating the close-confirmation guard.
+      // Only reject strictly OLDER run ids — a newer run for the same game
+      // supersedes the one we're tracking and must be adopted, not ignored.
+      if (
+        state.phase !== 'idle' &&
+        state.runId !== null &&
+        payload.runId !== undefined &&
+        payload.runId < state.runId
+      ) {
+        return state
+      }
+
       if (payload.phase === 'ended') {
         return {
           ...IDLE,
@@ -113,6 +142,7 @@ export const useLaunchStore = create<LaunchState>((set, get) => ({
 
       return {
         gameId: payload.gameId,
+        runId: payload.runId ?? state.runId,
         gameName: state.gameId === payload.gameId ? state.gameName : null,
         phase: payload.phase,
         detail: payload.detail ?? null,

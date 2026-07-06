@@ -4,6 +4,7 @@ import { Outlet } from 'react-router-dom'
 import { Sidebar } from '@/components/layout/sidebar'
 import { ScrollContainerProvider } from '@/components/layout/scroll-container-context'
 import { TopBar } from '@/components/layout/top-bar'
+import { AppCloseGuard } from '@/features/launch/app-close-guard'
 import { LaunchBanner } from '@/features/launch/launch-banner'
 import { useLaunchEvents } from '@/features/launch/use-launch-events'
 import { useDlssLibraryScanSync } from '@/lib/queries/use-dlss'
@@ -35,6 +36,7 @@ export function AppLayout(): React.JSX.Element {
           <Outlet />
         </ScrollContainerProvider>
       </main>
+      <AppCloseGuard />
     </div>
   )
 }

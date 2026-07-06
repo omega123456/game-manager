@@ -9,6 +9,7 @@
     "process:default",
     "updater:default",
     "window-state:default",
+    "core:window:allow-destroy",
     "allow-log-frontend",
     "allow-list-logs",
     "allow-list-games",

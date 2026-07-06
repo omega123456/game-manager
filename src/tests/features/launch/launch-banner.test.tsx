@@ -65,11 +65,12 @@ describe('LaunchBanner (event-driven)', () => {
 
     await emitPhase(event({ phase: 'waitingForProcess', elapsedSeconds: 14 }))
     await waitFor(() => expect(within(banner).getByText('Launching')).toBeInTheDocument())
-    expect(screen.getByTestId('launch-banner-counter')).toHaveTextContent('00:14')
+    expect(screen.queryByTestId('launch-banner-counter')).not.toBeInTheDocument()
     expect(screen.getByTestId('launch-banner-cancel')).toBeInTheDocument()
 
     await emitPhase(event({ phase: 'playing', elapsedSeconds: 20 }))
     await waitFor(() => expect(within(banner).getByText('Playing')).toBeInTheDocument())
+    expect(screen.getByTestId('launch-banner-counter')).toHaveTextContent('00:20')
     expect(screen.getByTestId('launch-banner-cancel')).toBeInTheDocument()
 
     await emitPhase(event({ phase: 'onExit' }))
@@ -125,14 +126,14 @@ describe('LaunchBanner (event-driven)', () => {
     expect(ipc.calls('get_latest_launch_run')).toContainEqual({ gameId: 1 })
   })
 
-  it('ticks the live counter once per second while waiting', async () => {
+  it('ticks the live counter once per second while playing', async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true })
     await act(async () => {
       renderWithProviders(<AppRoutes />, { route: '/library' })
     })
     await waitFor(() => expect(screen.getByText('Alan Wake 2')).toBeInTheDocument())
 
-    await emitPhase(event({ phase: 'waitingForProcess', elapsedSeconds: 0 }))
+    await emitPhase(event({ phase: 'playing', elapsedSeconds: 0 }))
     await waitFor(() => expect(screen.getByTestId('launch-banner-counter')).toBeInTheDocument())
 
     await act(async () => {

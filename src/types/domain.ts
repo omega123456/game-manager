@@ -127,6 +127,13 @@ export interface MetadataResult {
 /** Launch lifecycle event payload (emitted on `launch://*`). */
 export interface LaunchLifecycle {
   gameId: number
+  /**
+   * The durable launch run this event belongs to. Absent only for a terminal
+   * failure emitted before any run row was created. Used to tell apart a
+   * stale event from an earlier run of the same game (e.g. a rapid relaunch)
+   * from the current one.
+   */
+  runId?: number
   phase: LaunchPhase
   detail?: string
   failedCount: number
