@@ -108,7 +108,7 @@ pub mod status {
     /// The profile does not exist.
     pub const PROFILE_NOT_FOUND: i32 = -163;
     /// The requested setting is not present on the profile.
-    pub const SETTING_NOT_FOUND: i32 = -165;
+    pub const SETTING_NOT_FOUND: i32 = -160;
 }
 
 /// One enumerated driver profile: an opaque handle, its name, and the lowercase

@@ -17,9 +17,9 @@ use game_manager_lib::db::repo::{
 use game_manager_lib::dlss::detect::{DetectionResult, DetectionSummary};
 use game_manager_lib::dlss::nvapi::drs::{find_app_profile, levenshtein, DrsOrchestrator};
 use game_manager_lib::dlss::nvapi::ffi::{
-    make_nvapi_version, setting_location, DrsDwordSetting, NvapiDriver, NvapiDrs, ProfileInfo,
-    PRESET_VALUE_RECOMMENDED, SETTING_ID_DLSS_RR, SETTING_ID_DLSS_SR, SETTING_ID_DLSS_SR_OVERRIDE,
-    SETTING_ID_DLSS_SR_PRESET_PROFILE,
+    make_nvapi_version, setting_location, status, DrsDwordSetting, NvapiDriver, NvapiDrs,
+    ProfileInfo, PRESET_VALUE_RECOMMENDED, SETTING_ID_DLSS_RR, SETTING_ID_DLSS_SR,
+    SETTING_ID_DLSS_SR_OVERRIDE, SETTING_ID_DLSS_SR_PRESET_PROFILE,
 };
 use game_manager_lib::dlss::nvapi::presets::{
     self, game_identity, override_setting_id, setting_id,
@@ -284,6 +284,11 @@ fn preset_options_contain_default_and_recommended() {
 fn make_nvapi_version_packs_size_and_interface_version() {
     let packed = make_nvapi_version::<u32>(1);
     assert_eq!(packed, 4 | (1 << 16));
+}
+
+#[test]
+fn nvapi_setting_not_found_status_matches_the_driver_api() {
+    assert_eq!(status::SETTING_NOT_FOUND, -160);
 }
 
 #[test]
