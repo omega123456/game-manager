@@ -16,3 +16,8 @@ commands.allow = ["fetch_metadata"]
 identifier = "allow-cache-art-candidate"
 description = "Allows the frontend to persist a selected remote art candidate via cache_art_candidate."
 commands.allow = ["cache_art_candidate"]
+
+[[permission]]
+identifier = "allow-import-local-art"
+description = "Allows the frontend to copy a user-picked local cover image into the art cache via import_local_art."
+commands.allow = ["import_local_art"]

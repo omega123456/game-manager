@@ -16,3 +16,13 @@ export function fetchMetadata(name: string): Promise<MetadataResult> {
 export function cacheArtCandidate(url: string): Promise<string | null> {
   return invoke<string | null>('cache_art_candidate', { url })
 }
+
+/**
+ * Copy a user-picked local cover image into the app-data art cache.
+ *
+ * The picked path itself is only loadable by the webview for the current
+ * session, so the cached copy is what gets stored on the game.
+ */
+export function importLocalArt(path: string): Promise<string | null> {
+  return invoke<string | null>('import_local_art', { path })
+}

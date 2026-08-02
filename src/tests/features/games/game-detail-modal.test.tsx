@@ -381,6 +381,7 @@ describe('GameDetailModal', () => {
               return null
           }
         },
+        import_local_art: () => 'C:/AppData/game-manager/art-cache/alan-wake-2-deluxe.png',
       })
       const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime.bind(vi) })
 
@@ -398,9 +399,13 @@ describe('GameDetailModal', () => {
       await user.click(screen.getAllByRole('button', { name: 'Browse' })[1]!)
       await user.click(screen.getByRole('button', { name: 'Change cover' }))
 
+      // The picked path is replaced by the cached copy so the cover survives a restart.
       await waitFor(() => {
-        expect(screen.getByText('D:/Art/alan-wake-2-deluxe.png')).toBeInTheDocument()
+        expect(
+          screen.getByText('C:/AppData/game-manager/art-cache/alan-wake-2-deluxe.png')
+        ).toBeInTheDocument()
       })
+      expect(ipc.calls('import_local_art')).toEqual([{ path: 'D:/Art/alan-wake-2-deluxe.png' }])
 
       expect(
         screen.getByText((_, element) => element?.textContent === 'Process name: AlanWake2.exe')
@@ -421,10 +426,53 @@ describe('GameDetailModal', () => {
           monitorMode: 'named',
           monitorProcessName: 'AlanWake2.exe',
           arguments: '-fullscreen',
-          imagePath: 'D:/Art/alan-wake-2-deluxe.png',
+          imagePath: 'C:/AppData/game-manager/art-cache/alan-wake-2-deluxe.png',
         },
       })
       expect(state.getGame().monitorProcessName).toBe('AlanWake2.exe')
+    })
+
+    it('keeps the existing cover and reports the failure when a picked image cannot be imported', async () => {
+      installGameMocks()
+      overrideIpcCommands({
+        'plugin:dialog|open': () => 'D:/Art/broken.png',
+        import_local_art: () => {
+          throw new Error('local art file is not a supported image')
+        },
+      })
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime.bind(vi) })
+
+      renderWithProviders(<AppRoutes />, { route: '/library' })
+
+      await screen.findByText('Alan Wake 2')
+      await user.click(screen.getByRole('button', { name: 'Open Alan Wake 2' }))
+      await user.click(await screen.findByRole('tab', { name: 'Edit' }))
+      await user.click(screen.getByRole('button', { name: 'Change cover' }))
+
+      expect(
+        await screen.findByText('Could not import that image. Pick a PNG, JPG, or WebP file.')
+      ).toBeInTheDocument()
+      expect(screen.queryByText('D:/Art/broken.png')).not.toBeInTheDocument()
+    })
+
+    it('reports the failure when the local cover import returns no cached path', async () => {
+      installGameMocks()
+      overrideIpcCommands({
+        'plugin:dialog|open': () => 'D:/Art/blank.png',
+        import_local_art: () => null,
+      })
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime.bind(vi) })
+
+      renderWithProviders(<AppRoutes />, { route: '/library' })
+
+      await screen.findByText('Alan Wake 2')
+      await user.click(screen.getByRole('button', { name: 'Open Alan Wake 2' }))
+      await user.click(await screen.findByRole('tab', { name: 'Edit' }))
+      await user.click(screen.getByRole('button', { name: 'Change cover' }))
+
+      expect(
+        await screen.findByText('Could not import that image. Pick a PNG, JPG, or WebP file.')
+      ).toBeInTheDocument()
     })
 
     it('preserves the typed monitor executable value when launcher mode is toggled off and on', async () => {

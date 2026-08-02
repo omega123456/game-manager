@@ -30,8 +30,8 @@ impl Drop for EnvGuard {
 
 use game_manager_lib::art::{cache, steam, steamgriddb};
 use game_manager_lib::commands::art::{
-    cache_art_candidate_impl, fetch_metadata_impl, fetch_metadata_with_provider, search_art_impl,
-    search_art_with_providers,
+    cache_art_candidate_impl, fetch_metadata_impl, fetch_metadata_with_provider,
+    import_local_art_impl, search_art_impl, search_art_with_providers,
 };
 use game_manager_lib::commands::settings::set_setting_impl;
 use game_manager_lib::db::repo::logs;
@@ -908,4 +908,177 @@ fn fetch_metadata_with_provider_logs_missing_steam_key() {
 
     let messages = log_messages(&state);
     assert!(messages.contains(&"Steam metadata lookup skipped".to_string()));
+}
+
+#[test]
+fn import_local_art_copies_the_picked_file_into_the_art_cache() {
+    let (state, dir) = temp_state();
+    let source_dir = TempDir::new().unwrap();
+    let source = source_dir.path().join("cover.png");
+    let bytes = b"\x89PNG\r\n\x1a\nlocal-cover-bytes";
+    std::fs::write(&source, bytes).unwrap();
+
+    let cached = import_local_art_impl(&state, source.to_str().unwrap())
+        .unwrap()
+        .expect("import returns a cached path");
+
+    let cached_path = PathBuf::from(&cached);
+    assert!(cached_path.starts_with(dir.path().join("art-cache")));
+    assert_eq!(cached_path.extension().unwrap(), "png");
+    assert_eq!(std::fs::read(&cached_path).unwrap(), bytes);
+
+    // Content addressing: re-importing the same image reuses the same entry.
+    let again = import_local_art_impl(&state, source.to_str().unwrap())
+        .unwrap()
+        .unwrap();
+    assert_eq!(again, cached);
+}
+
+#[test]
+fn import_local_art_names_jpeg_and_webp_files_from_their_magic_bytes() {
+    let (state, _dir) = temp_state();
+    let source_dir = TempDir::new().unwrap();
+
+    // A misleading extension must not decide the cached file name.
+    let jpeg = source_dir.path().join("cover.png");
+    std::fs::write(&jpeg, b"\xFF\xD8\xFFjpeg-bytes").unwrap();
+    let cached_jpeg = import_local_art_impl(&state, jpeg.to_str().unwrap())
+        .unwrap()
+        .unwrap();
+    assert_eq!(PathBuf::from(&cached_jpeg).extension().unwrap(), "jpg");
+
+    let webp = source_dir.path().join("cover.bin");
+    std::fs::write(&webp, b"RIFF\x00\x00\x00\x00WEBPfake").unwrap();
+    let cached_webp = import_local_art_impl(&state, webp.to_str().unwrap())
+        .unwrap()
+        .unwrap();
+    assert_eq!(PathBuf::from(&cached_webp).extension().unwrap(), "webp");
+}
+
+#[test]
+fn import_local_art_ignores_a_blank_path() {
+    let (state, _dir) = temp_state();
+    assert!(import_local_art_impl(&state, "   ").unwrap().is_none());
+}
+
+#[test]
+fn import_local_art_rejects_non_image_files_and_logs() {
+    let (state, _dir) = temp_state();
+    let source_dir = TempDir::new().unwrap();
+    let source = source_dir.path().join("notes.txt");
+    std::fs::write(&source, b"not an image").unwrap();
+
+    assert!(import_local_art_impl(&state, source.to_str().unwrap()).is_err());
+    assert!(log_messages(&state).contains(&"Local cover art import failed".to_string()));
+}
+
+#[test]
+fn import_local_art_rejects_a_missing_file_and_a_directory() {
+    let (state, _dir) = temp_state();
+    let source_dir = TempDir::new().unwrap();
+
+    let missing = source_dir.path().join("nope.png");
+    assert!(import_local_art_impl(&state, missing.to_str().unwrap()).is_err());
+
+    assert!(import_local_art_impl(&state, source_dir.path().to_str().unwrap()).is_err());
+}
+
+#[test]
+fn import_local_image_rejects_oversized_files() {
+    let dir = TempDir::new().unwrap();
+    let source_dir = TempDir::new().unwrap();
+    let source = source_dir.path().join("huge.png");
+    let mut bytes = vec![0u8; 16 * 1024 * 1024 + 1];
+    bytes[..8].copy_from_slice(&[0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]);
+    std::fs::write(&source, &bytes).unwrap();
+
+    let err = cache::import_local_image(dir.path(), &source).unwrap_err();
+    assert!(err.to_string().contains("byte limit"));
+}
+
+#[test]
+fn import_local_art_surfaces_a_cache_dir_creation_failure() {
+    let (state, dir) = temp_state();
+    // A plain file where the cache directory belongs makes create_dir_all fail.
+    std::fs::write(dir.path().join("art-cache"), b"not a directory").unwrap();
+
+    let source_dir = TempDir::new().unwrap();
+    let source = source_dir.path().join("cover.png");
+    std::fs::write(&source, b"\x89PNG\r\n\x1a\ncover").unwrap();
+
+    let err = import_local_art_impl(&state, source.to_str().unwrap()).unwrap_err();
+    assert!(err.to_string().contains("create art cache dir"));
+    assert!(log_messages(&state).contains(&"Local cover art import failed".to_string()));
+}
+
+#[test]
+fn import_local_image_surfaces_a_cache_write_failure() {
+    let dir = TempDir::new().unwrap();
+    let source_dir = TempDir::new().unwrap();
+    let source = source_dir.path().join("cover.png");
+    std::fs::write(&source, b"\x89PNG\r\n\x1a\ncover").unwrap();
+
+    // Import once to learn the content-addressed target, then occupy it with a
+    // directory so the second write cannot succeed.
+    let cached = cache::import_local_image(dir.path(), &source).unwrap();
+    std::fs::remove_file(&cached).unwrap();
+    std::fs::create_dir(&cached).unwrap();
+
+    let err = cache::import_local_image(dir.path(), &source).unwrap_err();
+    assert!(err.to_string().contains("write art cache file"));
+}
+
+#[test]
+fn write_bytes_surfaces_a_cache_dir_creation_failure() {
+    let dir = TempDir::new().unwrap();
+    std::fs::write(dir.path().join("art-cache"), b"not a directory").unwrap();
+
+    let err = cache::write_bytes(
+        dir.path(),
+        "https://cdn.cloudflare.steamstatic.com/cover.png",
+        b"\x89PNG\r\n\x1a\n",
+        Some("image/png"),
+    )
+    .unwrap_err();
+    assert!(err.to_string().contains("create art cache dir"));
+}
+
+#[test]
+fn cache_remote_image_surfaces_a_connect_failure() {
+    let dir = TempDir::new().unwrap();
+    // Bind then drop the listener so the port is free and the connect is refused.
+    let addr = {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        listener.local_addr().unwrap()
+    };
+
+    let client = reqwest::blocking::Client::new();
+    let err = cache::cache_remote_image(&client, dir.path(), &format!("http://{addr}/cover.png"))
+        .unwrap_err();
+    assert!(err.to_string().contains("download art candidate"));
+}
+
+#[test]
+fn cache_remote_image_surfaces_a_truncated_response_body() {
+    let dir = TempDir::new().unwrap();
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let addr = listener.local_addr().unwrap();
+    let handle = thread::spawn(move || {
+        let (mut stream, _) = listener.accept().unwrap();
+        let mut request_buf = [0_u8; 1024];
+        let _ = stream.read(&mut request_buf);
+        // Promise more bytes than we send, then hang up mid-body.
+        stream
+            .write_all(
+                b"HTTP/1.1 200 OK\r\nContent-Type: image/png\r\nContent-Length: 64\r\nConnection: close\r\n\r\n",
+            )
+            .unwrap();
+        stream.write_all(b"\x89PNG\r\n\x1a\n").unwrap();
+    });
+
+    let client = reqwest::blocking::Client::new();
+    let err = cache::cache_remote_image(&client, dir.path(), &format!("http://{addr}/cover.png"))
+        .unwrap_err();
+    handle.join().unwrap();
+    assert!(err.to_string().contains("read art candidate response"));
 }

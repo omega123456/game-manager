@@ -312,6 +312,30 @@ fn cache_art_candidate_with_deps(
     }
 }
 
+/// Copy a user-picked local image into the app-data art cache.
+///
+/// Storing the picked path verbatim only works until the app restarts, because
+/// the asset-protocol grant the file dialog hands out is session-scoped.
+pub fn import_local_art_impl(state: &AppState, path: &str) -> AppResult<Option<String>> {
+    let trimmed = path.trim();
+    if trimmed.is_empty() {
+        return Ok(None);
+    }
+
+    match cache::import_local_image(state.app_data_dir(), Path::new(trimmed)) {
+        Ok(cached) => Ok(Some(cached)),
+        Err(err) => {
+            log_art(
+                state,
+                LogLevel::Warn,
+                "Local cover art import failed",
+                &err.to_string(),
+            );
+            Err(err)
+        }
+    }
+}
+
 /// Search remote art providers for cover candidates.
 pub fn search_art_impl(state: &AppState, name: &str) -> AppResult<Vec<ArtCandidate>> {
     search_art_with_deps(state, name, default_deps())
@@ -349,4 +373,13 @@ pub fn cache_art_candidate(
     url: String,
 ) -> AppResult<Option<String>> {
     cache_art_candidate_impl(&state, &url)
+}
+
+#[cfg(not(coverage))]
+#[tauri::command]
+pub fn import_local_art(
+    state: tauri::State<'_, AppState>,
+    path: String,
+) -> AppResult<Option<String>> {
+    import_local_art_impl(&state, &path)
 }

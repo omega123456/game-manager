@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input'
 import { Switch } from '@/components/ui/switch'
 import { toCoverImageUrl } from '@/lib/asset-url'
 import { logFrontend } from '@/lib/app-log-commands'
+import { importLocalArt } from '@/lib/ipc/art-commands'
 import { useUpdateGameMutation } from '@/lib/queries/use-games'
 import type { Game, MonitorMode } from '@/types/domain'
 
@@ -132,6 +133,26 @@ export function GameEditForm({ game, onSaved }: GameEditFormProps): React.JSX.El
     }
   }, [])
 
+  // The picked file lives outside the webview asset scope, so store the cached
+  // copy instead — a raw path stops rendering once the app restarts.
+  async function applyLocalCover(path: string): Promise<void> {
+    try {
+      const cachedPath = await importLocalArt(path)
+      if (!cachedPath) {
+        setBrowseError('Could not import that image. Pick a PNG, JPG, or WebP file.')
+        return
+      }
+      setForm((current) => ({ ...current, imagePath: cachedPath }))
+    } catch (error) {
+      const details = error instanceof Error ? error.message : String(error)
+      setBrowseError('Could not import that image. Pick a PNG, JPG, or WebP file.')
+      logFrontend('warn', 'Failed to import a local cover image from the game detail form.', {
+        category: 'games.detail',
+        details,
+      })
+    }
+  }
+
   async function browseForExecutable(target: 'launch' | 'monitor' | 'cover'): Promise<void> {
     setBrowseError(null)
 
@@ -157,14 +178,16 @@ export function GameEditForm({ game, onSaved }: GameEditFormProps): React.JSX.El
         return
       }
 
+      if (target === 'cover') {
+        await applyLocalCover(path)
+        return
+      }
+
       setForm((current) => {
         if (target === 'launch') {
           return { ...current, launchTarget: path }
         }
-        if (target === 'monitor') {
-          return { ...current, monitorExecutablePath: path }
-        }
-        return { ...current, imagePath: path }
+        return { ...current, monitorExecutablePath: path }
       })
     } catch (error) {
       const message = getDialogErrorMessage(error)

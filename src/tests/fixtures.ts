@@ -121,4 +121,5 @@ export const IPC_FIXTURES: Record<string, IpcHandler> = {
     source: 'input',
   }),
   cache_art_candidate: () => null,
+  import_local_art: () => null,
 }

@@ -106,11 +106,15 @@ fn has_image_magic_bytes(bytes: &[u8]) -> bool {
     false
 }
 
-fn hex_digest(input: &str) -> String {
+fn hex_digest_bytes(input: &[u8]) -> String {
     let mut hasher = Sha256::new();
-    hasher.update(input.as_bytes());
+    hasher.update(input);
     let bytes = hasher.finalize();
     bytes.iter().map(|byte| format!("{byte:02x}")).collect()
+}
+
+fn hex_digest(input: &str) -> String {
+    hex_digest_bytes(input.as_bytes())
 }
 
 fn extension_from_url(url: &str) -> Option<&str> {
@@ -119,6 +123,20 @@ fn extension_from_url(url: &str) -> Option<&str> {
         .extension()
         .and_then(|ext| ext.to_str())
         .filter(|ext| !ext.is_empty())
+}
+
+/// Pick a file extension from the payload itself rather than the source name.
+///
+/// Only ever called after [`has_image_magic_bytes`] accepted the payload, so the
+/// final arm is the WEBP case.
+fn extension_from_magic_bytes(bytes: &[u8]) -> &'static str {
+    if bytes.starts_with(&[0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]) {
+        "png"
+    } else if bytes.starts_with(&[0xFF, 0xD8, 0xFF]) {
+        "jpg"
+    } else {
+        "webp"
+    }
 }
 
 fn extension_from_content_type(content_type: Option<&str>) -> &'static str {
@@ -138,6 +156,27 @@ pub fn build_cache_path(app_data_dir: &Path, url: &str, content_type: Option<&st
         .join(format!("{}.{}", hex_digest(url), ext))
 }
 
+fn cache_dir_error(err: std::io::Error) -> AppError {
+    AppError::Io(format!("create art cache dir: {err}"))
+}
+
+fn cache_write_error(err: std::io::Error) -> AppError {
+    AppError::Io(format!("write art cache file: {err}"))
+}
+
+fn local_art_read_error(err: std::io::Error) -> AppError {
+    AppError::Io(format!("read local art file: {err}"))
+}
+
+/// Write image bytes to a cache path, creating the cache directory on demand.
+fn write_cache_file(path: &Path, bytes: &[u8]) -> AppResult<String> {
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent).map_err(cache_dir_error)?;
+    }
+    fs::write(path, bytes).map_err(cache_write_error)?;
+    Ok(path.to_string_lossy().into_owned())
+}
+
 /// Persist already-downloaded image bytes into the app-data art cache.
 pub fn write_bytes(
     app_data_dir: &Path,
@@ -145,13 +184,45 @@ pub fn write_bytes(
     bytes: &[u8],
     content_type: Option<&str>,
 ) -> AppResult<String> {
-    let path = build_cache_path(app_data_dir, url, content_type);
-    if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent)
-            .map_err(|err| AppError::Io(format!("create art cache dir: {err}")))?;
+    write_cache_file(&build_cache_path(app_data_dir, url, content_type), bytes)
+}
+
+/// Copy a user-picked local image into the app-data art cache.
+///
+/// Cover files the user picks live wherever they keep them (any drive), which is
+/// outside the webview asset-protocol scope. The dialog plugin only widens that
+/// scope for the running session, so a path stored verbatim renders once and
+/// then stops resolving after the next app start. Copying the bytes into the
+/// cache directory — which is permanently in scope — keeps the cover loadable.
+///
+/// The cache file is content-addressed, so re-picking the same image reuses the
+/// existing entry instead of piling up duplicates.
+pub fn import_local_image(app_data_dir: &Path, source: &Path) -> AppResult<String> {
+    let metadata = fs::metadata(source).map_err(local_art_read_error)?;
+    if !metadata.is_file() {
+        return Err(AppError::other("local art path is not a file"));
     }
-    fs::write(&path, bytes).map_err(|err| AppError::Io(format!("write art cache file: {err}")))?;
-    Ok(path.to_string_lossy().into_owned())
+    if metadata.len() > MAX_ART_BYTES as u64 {
+        return Err(AppError::other(format!(
+            "local art file exceeds {MAX_ART_BYTES} byte limit"
+        )));
+    }
+
+    let bytes = fs::read(source).map_err(local_art_read_error)?;
+    if !has_image_magic_bytes(&bytes) {
+        return Err(AppError::other(
+            "local art file is not a supported image".to_string(),
+        ));
+    }
+
+    // Derive the name entirely from the bytes: no user-controlled path segment
+    // ever reaches the cache directory.
+    let path = app_data_dir.join(CACHE_DIR_NAME).join(format!(
+        "{}.{}",
+        hex_digest_bytes(&bytes),
+        extension_from_magic_bytes(&bytes)
+    ));
+    write_cache_file(&path, &bytes)
 }
 
 /// Download a remote art URL and persist it into the local cache.

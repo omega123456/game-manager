@@ -14,7 +14,7 @@ import { Icon } from '@/components/ui/icon'
 import { Input } from '@/components/ui/input'
 import { toCoverImageUrl } from '@/lib/asset-url'
 import { logFrontend } from '@/lib/app-log-commands'
-import { cacheArtCandidate, fetchMetadata, searchArt } from '@/lib/ipc/art-commands'
+import { cacheArtCandidate, fetchMetadata, importLocalArt, searchArt } from '@/lib/ipc/art-commands'
 import { useCreateGameMutation } from '@/lib/queries/use-games'
 import { cn } from '@/lib/utils'
 import { useUiStore } from '@/stores/ui-store'
@@ -204,6 +204,24 @@ export function AddGameWizard(): React.JSX.Element {
     }
   }
 
+  async function importLocalCover(imagePath: string): Promise<string | null> {
+    try {
+      const cachedPath = await importLocalArt(imagePath)
+      if (cachedPath) {
+        return cachedPath
+      }
+      setArtError('Could not import that image. Pick a PNG, JPG, or WebP file.')
+      return null
+    } catch (error) {
+      setArtError('Could not import that image. Pick a PNG, JPG, or WebP file.')
+      logFrontend('error', 'Failed to import a local cover file.', {
+        category: 'games.wizard',
+        details: getArtDialogErrorMessage(error),
+      })
+      return null
+    }
+  }
+
   async function browseForLocalArt(): Promise<void> {
     setBrowseError(null)
 
@@ -219,11 +237,18 @@ export function AddGameWizard(): React.JSX.Element {
         return
       }
 
+      // Copy into the art cache: the picked path is only loadable by the webview
+      // for this session, so storing it verbatim loses the cover on restart.
+      const cachedPath = await importLocalCover(imagePath)
+      if (!cachedPath) {
+        return
+      }
+
       setWizard((current) => ({
         ...current,
         selectedCandidate: null,
-        selectedImagePath: imagePath,
-        selectedImagePreview: imagePath,
+        selectedImagePath: cachedPath,
+        selectedImagePreview: cachedPath,
         selectedImageLabel: imagePath.split(/[\\/]/).pop() ?? imagePath,
       }))
       setArtError(null)

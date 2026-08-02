@@ -39,6 +39,7 @@
     "allow-search-art",
     "allow-fetch-metadata",
     "allow-cache-art-candidate",
+    "allow-import-local-art",
     "allow-get-all-settings",
     "allow-get-setting",
     "allow-set-setting",

@@ -303,6 +303,7 @@ describe('AddGameWizard', () => {
       },
       fetch_metadata: () => ({ canonicalName: 'Hades II', source: 'steam' }),
       search_art: () => [],
+      import_local_art: () => 'C:/AppData/game-manager/art-cache/hades-2-cover.png',
     })
 
     const user = userEvent.setup()
@@ -336,8 +337,44 @@ describe('AddGameWizard', () => {
         launchTarget: 'C:/Games/Hades2.exe',
         monitorMode: 'tree',
         arguments: null,
-        imagePath: 'C:/Users/Test/Pictures/hades-2-cover.png',
+        imagePath: 'C:/AppData/game-manager/art-cache/hades-2-cover.png',
       },
     })
+    // The raw picked path never reaches the DB: it stops resolving after a restart.
+    expect(ipc.calls('import_local_art')).toEqual([
+      { path: 'C:/Users/Test/Pictures/hades-2-cover.png' },
+    ])
+  })
+
+  it('surfaces an error when the picked local cover cannot be imported', async () => {
+    installStatefulGameMocks()
+    overrideIpcCommands({
+      'plugin:dialog|open': (args) => {
+        const options = args?.options as { filters?: Array<{ extensions?: string[] }> } | undefined
+        const extensions = options?.filters?.flatMap((filter) => filter.extensions ?? []) ?? []
+        return extensions.includes('exe')
+          ? 'C:/Games/Hades2.exe'
+          : 'C:/Users/Test/Documents/notes.txt'
+      },
+      fetch_metadata: () => ({ canonicalName: 'Hades II', source: 'steam' }),
+      search_art: () => [],
+      import_local_art: () => {
+        throw new Error('local art file is not a supported image')
+      },
+    })
+
+    const user = userEvent.setup()
+    renderWithProviders(<AppRoutes />, { route: '/library' })
+
+    await screen.findByText('Balatro')
+    await user.click(screen.getByRole('button', { name: 'Add Game' }))
+    await user.click(screen.getByRole('button', { name: 'Browse for executable' }))
+    await user.click(screen.getByRole('button', { name: 'Continue to cover art' }))
+    await user.click(screen.getByRole('button', { name: 'Use Local File' }))
+
+    expect(
+      await screen.findByText('Could not import that image. Pick a PNG, JPG, or WebP file.')
+    ).toBeInTheDocument()
+    expect(screen.queryByText(/Local cover selected/)).not.toBeInTheDocument()
   })
 })

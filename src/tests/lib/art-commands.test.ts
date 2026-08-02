@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { cacheArtCandidate, fetchMetadata, searchArt } from '@/lib/ipc/art-commands'
+import { cacheArtCandidate, fetchMetadata, importLocalArt, searchArt } from '@/lib/ipc/art-commands'
 import { ipc } from '../ipc-mock'
 
 describe('art-commands', () => {
@@ -49,5 +49,17 @@ describe('art-commands', () => {
 
     ipc.override('cache_art_candidate', () => null)
     await expect(cacheArtCandidate('https://cdn.example.test/missing.png')).resolves.toBeNull()
+  })
+
+  it('importLocalArt forwards the picked path and returns the cached copy', async () => {
+    ipc.override('import_local_art', () => 'C:/cache/imported.png')
+
+    await expect(importLocalArt('F:/Games/Control/cover.png')).resolves.toBe(
+      'C:/cache/imported.png'
+    )
+    expect(ipc.calls('import_local_art')).toEqual([{ path: 'F:/Games/Control/cover.png' }])
+
+    ipc.override('import_local_art', () => null)
+    await expect(importLocalArt('   ')).resolves.toBeNull()
   })
 })

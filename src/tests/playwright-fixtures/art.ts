@@ -46,4 +46,6 @@ export const artFixtures: Record<string, PlaywrightFixtureHandler> = {
   search_art: () => ART_CANDIDATES,
   fetch_metadata: () => METADATA_RESULT,
   cache_art_candidate: () => 'C:/Users/Test/AppData/Roaming/game-manager/art-cache/alan-wake-2.png',
+  import_local_art: () =>
+    'C:/Users/Test/AppData/Roaming/game-manager/art-cache/local-cover-import.png',
 }

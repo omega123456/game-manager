@@ -216,6 +216,7 @@ pub fn run() {
             commands::art::search_art,
             commands::art::fetch_metadata,
             commands::art::cache_art_candidate,
+            commands::art::import_local_art,
             commands::settings::get_all_settings,
             commands::settings::get_setting,
             commands::settings::set_setting,
