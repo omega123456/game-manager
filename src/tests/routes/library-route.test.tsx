@@ -67,7 +67,7 @@ describe('LibraryRoute', () => {
     const cards = await screen.findAllByRole('button', { name: /Open / })
     expect(cards).toHaveLength(3)
     expect(screen.getByText('Alan Wake 2')).toBeInTheDocument()
-    expect(screen.getByText('2.0 hrs')).toBeInTheDocument()
+    expect(screen.getByText('2 hrs')).toBeInTheDocument()
     expect(screen.getByText('14 Jun 2026')).toBeInTheDocument()
     expect(screen.getByText('Never launched')).toBeInTheDocument()
     expect(screen.getByText('HDR Games')).toBeInTheDocument()

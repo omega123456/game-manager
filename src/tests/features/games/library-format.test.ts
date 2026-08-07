@@ -20,7 +20,7 @@ describe('formatLastPlayed', () => {
 describe('getLibraryMeta', () => {
   it('combines playtime and last-played labels', () => {
     expect(getLibraryMeta(3600, '2026-06-14T12:00:00Z')).toEqual({
-      playtime: '1.0 hrs',
+      playtime: '1 hr',
       lastPlayed: '14 Jun 2026',
     })
   })
