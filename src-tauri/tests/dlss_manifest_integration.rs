@@ -422,4 +422,8 @@ fn preset_options_load_for_both_kinds() {
     assert!(rr.iter().any(|p| p.name == "Default"));
     // RR Preset A is deprecated.
     assert!(rr.iter().any(|p| p.value == 1 && p.deprecated));
+    // DLSS 4.5 RR Preset F is an active model option.
+    assert!(rr
+        .iter()
+        .any(|p| p.name == "Preset F" && p.value == 6 && !p.deprecated));
 }

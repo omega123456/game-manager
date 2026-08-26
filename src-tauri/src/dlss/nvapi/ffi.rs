@@ -81,6 +81,8 @@ pub mod query_interface_id {
     pub const DRS_GET_PROFILE_INFO: u32 = 0x61CD_6FD6;
     /// `NvAPI_DRS_EnumApplications`.
     pub const DRS_ENUM_APPLICATIONS: u32 = 0x7FA2_173A;
+    /// `NvAPI_DRS_EnumAvailableSettingValues`.
+    pub const DRS_ENUM_AVAILABLE_SETTING_VALUES: u32 = 0x2EC3_9F90;
     /// Primary `NvAPI_DRS_GetSetting` query id (newer drivers).
     pub const DRS_GET_SETTING: u32 = 0xEA99_498D;
     /// Legacy `NvAPI_DRS_GetSetting` query id fallback.
@@ -140,6 +142,8 @@ pub trait NvapiDriver: Send {
     fn current_global_profile(&self) -> DlssResult<usize>;
     /// Enumerate every per-application profile (handle + name + exe names).
     fn enumerate_profiles(&self) -> DlssResult<Vec<ProfileInfo>>;
+    /// Enumerate the DWORD values recognized by the installed driver for a setting.
+    fn available_setting_values(&self, setting_id: u32) -> DlssResult<Vec<u32>>;
     /// Read a DWORD setting from `profile`. `None` when the setting is absent.
     fn get_setting(&self, profile: usize, setting_id: u32) -> DlssResult<Option<u32>> {
         Ok(self
@@ -165,6 +169,8 @@ pub trait NvapiDriver: Send {
 ///
 /// Implemented by [`super::drs::DrsOrchestrator`] over any [`NvapiDriver`].
 pub trait NvapiDrs: Send {
+    /// Enumerate the DWORD values recognized by the installed driver for a setting.
+    fn available_setting_values(&self, setting_id: u32) -> DlssResult<Vec<u32>>;
     /// Read a DWORD setting from the current global profile. `None` when unset.
     fn get_base_setting(&self, setting_id: u32) -> DlssResult<Option<u32>>;
     /// Read the effective global preset for NVIDIA App parity.
@@ -259,6 +265,8 @@ mod windows_impl {
         *mut u32,
         *mut NvdrsApplicationV1,
     ) -> i32;
+    type EnumAvailableSettingValuesFn =
+        unsafe extern "C" fn(u32, *mut u32, *mut NvdrsSettingValues) -> i32;
     type GetSettingFn =
         unsafe extern "C" fn(*mut c_void, *mut c_void, u32, *mut NvdrsSettingV1) -> i32;
     type GetSettingFnV2 =
@@ -272,6 +280,7 @@ mod windows_impl {
 
     const NVAPI_UNICODE_STRING_MAX: usize = 2048;
     const NVAPI_BINARY_DATA_MAX: usize = 4096;
+    const NVAPI_SETTING_MAX_VALUES: usize = 100;
 
     #[repr(C)]
     #[derive(Clone, Copy)]
@@ -285,6 +294,16 @@ mod windows_impl {
         u32_value: u32,
         binary: NvdrsBinarySettingValue,
         wsz_value: [u16; NVAPI_UNICODE_STRING_MAX],
+    }
+
+    /// `NVDRS_SETTING_VALUES` returned by `NvAPI_DRS_EnumAvailableSettingValues`.
+    #[repr(C)]
+    struct NvdrsSettingValues {
+        version: u32,
+        num_setting_values: u32,
+        setting_type: u32,
+        default_value: NvdrsSettingValue,
+        setting_values: [NvdrsSettingValue; NVAPI_SETTING_MAX_VALUES],
     }
 
     /// `NVDRS_SETTING_V1` — see the Reference Data Appendix for the field shape.
@@ -452,6 +471,7 @@ mod windows_impl {
         enum_profiles: EnumProfilesFn,
         get_profile_info: GetProfileInfoFn,
         enum_applications: EnumApplicationsFn,
+        enum_available_setting_values: Option<EnumAvailableSettingValuesFn>,
         get_base_profile: GetBaseProfileFn,
         get_current_global_profile: GetCurrentGlobalProfileFn,
         get_setting: ResolvedGetSetting,
@@ -558,6 +578,22 @@ mod windows_impl {
                     module,
                 )?)
             };
+            // This API is optional so older drivers can continue using the bundled
+            // compatibility list instead of making the whole preset surface unavailable.
+            let enum_available_setting_values = {
+                // SAFETY: the official query-interface ID has the declared signature.
+                let ptr = unsafe { query(qid::DRS_ENUM_AVAILABLE_SETTING_VALUES) };
+                if ptr.is_null() {
+                    tracing::warn!(
+                        category = "dlss",
+                        "nvapi open: DRS_EnumAvailableSettingValues not found; using bundled preset options"
+                    );
+                    None
+                } else {
+                    // SAFETY: non-null pointer resolved for DRS_EnumAvailableSettingValues.
+                    Some(unsafe { std::mem::transmute(ptr) })
+                }
+            };
             let get_setting = resolve_get_setting(query, module)?;
             let set_setting = resolve_set_setting(query, module)?;
             let save_settings: SaveSettingsFn = unsafe {
@@ -621,6 +657,7 @@ mod windows_impl {
                 enum_profiles,
                 get_profile_info,
                 enum_applications,
+                enum_available_setting_values,
                 get_base_profile,
                 get_current_global_profile,
                 get_setting,
@@ -717,6 +754,47 @@ mod windows_impl {
                 index += 1;
             }
             Ok(out)
+        }
+
+        fn available_setting_values(&self, setting_id: u32) -> DlssResult<Vec<u32>> {
+            let Some(enumerate) = self.enum_available_setting_values else {
+                return Err(DlssError::Unsupported);
+            };
+            // `NVDRS_SETTING_VALUES` is roughly 404 KiB because it embeds 100
+            // maximum-size value unions. Constructing `zeroed()` inside
+            // `Box::new` first materializes that object on the caller's stack,
+            // which overflows Tauri's Windows main thread. Allocate and zero it
+            // directly on the heap instead.
+            let layout = std::alloc::Layout::new::<NvdrsSettingValues>();
+            // SAFETY: `alloc_zeroed` returns suitably aligned storage for the
+            // exact layout; `Box::from_raw` assumes ownership of that allocation.
+            let mut setting_values: Box<NvdrsSettingValues> = unsafe {
+                let ptr = std::alloc::alloc_zeroed(layout).cast::<NvdrsSettingValues>();
+                if ptr.is_null() {
+                    std::alloc::handle_alloc_error(layout);
+                }
+                Box::from_raw(ptr)
+            };
+            setting_values.version = make_nvapi_version::<NvdrsSettingValues>(1);
+            let mut max_values = NVAPI_SETTING_MAX_VALUES as u32;
+            // SAFETY: the boxed output struct and count pointer are valid for the call.
+            let code = unsafe { enumerate(setting_id, &mut max_values, setting_values.as_mut()) };
+            if code != status::OK {
+                return Err(classify(code, "enum_available_setting_values"));
+            }
+            if setting_values.setting_type != NVDRS_DWORD_TYPE {
+                return Err(DlssError::Invalid(format!(
+                    "nvapi setting 0x{setting_id:08X} is not a DWORD"
+                )));
+            }
+            let count = (setting_values.num_setting_values as usize)
+                .min(max_values as usize)
+                .min(NVAPI_SETTING_MAX_VALUES);
+            Ok(setting_values.setting_values[..count]
+                .iter()
+                // SAFETY: the driver reported a DWORD setting, so each union uses this arm.
+                .map(|value| unsafe { value.u32_value })
+                .collect())
         }
 
         fn current_global_profile(&self) -> DlssResult<usize> {

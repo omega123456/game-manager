@@ -39,6 +39,7 @@ struct FakeDriver {
     profiles: Vec<ProfileInfo>,
     /// Settings keyed by `(profile_handle, setting_id)`.
     settings: Mutex<Vec<((usize, u32), DrsDwordSetting)>>,
+    available_values: Vec<u32>,
     /// Optional forced error for every call.
     error: Option<fn() -> DlssError>,
 }
@@ -50,6 +51,7 @@ impl FakeDriver {
             current_global_profile: base_profile,
             profiles,
             settings: Mutex::new(Vec::new()),
+            available_values: Vec::new(),
             error: None,
         }
     }
@@ -70,6 +72,13 @@ impl FakeDriver {
                 location: setting_location::CURRENT_PROFILE,
             },
         )
+    }
+
+    fn with_available_values(self, values: &[u32]) -> Self {
+        Self {
+            available_values: values.to_vec(),
+            ..self
+        }
     }
 
     fn with_inherited_setting(self, profile: usize, setting_id: u32, value: u32) -> Self {
@@ -113,6 +122,7 @@ impl FakeDriver {
             current_global_profile: 1,
             profiles: Vec::new(),
             settings: Mutex::new(Vec::new()),
+            available_values: Vec::new(),
             error: Some(error),
         }
     }
@@ -147,6 +157,13 @@ impl NvapiDriver for FakeDriver {
             return Err(err());
         }
         Ok(self.profiles.clone())
+    }
+
+    fn available_setting_values(&self, _setting_id: u32) -> Result<Vec<u32>, DlssError> {
+        if let Some(err) = self.error {
+            return Err(err());
+        }
+        Ok(self.available_values.clone())
     }
 
     fn get_setting_detail(
@@ -201,6 +218,10 @@ impl NvapiDriver for CountingDriver {
         Ok(self.profiles.clone())
     }
 
+    fn available_setting_values(&self, _setting_id: u32) -> Result<Vec<u32>, DlssError> {
+        Ok(Vec::new())
+    }
+
     fn get_setting_detail(
         &self,
         _profile: usize,
@@ -231,6 +252,10 @@ impl NvapiDriver for MinimalDriver {
     }
 
     fn enumerate_profiles(&self) -> Result<Vec<ProfileInfo>, DlssError> {
+        Ok(Vec::new())
+    }
+
+    fn available_setting_values(&self, _setting_id: u32) -> Result<Vec<u32>, DlssError> {
         Ok(Vec::new())
     }
 
@@ -278,6 +303,32 @@ fn preset_options_contain_default_and_recommended() {
 
     let rr = presets::preset_options(PresetKind::RayReconstruction).unwrap();
     assert!(rr.iter().any(|p| p.value == 0 && p.name == "Default"));
+}
+
+#[test]
+fn preset_options_use_driver_values_and_generate_names_for_new_presets() {
+    let drs = orchestrator(FakeDriver::new(1, Vec::new()).with_available_values(&[
+        6,
+        26,
+        PRESET_VALUE_RECOMMENDED,
+        6,
+    ]));
+
+    let options = presets::preset_options_with(&drs, PresetKind::RayReconstruction).unwrap();
+
+    assert_eq!(
+        options
+            .iter()
+            .map(|option| option.value)
+            .collect::<Vec<_>>(),
+        vec![0, 6, 26, PRESET_VALUE_RECOMMENDED]
+    );
+    assert!(options
+        .iter()
+        .any(|option| option.value == 6 && option.name == "Preset F" && !option.deprecated));
+    assert!(options
+        .iter()
+        .any(|option| option.value == 26 && option.name == "Preset Z" && !option.deprecated));
 }
 
 #[test]

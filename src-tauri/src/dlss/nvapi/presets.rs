@@ -1,6 +1,7 @@
 //! NVAPI preset feature surface.
 //!
-//! Phase 1 implemented [`preset_options`] (the bundled SR / RR option lists).
+//! Preset options come from the installed driver's available-value enumeration,
+//! with bundled SR / RR lists retained only as a compatibility fallback.
 //! Phase 3 fills the live get/set of global and per-game presets against the
 //! [`NvapiDrs`](super::ffi::NvapiDrs) abstraction.
 //!
@@ -40,8 +41,7 @@ struct RawPreset {
     deprecated: bool,
 }
 
-/// Return the bundled preset options for the given kind.
-pub fn preset_options(kind: PresetKind) -> DlssResult<Vec<PresetOption>> {
+fn bundled_preset_options(kind: PresetKind) -> DlssResult<Vec<PresetOption>> {
     let body = match kind {
         PresetKind::Dlss => SR_PRESETS,
         PresetKind::RayReconstruction => RR_PRESETS,
@@ -56,6 +56,63 @@ pub fn preset_options(kind: PresetKind) -> DlssResult<Vec<PresetOption>> {
             deprecated: preset.deprecated,
         })
         .collect())
+}
+
+fn generated_preset_name(value: u32) -> String {
+    match value {
+        0 => "Default".to_string(),
+        PRESET_VALUE_RECOMMENDED => "NVIDIA recommended".to_string(),
+        1..=26 => format!("Preset {}", char::from(b'A' + (value as u8 - 1))),
+        _ => format!("Preset value {value}"),
+    }
+}
+
+/// Build options from the values advertised by an NVAPI driver. Known bundled
+/// records retain their display/deprecation metadata; newly introduced values
+/// get a generated label and are immediately selectable without an app update.
+pub fn preset_options_with(drs: &dyn NvapiDrs, kind: PresetKind) -> DlssResult<Vec<PresetOption>> {
+    let mut values = drs.available_setting_values(setting_id(kind))?;
+    if values.is_empty() {
+        return Err(DlssError::Unsupported);
+    }
+    // Clearing an override must always remain possible even if a driver omits
+    // the semantic Default value from its available-value response.
+    values.push(0);
+    values.sort_unstable();
+    values.dedup();
+
+    let known = bundled_preset_options(kind)?;
+    Ok(values
+        .into_iter()
+        .map(|value| {
+            known
+                .iter()
+                .find(|option| option.value == value)
+                .cloned()
+                .unwrap_or_else(|| PresetOption {
+                    value,
+                    name: generated_preset_name(value),
+                    deprecated: false,
+                })
+        })
+        .collect())
+}
+
+/// Return preset options recognized by the installed driver, falling back to
+/// the bundled compatibility data when NVAPI or value enumeration is unavailable.
+pub fn preset_options(kind: PresetKind) -> DlssResult<Vec<PresetOption>> {
+    match with_nvapi_drs(|drs| preset_options_with(drs, kind)) {
+        Ok(options) => Ok(options),
+        Err(error) => {
+            tracing::info!(
+                category = "dlss",
+                %error,
+                ?kind,
+                "nvapi preset value enumeration unavailable; using bundled options"
+            );
+            bundled_preset_options(kind)
+        }
+    }
 }
 
 /// The NVAPI DRS setting id backing a [`PresetKind`].

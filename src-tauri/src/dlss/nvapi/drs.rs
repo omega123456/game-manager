@@ -246,6 +246,10 @@ impl DrsOrchestrator {
 }
 
 impl NvapiDrs for DrsOrchestrator {
+    fn available_setting_values(&self, setting_id: u32) -> DlssResult<Vec<u32>> {
+        self.driver.available_setting_values(setting_id)
+    }
+
     fn get_base_setting(&self, setting_id: u32) -> DlssResult<Option<u32>> {
         let profile = self.driver.current_global_profile()?;
         self.driver.get_setting(profile, setting_id)

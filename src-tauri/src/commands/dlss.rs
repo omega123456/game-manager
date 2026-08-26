@@ -210,7 +210,7 @@ pub fn count_applicable_impl(state: &AppState, dll_type: DllType) -> AppResult<u
     Ok(swap::count_applicable_impl(state, dll_type)?)
 }
 
-/// Bundled preset options for the given kind.
+/// Driver-recognized preset options for the given kind (bundled fallback).
 pub fn get_preset_options_impl(kind: PresetKind) -> AppResult<Vec<PresetOption>> {
     Ok(nvapi::presets::preset_options(kind)?)
 }
@@ -419,7 +419,7 @@ pub fn dlss_count_applicable(
     count_applicable_impl(&state, dll_type)
 }
 
-/// Bundled preset options for the given kind.
+/// Driver-recognized preset options for the given kind (bundled fallback).
 #[cfg(not(coverage))]
 #[tauri::command]
 pub fn dlss_get_preset_options(preset_kind: PresetKind) -> AppResult<Vec<PresetOption>> {

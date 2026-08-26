@@ -851,7 +851,7 @@ pub struct GamePresetState {
     pub value: u32,
 }
 
-/// A selectable preset option from the bundled preset lists.
+/// A selectable preset option advertised by the driver or compatibility fallback.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PresetOption {
