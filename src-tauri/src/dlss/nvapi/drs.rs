@@ -50,14 +50,14 @@ fn normalize_exe(name: &str) -> String {
         .unwrap_or_else(|| name.to_lowercase())
 }
 
-/// Find the per-game profile (port of DLSS Swapper `FindGameProfile`):
+/// Find the per-game profile. Retain DLSS Swapper's exact-title lookup, but
+/// account for user-renamed games by prioritizing their configured executables:
 ///
 /// 1. exact case-insensitive profile name match on `game_name` (no exe check);
 /// 2. otherwise order all driver profiles by Levenshtein distance between the profile name
 ///    and `game_name` (closest first);
-/// 3. for each candidate (closest first), confirm by checking whether any exe in
-///    `exe_names` equals one of the profile's registered application names
-///    (case-insensitive);
+/// 3. try `exe_names` in priority order (monitored game, launch target, scanned
+///    executables). For each exe, use the closest profile with a matching app;
 /// 4. the first confirmed profile wins; if none confirms, return `None`
 ///    (per-game presets are *unavailable* for this game — not an error).
 pub fn find_app_profile(
@@ -97,12 +97,13 @@ pub fn find_app_profile(
     }
     let mut ordered: Vec<&ffi::ProfileInfo> = profiles.iter().collect();
     ordered.sort_by_key(|p| levenshtein(&p.name, game_name));
-    for profile in &ordered {
-        let matched_exe = profile
-            .exe_names
-            .iter()
-            .find(|registered| wanted.iter().any(|w| w == *registered));
-        if let Some(exe) = matched_exe {
+    for exe in &wanted {
+        if let Some(profile) = ordered.iter().find(|profile| {
+            profile
+                .exe_names
+                .iter()
+                .any(|registered| *exe == normalize_exe(registered))
+        }) {
             tracing::info!(
                 category = "dlss",
                 game_name = %game_name,

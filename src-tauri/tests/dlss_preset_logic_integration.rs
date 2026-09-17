@@ -467,6 +467,61 @@ fn find_app_profile_matches_exe_path_case_insensitively() {
     assert_eq!(find_app_profile(&profiles, "Game", &exes), Some(20));
 }
 
+#[test]
+fn dawnwalker_executable_beats_unreal_helper_profile_for_shortened_title() {
+    let profiles = vec![
+        profile(10, "Unreal Engine 5", &["epicwebhelper.exe"]),
+        profile(20, "The Blood of Dawnwalker", &["dawnwalker.exe"]),
+    ];
+    // These titles tie in the live NVIDIA database. Driver enumeration order
+    // must not let a bundled helper redirect writes to the engine profile.
+    assert_eq!(levenshtein("Dawnwalker", "Unreal Engine 5"), 13);
+    assert_eq!(levenshtein("Dawnwalker", "The Blood of Dawnwalker"), 13);
+    let exes = vec![
+        "Dawnwalker.exe".to_string(),
+        "EpicWebHelper.exe".to_string(),
+    ];
+    assert_eq!(find_app_profile(&profiles, "Dawnwalker", &exes), Some(20));
+}
+
+#[test]
+fn dawnwalker_save_targets_game_profile_and_leaves_engine_profile_unchanged() {
+    let state = state();
+    let folder = tempfile::TempDir::new().unwrap();
+    let game_exe = folder.path().join("Dawnwalker.exe");
+    let helper_exe = folder.path().join("EpicWebHelper.exe");
+    std::fs::write(&game_exe, b"game").unwrap();
+    std::fs::write(&helper_exe, b"helper").unwrap();
+    let id = insert_game(&state, "Dawnwalker", game_exe.to_str().unwrap(), None);
+    let driver = FakeDriver::new(
+        1,
+        vec![
+            profile(10, "Unreal Engine 5", &["epicwebhelper.exe"]),
+            profile(20, "The Blood of Dawnwalker", &["dawnwalker.exe"]),
+        ],
+    )
+    .with_setting(10, SETTING_ID_DLSS_SR, 11)
+    .with_setting(20, SETTING_ID_DLSS_SR, 0);
+    let settings = driver.settings.clone();
+    let drs = orchestrator(driver);
+    presets::set_game_preset_for(&drs, &state, id, PresetKind::Dlss, 13).unwrap();
+    let settings = settings.lock().unwrap();
+    assert_eq!(settings[0].1.value, 11);
+    assert_eq!(settings[1].1.value, 13);
+}
+
+#[test]
+fn game_identity_prioritizes_monitored_game_then_launcher_before_folder_helpers() {
+    let state = state();
+    let folder = tempfile::TempDir::new().unwrap();
+    let launcher = folder.path().join("launcher.exe");
+    std::fs::write(&launcher, b"launcher").unwrap();
+    std::fs::write(folder.path().join("a-helper.exe"), b"helper").unwrap();
+    let id = insert_game(&state, "Game", launcher.to_str().unwrap(), Some("game.exe"));
+    let (_, exes) = game_identity(&state, id).unwrap();
+    assert_eq!(&exes[..2], &["game.exe", "launcher.exe"]);
+}
+
 // ---------------------------------------------------------------------------
 // Global preset get/set round-trips.
 // ---------------------------------------------------------------------------

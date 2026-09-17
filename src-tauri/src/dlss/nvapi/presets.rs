@@ -214,14 +214,20 @@ pub fn set_game_preset_with(
 // ---------------------------------------------------------------------------
 
 /// Resolve a game's display name and the candidate `.exe` file names used for
-/// per-game profile matching: the launch target and (when set) the named
-/// monitor process. Names are normalised to lowercase base file names downstream.
+/// per-game profile matching, ordered by confidence: the named monitor process,
+/// launch target, then executables discovered in game folders. The configured
+/// game executable must win over bundled helpers such as EpicWebHelper.exe.
+/// Names are normalised to lowercase base file names downstream.
 pub fn game_identity(state: &AppState, game_id: i64) -> DlssResult<(String, Vec<String>)> {
     let game = state.with_db(|conn| crate::db::repo::games::get(conn, game_id))?;
     let folder_override =
         state.with_db(|conn| crate::db::repo::dlss::get_folder_override(conn, game_id))?;
     let detection = state.dlss_detection_get(game_id);
     let mut exe_names = Vec::new();
+    if let Some(process) = game.monitor_process_name.as_deref() {
+        push_exe(&mut exe_names, process);
+    }
+    push_exe(&mut exe_names, &game.launch_target);
     let resolved_folder =
         crate::dlss::detect::resolve_folder(folder_override.as_deref(), &game.launch_target);
     if let Some(folder) = resolved_folder.as_ref() {
@@ -241,10 +247,6 @@ pub fn game_identity(state: &AppState, game_id: i64) -> DlssResult<(String, Vec<
                 push_folder_exes(&mut exe_names, parent);
             }
         }
-    }
-    push_exe(&mut exe_names, &game.launch_target);
-    if let Some(process) = game.monitor_process_name.as_deref() {
-        push_exe(&mut exe_names, process);
     }
     tracing::info!(
         category = "dlss",
