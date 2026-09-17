@@ -169,21 +169,10 @@ impl DrsOrchestrator {
 }
 
 impl DrsOrchestrator {
-    fn current_global_selection(&self, selection_id: u32) -> DlssResult<u32> {
-        let global = self.driver.current_global_profile()?;
-        Ok(self.driver.get_setting(global, selection_id)?.unwrap_or(0))
-    }
-
-    /// Effective per-game preset for the NVIDIA App per-title view: only a
+    /// Per-game preset, matching DLSS Swapper's profile settings view: only a
     /// **local** selection on the matched app profile counts; inherited/global
     /// DWORDs are ignored and read as Default (`0`).
-    fn effective_app_preset(
-        override_enabled: u32,
-        app_selection: Option<ffi::DrsDwordSetting>,
-    ) -> (u32, &'static str) {
-        if override_enabled == 0 {
-            return (0, "app profile (override off → Default)");
-        }
+    fn effective_app_preset(app_selection: Option<ffi::DrsDwordSetting>) -> (u32, &'static str) {
         if let Some(setting) = app_selection {
             if setting.location == setting_location::CURRENT_PROFILE {
                 return (setting.value, "app profile (local selection)");
@@ -301,33 +290,26 @@ impl NvapiDrs for DrsOrchestrator {
         game_name: &str,
         exe_names: &[String],
         selection_id: u32,
-        override_id: u32,
     ) -> DlssResult<Option<u32>> {
         let profiles = self.profiles()?;
         tracing::info!(
             category = "dlss",
             game_name = %game_name,
             selection_id,
-            override_id,
             enumerated_profile_count = profiles.len(),
             "nvapi profile match: enumerated driver profiles"
         );
         let Some(profile) = find_app_profile(&profiles, game_name, exe_names) else {
             return Ok(None);
         };
-        let override_enabled = self.driver.get_setting(profile, override_id)?.unwrap_or(0);
         let app_selection = self.driver.get_setting_detail(profile, selection_id)?;
-        let global_selection = self.current_global_selection(selection_id)?;
-        let (value, source) = Self::effective_app_preset(override_enabled, app_selection);
+        let (value, source) = Self::effective_app_preset(app_selection);
         tracing::info!(
             category = "dlss",
             game_name = %game_name,
             profile_handle = profile,
             selection_id,
-            override_id,
-            override_enabled,
             app_selection = ?app_selection,
-            global_selection,
             preset_value = value,
             preset_source = source,
             "nvapi profile match: read preset from matched profile"

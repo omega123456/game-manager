@@ -83,14 +83,11 @@ pub mod query_interface_id {
     pub const DRS_ENUM_APPLICATIONS: u32 = 0x7FA2_173A;
     /// `NvAPI_DRS_EnumAvailableSettingValues`.
     pub const DRS_ENUM_AVAILABLE_SETTING_VALUES: u32 = 0x2EC3_9F90;
-    /// Primary `NvAPI_DRS_GetSetting` query id (newer drivers).
-    pub const DRS_GET_SETTING: u32 = 0xEA99_498D;
-    /// Legacy `NvAPI_DRS_GetSetting` query id fallback.
-    pub const DRS_GET_SETTING_LEGACY: u32 = 0x73BF_8338;
-    /// Primary `NvAPI_DRS_SetSetting` query id (newer drivers).
-    pub const DRS_SET_SETTING: u32 = 0x8A2C_F5F5;
-    /// Legacy `NvAPI_DRS_SetSetting` query id fallback.
-    pub const DRS_SET_SETTING_LEGACY: u32 = 0x577D_D202;
+    /// Public `NvAPI_DRS_GetSetting` ABI from NVIDIA's `nvapi_interface.h`.
+    pub const DRS_GET_SETTING: u32 = 0x73BF_8338;
+    /// Public `NvAPI_DRS_SetSetting` ABI, also used by DLSS Swapper's NvAPIWrapper.
+    /// Private entry points are not driver-version replacements for this API.
+    pub const DRS_SET_SETTING: u32 = 0x577D_D202;
     /// `NvAPI_DRS_SaveSettings`.
     pub const DRS_SAVE_SETTINGS: u32 = 0xFCBC_7E14;
     /// `NvAPI_DRS_DestroySession`.
@@ -185,14 +182,12 @@ pub trait NvapiDrs: Send {
     /// Write a DWORD setting to the current global profile and save.
     fn set_base_setting(&self, setting_id: u32, value: u32) -> DlssResult<()>;
     /// Read the effective preset selection for a matched app profile.
-    /// `override_id` is the profile's DLSS override-enable setting; when it is off
-    /// the effective preset is Default regardless of stale selection DWORDs.
+    /// Read the local render-preset selection directly, as DLSS Swapper does.
     fn get_app_preset_selection(
         &self,
         game_name: &str,
         exe_names: &[String],
         selection_id: u32,
-        override_id: u32,
     ) -> DlssResult<Option<u32>>;
     /// Write a DWORD setting to the matched app profile and save. Returns `false`
     /// when no profile matches.
@@ -269,12 +264,8 @@ mod windows_impl {
         unsafe extern "C" fn(u32, *mut u32, *mut NvdrsSettingValues) -> i32;
     type GetSettingFn =
         unsafe extern "C" fn(*mut c_void, *mut c_void, u32, *mut NvdrsSettingV1) -> i32;
-    type GetSettingFnV2 =
-        unsafe extern "C" fn(*mut c_void, *mut c_void, u32, *mut NvdrsSettingV1, *mut u32) -> i32;
     type SetSettingFn =
         unsafe extern "C" fn(*mut c_void, *mut c_void, *const NvdrsSettingV1) -> i32;
-    type SetSettingFnV2 =
-        unsafe extern "C" fn(*mut c_void, *mut c_void, *mut NvdrsSettingV1, u32, u32) -> i32;
     type SaveSettingsFn = unsafe extern "C" fn(*mut c_void) -> i32;
     type DestroySessionFn = unsafe extern "C" fn(*mut c_void) -> i32;
 
@@ -392,78 +383,6 @@ mod windows_impl {
         Ok(ptr)
     }
 
-    enum ResolvedGetSetting {
-        V1(GetSettingFn),
-        V2(GetSettingFnV2),
-    }
-
-    enum ResolvedSetSetting {
-        V1(SetSettingFn),
-        V2(SetSettingFnV2),
-    }
-
-    fn resolve_get_setting(
-        query: QueryInterfaceFn,
-        module: HMODULE,
-    ) -> DlssResult<ResolvedGetSetting> {
-        // SAFETY: resolved pointer matches the declared signature when non-null.
-        let primary = unsafe { query(qid::DRS_GET_SETTING) };
-        if !primary.is_null() {
-            return Ok(ResolvedGetSetting::V2(unsafe {
-                std::mem::transmute(primary)
-            }));
-        }
-        // SAFETY: resolved pointer matches the declared signature when non-null.
-        let legacy = unsafe { query(qid::DRS_GET_SETTING_LEGACY) };
-        if legacy.is_null() {
-            tracing::warn!(
-                category = "dlss",
-                "nvapi open: DRS_GetSetting not found (primary or legacy query id)"
-            );
-            free_module(module);
-            return Err(DlssError::Unsupported);
-        }
-        tracing::info!(
-            category = "dlss",
-            "nvapi open: DRS_GetSetting resolved via legacy query id"
-        );
-        // SAFETY: resolved pointer matches the declared signature.
-        Ok(ResolvedGetSetting::V1(unsafe {
-            std::mem::transmute(legacy)
-        }))
-    }
-
-    fn resolve_set_setting(
-        query: QueryInterfaceFn,
-        module: HMODULE,
-    ) -> DlssResult<ResolvedSetSetting> {
-        // SAFETY: resolved pointer matches the declared signature when non-null.
-        let primary = unsafe { query(qid::DRS_SET_SETTING) };
-        if !primary.is_null() {
-            return Ok(ResolvedSetSetting::V2(unsafe {
-                std::mem::transmute(primary)
-            }));
-        }
-        // SAFETY: resolved pointer matches the declared signature when non-null.
-        let legacy = unsafe { query(qid::DRS_SET_SETTING_LEGACY) };
-        if legacy.is_null() {
-            tracing::warn!(
-                category = "dlss",
-                "nvapi open: DRS_SetSetting not found (primary or legacy query id)"
-            );
-            free_module(module);
-            return Err(DlssError::Unsupported);
-        }
-        tracing::info!(
-            category = "dlss",
-            "nvapi open: DRS_SetSetting resolved via legacy query id"
-        );
-        // SAFETY: resolved pointer matches the declared signature.
-        Ok(ResolvedSetSetting::V1(unsafe {
-            std::mem::transmute(legacy)
-        }))
-    }
-
     /// The resolved, live NVAPI driver session.
     pub(super) struct RealDriver {
         module: HMODULE,
@@ -474,8 +393,8 @@ mod windows_impl {
         enum_available_setting_values: Option<EnumAvailableSettingValuesFn>,
         get_base_profile: GetBaseProfileFn,
         get_current_global_profile: GetCurrentGlobalProfileFn,
-        get_setting: ResolvedGetSetting,
-        set_setting: ResolvedSetSetting,
+        get_setting: GetSettingFn,
+        set_setting: SetSettingFn,
         load_settings: LoadSettingsFn,
         save_settings: SaveSettingsFn,
         destroy_session: DestroySessionFn,
@@ -594,8 +513,24 @@ mod windows_impl {
                     Some(unsafe { std::mem::transmute(ptr) })
                 }
             };
-            let get_setting = resolve_get_setting(query, module)?;
-            let set_setting = resolve_set_setting(query, module)?;
+            // SAFETY: public NVIDIA ABI; do not substitute private entry points.
+            let get_setting: GetSettingFn = unsafe {
+                std::mem::transmute(resolve_required(
+                    query,
+                    qid::DRS_GET_SETTING,
+                    "DRS_GetSetting",
+                    module,
+                )?)
+            };
+            // SAFETY: public NVIDIA ABI, with the documented three arguments.
+            let set_setting: SetSettingFn = unsafe {
+                std::mem::transmute(resolve_required(
+                    query,
+                    qid::DRS_SET_SETTING,
+                    "DRS_SetSetting",
+                    module,
+                )?)
+            };
             let save_settings: SaveSettingsFn = unsafe {
                 std::mem::transmute(resolve_required(
                     query,
@@ -821,23 +756,8 @@ mod windows_impl {
             setting.version = make_nvapi_version::<NvdrsSettingV1>(1);
             let profile_ptr = profile as *mut c_void;
             // SAFETY: valid session + profile handle + out struct.
-            let code = match self.get_setting {
-                ResolvedGetSetting::V1(get_setting) => unsafe {
-                    get_setting(self.session, profile_ptr, setting_id, &mut setting)
-                },
-                ResolvedGetSetting::V2(get_setting) => {
-                    let mut flags = 0u32;
-                    unsafe {
-                        get_setting(
-                            self.session,
-                            profile_ptr,
-                            setting_id,
-                            &mut setting,
-                            &mut flags,
-                        )
-                    }
-                }
-            };
+            let code =
+                unsafe { (self.get_setting)(self.session, profile_ptr, setting_id, &mut setting) };
             if code == status::SETTING_NOT_FOUND {
                 return Ok(None);
             }
@@ -860,14 +780,7 @@ mod windows_impl {
             setting.current_value.u32_value = value;
             let profile_ptr = profile as *mut c_void;
             // SAFETY: valid session + profile handle + populated setting struct.
-            let code = match self.set_setting {
-                ResolvedSetSetting::V1(set_setting) => unsafe {
-                    set_setting(self.session, profile_ptr, &setting)
-                },
-                ResolvedSetSetting::V2(set_setting) => unsafe {
-                    set_setting(self.session, profile_ptr, &mut setting, 0, 0)
-                },
-            };
+            let code = unsafe { (self.set_setting)(self.session, profile_ptr, &setting) };
             if code != status::OK {
                 return Err(classify(code, "set_setting"));
             }

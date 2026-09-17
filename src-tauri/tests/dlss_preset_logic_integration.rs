@@ -17,8 +17,8 @@ use game_manager_lib::db::repo::{
 use game_manager_lib::dlss::detect::{DetectionResult, DetectionSummary};
 use game_manager_lib::dlss::nvapi::drs::{find_app_profile, levenshtein, DrsOrchestrator};
 use game_manager_lib::dlss::nvapi::ffi::{
-    make_nvapi_version, setting_location, status, DrsDwordSetting, NvapiDriver, NvapiDrs,
-    ProfileInfo, PRESET_VALUE_RECOMMENDED, SETTING_ID_DLSS_RR, SETTING_ID_DLSS_SR,
+    make_nvapi_version, query_interface_id, setting_location, status, DrsDwordSetting, NvapiDriver,
+    NvapiDrs, ProfileInfo, PRESET_VALUE_RECOMMENDED, SETTING_ID_DLSS_RR, SETTING_ID_DLSS_SR,
     SETTING_ID_DLSS_SR_OVERRIDE, SETTING_ID_DLSS_SR_PRESET_PROFILE,
 };
 use game_manager_lib::dlss::nvapi::presets::{
@@ -38,7 +38,9 @@ struct FakeDriver {
     current_global_profile: usize,
     profiles: Vec<ProfileInfo>,
     /// Settings keyed by `(profile_handle, setting_id)`.
-    settings: Mutex<Vec<((usize, u32), DrsDwordSetting)>>,
+    settings: Arc<Mutex<Vec<((usize, u32), DrsDwordSetting)>>>,
+    discard_on_reload: bool,
+    fail_reload: bool,
     available_values: Vec<u32>,
     /// Optional forced error for every call.
     error: Option<fn() -> DlssError>,
@@ -50,7 +52,9 @@ impl FakeDriver {
             base_profile,
             current_global_profile: base_profile,
             profiles,
-            settings: Mutex::new(Vec::new()),
+            settings: Arc::new(Mutex::new(Vec::new())),
+            discard_on_reload: false,
+            fail_reload: false,
             available_values: Vec::new(),
             error: None,
         }
@@ -121,7 +125,9 @@ impl FakeDriver {
             base_profile: 1,
             current_global_profile: 1,
             profiles: Vec::new(),
-            settings: Mutex::new(Vec::new()),
+            settings: Arc::new(Mutex::new(Vec::new())),
+            discard_on_reload: false,
+            fail_reload: false,
             available_values: Vec::new(),
             error: Some(error),
         }
@@ -138,6 +144,16 @@ impl FakeDriver {
 }
 
 impl NvapiDriver for FakeDriver {
+    fn reload_settings(&self) -> Result<(), DlssError> {
+        if self.fail_reload {
+            return Err(DlssError::Unsupported);
+        }
+        if self.discard_on_reload {
+            self.settings.lock().unwrap().clear();
+        }
+        Ok(())
+    }
+
     fn base_profile(&self) -> Result<usize, DlssError> {
         if let Some(err) = self.error {
             return Err(err());
@@ -676,7 +692,7 @@ fn game_preset_set_no_op_when_no_profile_matches() {
 }
 
 #[test]
-fn game_preset_set_default_turns_override_off_for_matched_profile() {
+fn game_preset_set_default_clears_selection_for_matched_profile() {
     let profiles = vec![profile(20, "My Game", &["mygame.exe"])];
     let driver = FakeDriver::new(1, profiles)
         .with_setting(20, SETTING_ID_DLSS_SR_OVERRIDE, 1)
@@ -720,23 +736,13 @@ fn drs_profile_cache_reuses_enumeration_until_reload() {
     let exes = vec!["mygame.exe".to_string()];
 
     assert_eq!(
-        drs.get_app_preset_selection(
-            "My Game",
-            &exes,
-            SETTING_ID_DLSS_SR,
-            SETTING_ID_DLSS_SR_OVERRIDE
-        )
-        .unwrap(),
+        drs.get_app_preset_selection("My Game", &exes, SETTING_ID_DLSS_SR)
+            .unwrap(),
         Some(0)
     );
     assert_eq!(
-        drs.get_app_preset_selection(
-            "My Game",
-            &exes,
-            SETTING_ID_DLSS_SR,
-            SETTING_ID_DLSS_SR_OVERRIDE
-        )
-        .unwrap(),
+        drs.get_app_preset_selection("My Game", &exes, SETTING_ID_DLSS_SR)
+            .unwrap(),
         Some(0)
     );
     assert_eq!(enumerate_calls.load(Ordering::SeqCst), 1);
@@ -745,13 +751,8 @@ fn drs_profile_cache_reuses_enumeration_until_reload() {
     assert_eq!(reload_calls.load(Ordering::SeqCst), 1);
 
     assert_eq!(
-        drs.get_app_preset_selection(
-            "My Game",
-            &exes,
-            SETTING_ID_DLSS_SR,
-            SETTING_ID_DLSS_SR_OVERRIDE
-        )
-        .unwrap(),
+        drs.get_app_preset_selection("My Game", &exes, SETTING_ID_DLSS_SR)
+            .unwrap(),
         Some(0)
     );
     assert_eq!(enumerate_calls.load(Ordering::SeqCst), 2);
@@ -1024,13 +1025,14 @@ fn set_game_preset_for_applies_to_matched_profile() {
 }
 
 #[test]
-fn set_game_preset_for_is_noop_success_when_unmatched() {
+fn set_game_preset_for_reports_unavailable_when_unmatched() {
     let state = state();
     let id = insert_game(&state, "My Game", "C:/Games/MyGame/mygame.exe", None);
     let profiles = vec![profile(20, "Other", &["other.exe"])];
     let drs = orchestrator(FakeDriver::new(1, profiles));
-    // No matching profile → success (the per-game surface is unavailable, not an error).
-    presets::set_game_preset_for(&drs, &state, id, PresetKind::RayReconstruction, 0x4).unwrap();
+    let err = presets::set_game_preset_for(&drs, &state, id, PresetKind::RayReconstruction, 0x4)
+        .unwrap_err();
+    assert!(matches!(err, DlssError::Unsupported));
 }
 
 // ---------------------------------------------------------------------------
@@ -1139,4 +1141,101 @@ fn sr_preset_pill_value_is_none_without_matched_profile() {
         PresetKind::Dlss,
     ));
     assert_eq!(value, None);
+}
+
+// Public SDK and DLSS Swapper interoperability regressions: use literal contract
+// values so a self-consistent but incorrect reader/writer cannot pass these.
+#[test]
+fn ffi_uses_documented_nvidia_drs_entry_points() {
+    assert_eq!(query_interface_id::DRS_GET_SETTING, 0x73BF8338);
+    assert_eq!(query_interface_id::DRS_SET_SETTING, 0x577DD202);
+}
+
+#[test]
+fn reads_swapper_preset_m_without_override_enable_flag() {
+    for kind in [PresetKind::Dlss, PresetKind::RayReconstruction] {
+        let selection_id = match kind {
+            PresetKind::Dlss => 0x10E41DF3,
+            PresetKind::RayReconstruction => 0x10E41DF7,
+        };
+        for override_value in [None, Some(0), Some(1)] {
+            let mut driver = FakeDriver::new(
+                1,
+                vec![profile(20, "The Blood of Dawnwalker", &["dawnwalker.exe"])],
+            )
+            .with_setting(20, selection_id, 13);
+            if let Some(value) = override_value {
+                driver = driver.with_setting(20, override_setting_id(kind), value);
+            }
+            let drs = orchestrator(driver);
+            let result =
+                presets::get_game_preset_with(&drs, "The Blood of Dawnwalker", &[], kind).unwrap();
+            assert!(result.available);
+            assert_eq!(result.value, 13);
+        }
+    }
+}
+
+#[test]
+fn writes_only_swapper_render_preset_setting_and_preserves_other_settings() {
+    for kind in [PresetKind::Dlss, PresetKind::RayReconstruction] {
+        let selection_id = match kind {
+            PresetKind::Dlss => 0x10E41DF3,
+            PresetKind::RayReconstruction => 0x10E41DF7,
+        };
+        // Include future driver values; applying a preset must not depend on
+        // a particular driver release or a fixed list of known letters.
+        for value in [13, 0, PRESET_VALUE_RECOMMENDED, 27] {
+            let driver = FakeDriver::new(
+                1,
+                vec![profile(20, "The Blood of Dawnwalker", &["dawnwalker.exe"])],
+            )
+            .with_setting(20, override_setting_id(kind), 1)
+            .with_setting(1, selection_id, 11)
+            .with_setting(30, selection_id, 12);
+            let settings = driver.settings.clone();
+            let drs = orchestrator(driver);
+            assert!(presets::set_game_preset_with(
+                &drs,
+                "The Blood of Dawnwalker",
+                &[],
+                kind,
+                value
+            )
+            .unwrap());
+            let settings = settings.lock().unwrap();
+            assert_eq!(settings.len(), 4);
+            assert_eq!(settings[0].1.value, 1);
+            assert_eq!(settings[1].1.value, 11);
+            assert_eq!(settings[2].1.value, 12);
+            assert_eq!(
+                settings[3],
+                (
+                    (20, selection_id),
+                    DrsDwordSetting {
+                        value,
+                        location: setting_location::CURRENT_PROFILE
+                    }
+                )
+            );
+        }
+    }
+}
+
+#[test]
+fn preset_save_rejects_value_not_retained_after_reload() {
+    let mut driver = FakeDriver::new(1, vec![profile(20, "Game", &["game.exe"])]);
+    driver.discard_on_reload = true;
+    let drs = orchestrator(driver);
+    let err = presets::set_game_preset_with(&drs, "Game", &[], PresetKind::Dlss, 13).unwrap_err();
+    assert!(matches!(err, DlssError::Invalid(message) if message.contains("did not retain")));
+}
+
+#[test]
+fn preset_save_propagates_reload_failure() {
+    let mut driver = FakeDriver::new(1, vec![profile(20, "Game", &["game.exe"])]);
+    driver.fail_reload = true;
+    let drs = orchestrator(driver);
+    let err = presets::set_game_preset_with(&drs, "Game", &[], PresetKind::Dlss, 13).unwrap_err();
+    assert!(matches!(err, DlssError::Unsupported));
 }

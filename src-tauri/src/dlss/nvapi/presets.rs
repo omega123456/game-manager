@@ -172,12 +172,7 @@ pub fn get_game_preset_with(
     exe_names: &[String],
     kind: PresetKind,
 ) -> DlssResult<GamePresetState> {
-    match drs.get_app_preset_selection(
-        game_name,
-        exe_names,
-        setting_id(kind),
-        override_setting_id(kind),
-    )? {
+    match drs.get_app_preset_selection(game_name, exe_names, setting_id(kind))? {
         Some(value) => Ok(GamePresetState {
             available: true,
             value,
@@ -189,8 +184,9 @@ pub fn get_game_preset_with(
     }
 }
 
-/// Write the per-game preset value over `drs`. A missing matched profile is a
-/// no-op success (the per-game surface is unavailable, not an error).
+/// Write only the render-preset selection, matching DLSS Swapper. Reload and
+/// verify the persisted profile before reporting success. A missing profile
+/// returns `false` so the command can report that nothing was applied.
 pub fn set_game_preset_with(
     drs: &dyn NvapiDrs,
     game_name: &str,
@@ -198,25 +194,18 @@ pub fn set_game_preset_with(
     kind: PresetKind,
     value: u32,
 ) -> DlssResult<bool> {
-    if drs
-        .get_app_preset_selection(
-            game_name,
-            exe_names,
-            setting_id(kind),
-            override_setting_id(kind),
-        )?
-        .is_none()
-    {
+    if !drs.set_app_setting(game_name, exe_names, setting_id(kind), value)? {
         return Ok(false);
     }
-    let override_value = if value == 0 { 0 } else { 1 };
-    drs.set_app_setting(
-        game_name,
-        exe_names,
-        override_setting_id(kind),
-        override_value,
-    )?;
-    drs.set_app_setting(game_name, exe_names, setting_id(kind), value)?;
+    drs.reload_from_driver()?;
+    let persisted = drs.get_app_preset_selection(game_name, exe_names, setting_id(kind))?;
+    if persisted != Some(value) {
+        tracing::warn!(category = "dlss", %game_name, ?kind, value, ?persisted,
+            "nvapi preset verification failed after save and reload");
+        return Err(DlssError::Invalid(
+            "The NVIDIA driver did not retain the requested DLSS preset".to_string(),
+        ));
+    }
     Ok(true)
 }
 
@@ -354,8 +343,7 @@ pub fn get_game_preset_for(
     Ok(preset)
 }
 
-/// Resolve the game identity, then write its per-game preset over `drs`. Logs an
-/// info line (and reports no error) when no driver profile matches.
+/// Resolve the game identity, then write its per-game preset over `drs`.
 pub fn set_game_preset_for(
     drs: &dyn NvapiDrs,
     state: &AppState,
@@ -365,10 +353,11 @@ pub fn set_game_preset_for(
 ) -> DlssResult<()> {
     let (name, exe_names) = game_identity(state, game_id)?;
     if !set_game_preset_with(drs, &name, &exe_names, kind, value)? {
-        tracing::info!(
+        tracing::warn!(
             category = "dlss",
             "no matching driver profile for game {game_id}; per-game preset not applied"
         );
+        return Err(DlssError::Unsupported);
     }
     Ok(())
 }
@@ -394,7 +383,7 @@ pub fn get_global_preset_impl(_state: &AppState, kind: PresetKind) -> DlssResult
 
 /// Write the global (base profile) preset value.
 pub fn set_global_preset_impl(_state: &AppState, kind: PresetKind, value: u32) -> DlssResult<()> {
-    with_nvapi_drs(|drs| set_global_preset_with(drs, kind, value))
+    with_nvapi_drs_reloaded(|drs| set_global_preset_with(drs, kind, value))
 }
 
 /// Read the per-game preset state.
@@ -442,12 +431,12 @@ pub fn read_game_sr_preset(state: &AppState, game_id: i64) -> Option<u32> {
     sr_preset_for_pill(get_game_preset_impl(state, game_id, PresetKind::Dlss))
 }
 
-/// Write the per-game preset value (no-op when no profile matches).
+/// Write the per-game preset value from a freshly loaded driver session.
 pub fn set_game_preset_impl(
     state: &AppState,
     game_id: i64,
     kind: PresetKind,
     value: u32,
 ) -> DlssResult<()> {
-    with_nvapi_drs(|drs| set_game_preset_for(drs, state, game_id, kind, value))
+    with_nvapi_drs_reloaded(|drs| set_game_preset_for(drs, state, game_id, kind, value))
 }
