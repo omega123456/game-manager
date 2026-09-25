@@ -113,6 +113,22 @@ pub fn split_arguments(arguments: Option<&str>) -> Vec<String> {
     args
 }
 
+/// The working directory to launch `launch_target` in: the directory that
+/// contains the executable, matching what Explorer does on double-click. Many
+/// games resolve data files relative to the working directory and fail to start
+/// when they inherit ours. Returns `None` for URIs, bare program names, or when
+/// the parent directory does not exist (the child then inherits our cwd).
+pub fn launch_working_dir(launch_target: &str) -> Option<std::path::PathBuf> {
+    if launch_target.contains("://") {
+        return None;
+    }
+    let parent = std::path::Path::new(launch_target).parent()?;
+    if parent.as_os_str().is_empty() || !parent.is_dir() {
+        return None;
+    }
+    Some(parent.to_path_buf())
+}
+
 /// Outcome of the post-launch confirmation grace period for the job tree.
 enum ConfirmOutcome {
     /// The tree still had a live process after the grace period: the game is up.
@@ -318,7 +334,7 @@ impl JobLauncher for WindowsJobLauncher {
 #[cfg(windows)]
 mod windows_impl {
     use super::{
-        split_arguments, JobHandle, JOB_OBJECT_MSG_ACTIVE_PROCESS_ZERO,
+        launch_working_dir, split_arguments, JobHandle, JOB_OBJECT_MSG_ACTIVE_PROCESS_ZERO,
         JOB_OBJECT_MSG_EXIT_PROCESS, JOB_OBJECT_MSG_NEW_PROCESS,
     };
     use crate::error::{AppError, AppResult};
@@ -426,6 +442,9 @@ mod windows_impl {
         let mut command = Command::new(launch_target);
         for arg in split_arguments(arguments) {
             command.arg(arg);
+        }
+        if let Some(dir) = launch_working_dir(launch_target) {
+            command.current_dir(dir);
         }
         command.creation_flags(CREATE_SUSPENDED);
         let child = command

@@ -18,7 +18,7 @@ use std::time::Duration;
 
 use async_trait::async_trait;
 
-use super::job_object::split_arguments;
+use super::job_object::{launch_working_dir, split_arguments};
 use super::stub::elapsed_seconds;
 use super::{Monitor, StartOutcome};
 use crate::db::repo::{games, sessions};
@@ -278,6 +278,9 @@ impl NamedProcessLauncher for WindowsNamedProcessLauncher {
         let mut command = Command::new(launch_target);
         for arg in split_arguments(arguments) {
             command.arg(arg);
+        }
+        if let Some(dir) = launch_working_dir(launch_target) {
+            command.current_dir(dir);
         }
         command
             .spawn()

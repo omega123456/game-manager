@@ -15,8 +15,8 @@ use game_manager_lib::db::repo::{games, sessions};
 use game_manager_lib::domain::MonitorMode;
 use game_manager_lib::launch::cancel::CancelToken;
 use game_manager_lib::monitor::job_object::{
-    split_arguments, JobHandle, JobLauncher, JobObjectMonitor, JOB_OBJECT_MSG_ACTIVE_PROCESS_ZERO,
-    JOB_OBJECT_MSG_EXIT_PROCESS, JOB_OBJECT_MSG_NEW_PROCESS,
+    launch_working_dir, split_arguments, JobHandle, JobLauncher, JobObjectMonitor,
+    JOB_OBJECT_MSG_ACTIVE_PROCESS_ZERO, JOB_OBJECT_MSG_EXIT_PROCESS, JOB_OBJECT_MSG_NEW_PROCESS,
 };
 use game_manager_lib::monitor::{Monitor, StartOutcome};
 use game_manager_lib::state::AppState;
@@ -39,6 +39,26 @@ fn splits_arguments_honoring_quotes() {
         split_arguments(Some(r#"--path "C:\Program Files\x" --flag"#)),
         vec!["--path", r"C:\Program Files\x", "--flag"]
     );
+}
+
+#[test]
+fn launch_working_dir_is_the_executable_folder() {
+    let dir = tempfile::tempdir().unwrap();
+    let exe = dir.path().join("Control_DX12.exe");
+    assert_eq!(
+        launch_working_dir(exe.to_str().unwrap()).as_deref(),
+        Some(dir.path())
+    );
+}
+
+#[test]
+fn launch_working_dir_is_none_without_an_existing_parent() {
+    assert_eq!(launch_working_dir("steam://rungameid/870780"), None);
+    assert_eq!(launch_working_dir("game.exe"), None);
+    assert_eq!(launch_working_dir(""), None);
+    let dir = tempfile::tempdir().unwrap();
+    let missing = dir.path().join("missing").join("game.exe");
+    assert_eq!(launch_working_dir(missing.to_str().unwrap()), None);
 }
 
 // ----- fake launcher / handle -----------------------------------------------
