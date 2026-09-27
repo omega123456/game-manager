@@ -108,8 +108,8 @@ function runGit(args, inheritIo = true) {
   })
 }
 
-function runCargoGenerateLockfile() {
-  execFileSync('cargo', ['generate-lockfile'], {
+function runCargoUpdateWorkspace() {
+  execFileSync('cargo', ['update', '--workspace'], {
     cwd: tauriDir,
     stdio: 'inherit',
   })
@@ -274,7 +274,7 @@ async function main() {
     console.log('')
     console.log('Refreshing src-tauri/Cargo.lock (cargo generate-lockfile)...')
     try {
-      runCargoGenerateLockfile()
+      runCargoUpdateWorkspace()
     } catch {
       restoreVersionFilesAndReleaseBody(
         raw,
