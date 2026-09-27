@@ -489,9 +489,14 @@ pub fn scan_library_with_progress(
     reader: &dyn FileVersionReader,
     progress: &dyn ScanProgressSink,
 ) -> DlssResult<Vec<GameDlssState>> {
-    let games = state
+    // Games whose launch target is missing (not installed) have nothing to scan;
+    // leaving them out also drops their stale cached detection below.
+    let games: Vec<_> = state
         .with_db(crate::db::repo::games::list)
-        .map_err(DlssError::from)?;
+        .map_err(DlssError::from)?
+        .into_iter()
+        .filter(|game| game.missing_reason.is_none())
+        .collect();
     // Bulk-load every folder override once (8c): this replaces the per-game
     // `games::get` + `get_folder_override` lock acquisitions that the loop used
     // to do, leaving the per-game work entirely DB-free (the precondition for
@@ -501,8 +506,9 @@ pub fn scan_library_with_progress(
         .map_err(DlssError::from)?
         .into_iter()
         .collect();
-    // Drop cached detections for games that no longer exist so deleted games stop
-    // counting toward the applicable totals (the cache is the source of truth).
+    // Drop cached detections for games that no longer exist (or are not
+    // installed) so they stop counting toward the applicable totals (the cache is
+    // the source of truth).
     let live_ids: std::collections::HashSet<i64> = games.iter().map(|game| game.id).collect();
     state.dlss_detection_retain(&live_ids);
     let total = games.len() as u32;

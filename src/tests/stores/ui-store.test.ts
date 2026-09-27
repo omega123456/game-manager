@@ -10,6 +10,7 @@ describe('ui-store', () => {
       activeOverlay: 'none',
       selectedGameId: null,
       searchQuery: '',
+      startupInstallRecheckStarted: false,
     })
   })
 
@@ -33,5 +34,11 @@ describe('ui-store', () => {
     expect(next.activeOverlay).toBe('detail')
     expect(next.selectedGameId).toBe(42)
     expect(next.searchQuery).toBe('elden')
+  })
+
+  it('marks the startup install recheck as started', () => {
+    expect(useUiStore.getState().startupInstallRecheckStarted).toBe(false)
+    useUiStore.getState().markStartupInstallRecheckStarted()
+    expect(useUiStore.getState().startupInstallRecheckStarted).toBe(true)
   })
 })

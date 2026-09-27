@@ -16,6 +16,7 @@ export function resetUiStore(): void {
     activeOverlay: 'none',
     selectedGameId: null,
     searchQuery: '',
+    startupInstallRecheckStarted: false,
   })
 }
 

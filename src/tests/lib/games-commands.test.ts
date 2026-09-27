@@ -7,6 +7,7 @@ import {
   getLatestLaunchRun,
   getResolvedScripts,
   listGames,
+  recheckInstalls,
   setGameGroups,
   setGameScripts,
   updateGame,
@@ -104,5 +105,12 @@ describe('games-commands', () => {
       failureCount: 1,
     })
     expect(ipc.calls('get_latest_launch_run')).toEqual([{ gameId: 8 }])
+  })
+
+  it('rechecks installs and returns the summary', async () => {
+    const summary = { checked: 3, missingGameIds: [2], changedGameIds: [2], restoredGameIds: [] }
+    ipc.override('recheck_installs', () => summary)
+    await expect(recheckInstalls()).resolves.toEqual(summary)
+    expect(ipc.calls('recheck_installs')).toHaveLength(1)
   })
 })

@@ -46,6 +46,9 @@ export interface PhaseConfig {
   interpreter?: Interpreter
 }
 
+/** Why a game's launch target is missing (the game is "not installed"). */
+export type MissingReason = 'fileMissing' | 'driveMissing'
+
 /** A game in the library, including computed playtime aggregates. */
 export interface Game {
   id: number
@@ -60,6 +63,18 @@ export interface Game {
   createdAt: string
   totalPlaytimeSeconds: number
   lastPlayedAt?: string
+  /** Set while the launch target is missing; absent means installed. */
+  missingReason?: MissingReason
+  /** Last time (RFC 3339) an install check found the launch target present. */
+  lastSeenInstalledAt?: string
+}
+
+/** Result of re-checking every game's launch target. */
+export interface InstallRecheckSummary {
+  checked: number
+  missingGameIds: number[]
+  changedGameIds: number[]
+  restoredGameIds: number[]
 }
 
 /** A script: normal/global (phases + priority) or utility (single snippet). */

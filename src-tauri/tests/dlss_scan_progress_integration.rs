@@ -232,3 +232,43 @@ fn noop_scan_progress_is_silent() {
     let states = detect::scan_library_with(&st, &catalog, &reader).unwrap();
     assert_eq!(states.len(), 1);
 }
+
+#[test]
+fn scan_library_skips_not_installed_games_and_drops_their_detection() {
+    let app_data = TempDir::new().unwrap();
+    let st = state_with_app_data(app_data.path());
+
+    let installed = st
+        .with_db(|c| games::create(c, &new_game("steam://run/1")))
+        .unwrap();
+    let missing = st
+        .with_db(|c| games::create(c, &new_game(r"C:\Games\Gone\gone.exe")))
+        .unwrap();
+    st.with_db(|c| {
+        games::apply_install_statuses(
+            c,
+            &[games::InstallUpdate {
+                id: missing,
+                launch_target: r"C:\Games\Gone\gone.exe".into(),
+                missing_reason: Some(game_manager_lib::domain::MissingReason::FileMissing),
+                seen_at: None,
+            }],
+        )
+    })
+    .unwrap();
+    st.dlss_detection_set(missing, detect::DetectionResult::default());
+
+    let sink = RecordingSink::default();
+    let reader = FakeReader {
+        map: HashMap::new(),
+    };
+    let states =
+        detect::scan_library_with_progress(&st, &sr_catalog("00"), &reader, &sink).unwrap();
+
+    assert_eq!(states.len(), 1);
+    assert_eq!(states[0].game_id, installed);
+    let calls = sink.calls.lock().unwrap();
+    assert_eq!(calls.len(), 1);
+    assert_eq!(calls[0].1, 1, "total counts installed games only");
+    assert!(st.dlss_detection_get(missing).is_none());
+}

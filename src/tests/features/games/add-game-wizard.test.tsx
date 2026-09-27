@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import { AppRoutes } from '@/routes/app-routes'
 import { renderWithProviders, resetUiStore } from '@/tests/helpers/render-app'
 import { ipc, overrideIpcCommands } from '@/tests/ipc-mock'
+import { useToastStore } from '@/stores/toast-store'
 import type { ArtCandidate, Game } from '@/types/domain'
 
 const EXISTING_GAMES: Game[] = [
@@ -376,5 +377,42 @@ describe('AddGameWizard', () => {
       await screen.findByText('Could not import that image. Pick a PNG, JPG, or WebP file.')
     ).toBeInTheDocument()
     expect(screen.queryByText(/Local cover selected/)).not.toBeInTheDocument()
+  })
+
+  it('tells the user when a new game lands under Not installed', async () => {
+    installStatefulGameMocks()
+    useToastStore.setState({ toasts: [] })
+    overrideIpcCommands({
+      'plugin:dialog|open': () => 'C:/Games/Cocoon.exe',
+      fetch_metadata: () => ({ canonicalName: 'Cocoon', source: 'input' }),
+      search_art: () => [],
+      create_game: (args) => ({
+        id: 9,
+        name: String((args?.input as Record<string, unknown>).name),
+        launchTarget: 'C:/Games/Cocoon.exe',
+        monitorMode: 'tree',
+        groupIds: [],
+        scriptIds: [],
+        createdAt: '2026-06-15T12:00:00Z',
+        totalPlaytimeSeconds: 0,
+        missingReason: 'fileMissing',
+      }),
+    })
+
+    const user = userEvent.setup()
+    renderWithProviders(<AppRoutes />, { route: '/library' })
+
+    await screen.findByText('Balatro')
+    await user.click(screen.getByRole('button', { name: 'Add Game' }))
+    await user.click(screen.getByRole('button', { name: 'Browse for executable' }))
+    await user.click(screen.getByRole('button', { name: 'Continue to cover art' }))
+    await user.click(await screen.findByRole('button', { name: 'Continue without cover' }))
+    await user.click(screen.getByRole('button', { name: 'Save game' }))
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    const toast = useToastStore
+      .getState()
+      .toasts.find((t) => t.title === 'Added under Not installed')
+    expect(toast?.description).toBe('Launch target not found for Cocoon.')
   })
 })

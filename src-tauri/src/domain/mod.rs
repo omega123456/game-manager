@@ -36,6 +36,35 @@ impl MonitorMode {
     }
 }
 
+/// Why a game's launch target is considered missing (the game is "not installed").
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum MissingReason {
+    /// The drive or share exists but the target file does not.
+    FileMissing,
+    /// The target's drive or network share itself is not available.
+    DriveMissing,
+}
+
+impl MissingReason {
+    /// The database string representation.
+    pub fn as_db_str(self) -> &'static str {
+        match self {
+            MissingReason::FileMissing => "file_missing",
+            MissingReason::DriveMissing => "drive_missing",
+        }
+    }
+
+    /// Parse from the database string representation.
+    pub fn from_db_str(value: &str) -> Option<Self> {
+        match value {
+            "file_missing" => Some(MissingReason::FileMissing),
+            "drive_missing" => Some(MissingReason::DriveMissing),
+            _ => None,
+        }
+    }
+}
+
 /// The mutually-exclusive kind of a script.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -383,6 +412,26 @@ pub struct Game {
     /// Computed last-played timestamp (RFC 3339), if any session exists.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub last_played_at: Option<String>,
+    /// Why the launch target is missing; `None` while the game is installed.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub missing_reason: Option<MissingReason>,
+    /// Last time (RFC 3339) an install check found the launch target present.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub last_seen_installed_at: Option<String>,
+}
+
+/// Result of re-checking every game's launch target.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct InstallRecheckSummary {
+    /// Number of games inspected.
+    pub checked: usize,
+    /// Games whose launch target is missing after the check.
+    pub missing_game_ids: Vec<i64>,
+    /// Games whose install state changed in either direction.
+    pub changed_game_ids: Vec<i64>,
+    /// Games that went from not installed back to installed.
+    pub restored_game_ids: Vec<i64>,
 }
 
 /// A script: normal/global (phases + priority) or utility (single snippet).

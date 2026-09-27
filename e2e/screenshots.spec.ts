@@ -5,6 +5,7 @@ import {
   driveLaunch,
   gotoApp,
   gotoAppState,
+  scrollInstallSegmentsIntoView,
   scrollRouteOutletToTop,
   setTheme,
   THEMES,
@@ -284,6 +285,117 @@ for (const theme of THEMES) {
     await page.getByRole('button', { name: 'Edit HDR Games' }).click()
     await page.getByTestId('group-detail-panel').waitFor({ state: 'visible' })
     await expect(page).toHaveScreenshot(`group-manager-detail-${theme}.png`)
+  })
+
+  // ── Not installed games ──────────────────────────────────────────────────
+
+  test(`library not installed segment — ${theme}`, async ({ page }) => {
+    await gotoAppState(page, '#/library?libraryFixture=notInstalled')
+    await setTheme(page, theme)
+    await page.getByRole('radio', { name: 'Not installed, 2' }).click()
+    await page
+      .getByRole('button', { name: 'Open Control, not installed' })
+      .waitFor({ state: 'visible' })
+    await waitForLibraryGridImagesSettled(page)
+    await scrollInstallSegmentsIntoView(page)
+    await expect(page).toHaveScreenshot(`library-not-installed-${theme}.png`)
+  })
+
+  test(`library not installed card tooltip — ${theme}`, async ({ page }) => {
+    await gotoAppState(page, '#/library?libraryFixture=notInstalled')
+    await setTheme(page, theme)
+    await page.getByRole('radio', { name: 'Not installed, 2' }).click()
+    const card = page.getByRole('button', { name: 'Open Control, not installed' })
+    await card.waitFor({ state: 'visible' })
+    await waitForLibraryGridImagesSettled(page)
+    await scrollInstallSegmentsIntoView(page)
+    await card.hover()
+    await page.getByRole('tooltip').waitFor({ state: 'visible' })
+    await expect(page).toHaveScreenshot(`library-not-installed-card-tooltip-${theme}.png`)
+  })
+
+  test(`library search hint for the other segment — ${theme}`, async ({ page }) => {
+    await gotoAppState(page, '#/library?libraryFixture=notInstalled')
+    await setTheme(page, theme)
+    await page.getByRole('searchbox', { name: 'Search games' }).fill('control')
+    await page.getByTestId('library-other-segment-hint').waitFor({ state: 'visible' })
+    await scrollInstallSegmentsIntoView(page)
+    await expect(page).toHaveScreenshot(`library-other-segment-hint-${theme}.png`)
+  })
+
+  test(`library nothing missing — ${theme}`, async ({ page }) => {
+    await gotoApp(page)
+    await setTheme(page, theme)
+    await page.getByRole('radio', { name: 'Not installed, 0' }).click()
+    await page.getByRole('heading', { name: 'Nothing missing' }).waitFor({ state: 'visible' })
+    await scrollInstallSegmentsIntoView(page)
+    await expect(page).toHaveScreenshot(`library-nothing-missing-${theme}.png`)
+  })
+
+  test(`library none installed — ${theme}`, async ({ page }) => {
+    await gotoAppState(page, '#/library?libraryFixture=noneInstalled')
+    await setTheme(page, theme)
+    await page
+      .getByRole('heading', { name: 'Nothing installed right now' })
+      .waitFor({ state: 'visible' })
+    await scrollInstallSegmentsIntoView(page)
+    await expect(page).toHaveScreenshot(`library-none-installed-${theme}.png`)
+  })
+
+  test(`game detail not installed overview — ${theme}`, async ({ page }) => {
+    await gotoAppState(page, '#/library?libraryFixture=notInstalled')
+    await setTheme(page, theme)
+    await page.getByRole('radio', { name: 'Not installed, 2' }).click()
+    await page.getByRole('button', { name: 'Open Control, not installed' }).click()
+    await page.getByTestId('not-installed-banner').waitFor({ state: 'visible' })
+    await expect(page).toHaveScreenshot(`game-detail-not-installed-overview-${theme}.png`)
+  })
+
+  test(`game detail drive not connected — ${theme}`, async ({ page }) => {
+    await gotoAppState(page, '#/library?libraryFixture=notInstalled')
+    await setTheme(page, theme)
+    await page.getByRole('radio', { name: 'Not installed, 2' }).click()
+    await page.getByRole('button', { name: 'Open Death Stranding, not installed' }).click()
+    await page.getByText("Drive E: isn't connected.").waitFor({ state: 'visible' })
+    await expect(page).toHaveScreenshot(`game-detail-drive-not-connected-${theme}.png`)
+  })
+
+  test(`game detail not installed edit — ${theme}`, async ({ page }) => {
+    await gotoAppState(page, '#/library?libraryFixture=notInstalled')
+    await setTheme(page, theme)
+    await page.getByRole('radio', { name: 'Not installed, 2' }).click()
+    await page.getByRole('button', { name: 'Open Control, not installed' }).click()
+    await page.getByRole('tab', { name: 'Edit' }).click()
+    await page.getByTestId('launch-target-missing-message').waitFor({ state: 'visible' })
+    await expect(page).toHaveScreenshot(`game-detail-not-installed-edit-${theme}.png`)
+  })
+
+  test(`game detail not installed scripts — ${theme}`, async ({ page }) => {
+    await gotoAppState(page, '#/library?libraryFixture=notInstalled')
+    await setTheme(page, theme)
+    await page.getByRole('radio', { name: 'Not installed, 2' }).click()
+    await page.getByRole('button', { name: 'Open Control, not installed' }).click()
+    await page.getByRole('tab', { name: 'Scripts' }).click()
+    await page.getByTestId('scripts-not-installed-note').waitFor({ state: 'visible' })
+    await expect(page).toHaveScreenshot(`game-detail-not-installed-scripts-${theme}.png`)
+  })
+
+  test(`game detail not installed dlss — ${theme}`, async ({ page }) => {
+    await gotoAppState(page, '#/library?libraryFixture=notInstalled')
+    await setTheme(page, theme)
+    await page.getByRole('radio', { name: 'Not installed, 2' }).click()
+    await page.getByRole('button', { name: 'Open Control, not installed' }).click()
+    await page.getByRole('tab', { name: 'DLSS' }).click()
+    await page.getByText('DLSS detection needs the game installed').waitFor({ state: 'visible' })
+    await expect(page).toHaveScreenshot(`game-detail-not-installed-dlss-${theme}.png`)
+  })
+
+  test(`group manager not installed member — ${theme}`, async ({ page }) => {
+    await gotoAppState(page, '#/groups?libraryFixture=notInstalled')
+    await setTheme(page, theme)
+    await page.getByRole('button', { name: 'Edit HDR Games' }).click()
+    await page.getByTestId('not-installed-badge').waitFor({ state: 'visible' })
+    await expect(page).toHaveScreenshot(`group-manager-not-installed-member-${theme}.png`)
   })
 
   // ── DLSS Management ──────────────────────────────────────────────────────

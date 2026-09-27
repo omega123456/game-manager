@@ -1,6 +1,12 @@
 import { invoke } from '@tauri-apps/api/core'
 
-import type { Game, LaunchRun, MonitorMode, ResolvedScript } from '@/types/domain'
+import type {
+  Game,
+  InstallRecheckSummary,
+  LaunchRun,
+  MonitorMode,
+  ResolvedScript,
+} from '@/types/domain'
 
 export interface SaveGameInput {
   name: string
@@ -54,6 +60,11 @@ export function setGameScripts(gameId: number, scriptIds: number[]): Promise<num
 /** Resolve the effective execution entries for a game's script pipeline. */
 export function getResolvedScripts(gameId: number): Promise<ResolvedScript[]> {
   return invoke<ResolvedScript[]>('get_resolved_scripts', { gameId })
+}
+
+/** Re-check every game's launch target and store which games are not installed. */
+export function recheckInstalls(): Promise<InstallRecheckSummary> {
+  return invoke<InstallRecheckSummary>('recheck_installs')
 }
 
 /** Read the latest retained launch run for a game, or `null` when none exists. */

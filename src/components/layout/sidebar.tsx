@@ -4,7 +4,7 @@ import { NavLink, useNavigate } from 'react-router-dom'
 import appIcon from '@/assets/app-icon.png'
 import { NAV_ITEMS } from '@/components/layout/nav-items'
 import { Icon } from '@/components/ui/icon'
-import { launchGameById } from '@/features/launch/launch-controller'
+import { useLaunchGame } from '@/features/launch/use-launch-game'
 import { toCoverImageUrl } from '@/lib/asset-url'
 import { usePlayNowGameQuery } from '@/lib/queries/use-games'
 import { cn } from '@/lib/utils'
@@ -81,6 +81,7 @@ function SidebarLaunchCard(): React.JSX.Element | null {
   const [failedCoverUrl, setFailedCoverUrl] = useState<string | null>(null)
   const coverFailed = coverUrl !== null && failedCoverUrl === coverUrl
   const showCover = coverUrl !== null && !coverFailed
+  const launchGame = useLaunchGame()
 
   if (game === null) {
     return null
@@ -91,7 +92,7 @@ function SidebarLaunchCard(): React.JSX.Element | null {
       return
     }
     navigate('/library')
-    launchGameById(game.id, game.name)
+    launchGame(game.id, game.name)
   }
 
   return (

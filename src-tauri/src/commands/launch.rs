@@ -181,15 +181,27 @@ fn emit_terminal_launch_failure(
 /// real `windows-rs` monitors.
 #[cfg(not(coverage))]
 #[tauri::command]
-pub fn launch_game(
-    app: tauri::AppHandle,
-    state: tauri::State<'_, AppState>,
-    game_id: i64,
-) -> AppResult<()> {
+pub async fn launch_game(app: tauri::AppHandle, game_id: i64) -> AppResult<()> {
+    use tauri::Manager;
+
+    // Confirm the launch target still exists (with the install grace re-probe)
+    // off the main thread; a missing target is recorded and surfaces as an error.
+    let check_app = app.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = check_app.state::<AppState>();
+        crate::commands::install::ensure_launchable_impl(
+            &state,
+            game_id,
+            crate::commands::install::INSTALL_GRACE,
+        )
+    })
+    .await
+    .map_err(|err| crate::error::AppError::other(format!("install check task failed: {err}")))??;
+
+    let state = app.state::<AppState>();
     let (cancel, monitor) = prepare_launch_impl(&state, game_id)?;
     let app_handle = app.clone();
     tauri::async_runtime::spawn(async move {
-        use tauri::Manager;
         let state = app_handle.state::<AppState>();
         let sink = TauriEventSink {
             app: app_handle.clone(),

@@ -67,15 +67,15 @@ fn query_plan(conn: &rusqlite::Connection, sql: &str) -> String {
 }
 
 #[test]
-fn migrated_db_reports_version_6_with_index() {
+fn migrated_db_includes_version_6_index() {
     let conn = open_in_memory().expect("open");
 
     let version: i64 = conn
         .query_row("PRAGMA user_version", [], |row| row.get(0))
         .expect("user_version");
-    assert_eq!(
-        version, 6,
-        "freshly migrated DB must report schema version 6"
+    assert!(
+        version >= 6,
+        "freshly migrated DB must include migration 6, got version {version}"
     );
 
     let index_exists: i64 = conn

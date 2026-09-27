@@ -11,7 +11,7 @@ import {
 import { useLaunchStore } from '@/stores/launch-store'
 import { toCoverImageUrl } from '@/lib/asset-url'
 import { CancelLaunchConfirmDialog } from '@/features/launch/cancel-launch-confirm-dialog'
-import { launchGameById } from '@/features/launch/launch-controller'
+import { useLaunchGame } from '@/features/launch/use-launch-game'
 import { formatElapsed, formatLoggedPlaytime } from '@/features/launch/launch-format'
 import { ScriptExecutionPopover } from '@/features/launch/script-execution-popover'
 
@@ -87,6 +87,7 @@ function HeroCard({
   const [failedCoverUrl, setFailedCoverUrl] = useState<string | null>(null)
   const coverFailed = coverUrl !== null && failedCoverUrl === coverUrl
   const showCover = coverUrl !== null && !coverFailed
+  const launchGame = useLaunchGame()
 
   const handleCoverError = () => {
     if (coverUrl) {
@@ -96,7 +97,7 @@ function HeroCard({
 
   const handlePlay = () => {
     if (game) {
-      launchGameById(game.id, game.name)
+      launchGame(game.id, game.name)
     }
   }
 

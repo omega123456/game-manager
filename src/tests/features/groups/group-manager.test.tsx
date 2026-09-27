@@ -292,4 +292,27 @@ describe('Group Manager', () => {
     expect(ipc.calls('delete_group')[0]).toEqual({ id: 10 })
     await waitFor(() => expect(screen.getByTestId('group-detail-empty')).toBeInTheDocument())
   })
+
+  it('marks member and pickable games that are not installed', async () => {
+    installGroupPageMocks()
+    ipc.override('list_games', () =>
+      games.map((game) =>
+        game.id === 1 || game.id === 3 ? { ...game, missingReason: 'fileMissing' as const } : game
+      )
+    )
+    const user = userEvent.setup()
+    renderWithProviders(<AppRoutes />, { route: '/groups' })
+
+    await user.click(await screen.findByRole('button', { name: 'Edit HDR Games' }))
+    const list = await screen.findByTestId('group-members-list')
+    const rows = within(list).getAllByRole('listitem')
+    expect(within(rows[0]).getByText('Alan Wake 2')).toBeInTheDocument()
+    expect(within(rows[0]).getByTestId('not-installed-badge')).toBeInTheDocument()
+    expect(within(rows[1]).queryByTestId('not-installed-badge')).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Add game' }))
+    expect(await screen.findByRole('option', { name: /Celeste/ })).toHaveTextContent(
+      'Not installed'
+    )
+  })
 })

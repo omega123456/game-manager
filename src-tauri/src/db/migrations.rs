@@ -43,6 +43,10 @@ pub const MIGRATIONS: &[Migration] = &[
         version: 6,
         sql: include_str!("../../migrations/006_play_sessions_game_id_index.sql"),
     },
+    Migration {
+        version: 7,
+        sql: include_str!("../../migrations/007_game_install_state.sql"),
+    },
 ];
 
 /// Read the current schema version from `PRAGMA user_version`.

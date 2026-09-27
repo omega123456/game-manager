@@ -1,5 +1,7 @@
 import { useState } from 'react'
 
+import { Icon } from '@/components/ui/icon'
+import { isGameInstalled } from '@/features/games/install-state'
 import { toastError } from '@/lib/app-log-commands'
 import { useResolvedScriptsQuery, useSetGameScriptsMutation } from '@/lib/queries/use-games'
 import { useGroupsQuery } from '@/lib/queries/use-groups'
@@ -59,6 +61,16 @@ export function GameDetailScriptsTab({ game }: GameDetailScriptsTabProps): React
 
   return (
     <div className="space-y-5" data-testid="game-detail-scripts-tab">
+      {isGameInstalled(game) ? null : (
+        <div
+          role="note"
+          className="flex items-start gap-2 rounded-lg bg-surface-high p-3 text-sm text-muted-foreground"
+          data-testid="scripts-not-installed-note"
+        >
+          <Icon name="info" className="mt-0.5 shrink-0 text-[18px]" />
+          These scripts run the next time the game launches. That needs the game installed again.
+        </div>
+      )}
       <GameScriptAssignment
         scripts={scripts}
         assignedScriptIds={directScriptIds}

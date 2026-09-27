@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Icon } from '@/components/ui/icon'
 import { Input } from '@/components/ui/input'
 import { logFrontend, toast, toastError } from '@/lib/app-log-commands'
+import { normalizeDialogPath } from '@/lib/dialog-path'
 import {
   useDlssCatalogQuery,
   useDlssGamePresetQuery,
@@ -37,14 +38,6 @@ const CATALOG_KEY: Record<
   superResolution: 'superResolution',
   frameGeneration: 'frameGeneration',
   rayReconstruction: 'rayReconstruction',
-}
-
-/** Normalize a Tauri dialog result to a single path string (or null). */
-function normalizeDialogPath(value: string | string[] | null): string | null {
-  if (Array.isArray(value)) {
-    return typeof value[0] === 'string' ? value[0] : null
-  }
-  return typeof value === 'string' ? value : null
 }
 
 /** Read the detected display version for a DLL type off the cached state. */

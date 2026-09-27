@@ -10,6 +10,7 @@ pub mod db;
 pub mod dlss;
 pub mod domain;
 pub mod error;
+pub mod install;
 pub mod keep_awake;
 pub mod launch;
 pub mod logging;
@@ -191,6 +192,7 @@ pub fn run() {
             commands::logging::list_logs,
             commands::games::list_games,
             commands::games::get_game,
+            commands::install::recheck_installs,
             commands::games::get_play_now_game,
             commands::games::create_game,
             commands::games::update_game,

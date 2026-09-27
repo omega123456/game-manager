@@ -13,7 +13,9 @@ import {
 import { Icon } from '@/components/ui/icon'
 import { Input } from '@/components/ui/input'
 import { toCoverImageUrl } from '@/lib/asset-url'
-import { logFrontend } from '@/lib/app-log-commands'
+import { isGameInstalled } from '@/features/games/install-state'
+import { logFrontend, toast } from '@/lib/app-log-commands'
+import { normalizeDialogPath } from '@/lib/dialog-path'
 import { cacheArtCandidate, fetchMetadata, importLocalArt, searchArt } from '@/lib/ipc/art-commands'
 import { useCreateGameMutation } from '@/lib/queries/use-games'
 import { cn } from '@/lib/utils'
@@ -71,13 +73,6 @@ const STEP_COPY: Record<WizardStep, { eyebrow: string; title: string; descriptio
 
 function resetWizardState(): WizardState {
   return { ...INITIAL_STATE }
-}
-
-function normalizeDialogPath(value: string | string[] | null): string | null {
-  if (Array.isArray(value)) {
-    return typeof value[0] === 'string' ? value[0] : null
-  }
-  return typeof value === 'string' ? value : null
 }
 
 function inferNameFromPath(path: string): string {
@@ -469,13 +464,19 @@ export function AddGameWizard(): React.JSX.Element {
   async function saveGame(): Promise<void> {
     setSaveError(null)
     try {
-      await createGameMutation.mutateAsync({
+      const created = await createGameMutation.mutateAsync({
         name: wizard.gameName.trim(),
         launchTarget: wizard.executablePath.trim(),
         monitorMode: 'tree',
         arguments: wizard.argumentsValue.trim() || null,
         imagePath: wizard.selectedImagePath,
       })
+      if (!isGameInstalled(created)) {
+        toast('info', 'Added under Not installed', {
+          description: `Launch target not found for ${created.name}.`,
+          category: 'games.wizard',
+        })
+      }
       closeWizard()
     } catch (error) {
       const details = error instanceof Error ? error.message : String(error)

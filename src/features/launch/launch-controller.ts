@@ -6,9 +6,10 @@ import { useLaunchStore } from '@/stores/launch-store'
  * Kick off a launch for a game. Optimistically moves the banner into its
  * "Preparing" state, then fires the backend command. Backend progress arrives via
  * the `launch://*` events the launch-store subscribes to. Fire-and-forget; a
- * failed invoke surfaces a non-blocking toast and resets the live state.
+ * failed invoke surfaces a non-blocking toast, resets the live state, and calls
+ * `onFailed` (the backend may have just marked the game as not installed).
  */
-export function launchGameById(gameId: number, gameName?: string): void {
+export function launchGameById(gameId: number, gameName?: string, onFailed?: () => void): void {
   const store = useLaunchStore.getState()
   if (store.isActive()) {
     return
@@ -26,6 +27,7 @@ export function launchGameById(gameId: number, gameName?: string): void {
     if (live.gameId === gameId && live.phase === 'before') {
       useLaunchStore.getState().reset()
     }
+    onFailed?.()
   })
 }
 

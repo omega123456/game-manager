@@ -12,6 +12,8 @@ import {
 } from '@/components/ui/command'
 import { Icon } from '@/components/ui/icon'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import { isGameInstalled } from '@/features/games/install-state'
+import { NotInstalledBadge } from '@/features/games/not-installed-badge'
 import type { Game } from '@/types/domain'
 
 export interface GroupMembersProps {
@@ -88,6 +90,9 @@ export function GroupMembers({
                       >
                         <Icon name="sports_esports" className="text-[16px]" />
                         <span className="flex-1">{game.name}</span>
+                        {isGameInstalled(game) ? null : (
+                          <span className="text-xs text-muted-foreground">Not installed</span>
+                        )}
                         {assigned ? (
                           <Icon name="check" className="text-[16px] text-primary" />
                         ) : null}
@@ -116,7 +121,10 @@ export function GroupMembers({
               className="flex items-center justify-between gap-3 rounded-xl border border-border/80 bg-background/60 px-3 py-2"
             >
               <div className="min-w-0">
-                <p className="truncate text-sm font-medium text-foreground">{game.name}</p>
+                <div className="flex items-center gap-2">
+                  <p className="truncate text-sm font-medium text-foreground">{game.name}</p>
+                  {isGameInstalled(game) ? null : <NotInstalledBadge className="shrink-0" />}
+                </div>
                 <p className="truncate text-xs text-muted-foreground">{game.launchTarget}</p>
               </div>
               <Badge variant="muted" className="gap-1.5 pr-1">

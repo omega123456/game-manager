@@ -15,6 +15,7 @@ use rusqlite::Connection;
 use crate::db::connection;
 use crate::domain::DllCatalog;
 use crate::error::{AppError, AppResult};
+use crate::install::{InstallProbe, RealFsProbe};
 use crate::keep_awake::{self, KeepAwake, NoopSleepBlocker, SleepBlocker};
 use crate::launch::cancel::CancelToken;
 use crate::priority::{self, NoopProcessPrioritizer, ProcessPrioritizer};
@@ -50,6 +51,8 @@ pub struct AppState {
     dlss_catalog: Mutex<Option<DlssCatalogSessionCache>>,
     /// Whether a full-library DLSS scan is currently in progress.
     dlss_scan_running: AtomicBool,
+    /// Filesystem access used to decide whether games are installed.
+    install_probe: Box<dyn InstallProbe>,
 }
 
 impl AppState {
@@ -87,6 +90,7 @@ impl AppState {
             dlss_detection: Mutex::new(HashMap::new()),
             dlss_catalog: Mutex::new(None),
             dlss_scan_running: AtomicBool::new(false),
+            install_probe: Box::new(RealFsProbe),
         }
     }
 
@@ -302,6 +306,11 @@ impl AppState {
     pub fn dlss_scan_is_running(&self) -> bool {
         self.dlss_scan_running.load(Ordering::Acquire)
     }
+
+    /// The filesystem probe used by install checks.
+    pub fn install_probe(&self) -> &dyn InstallProbe {
+        self.install_probe.as_ref()
+    }
 }
 
 #[cfg(feature = "test-utils")]
@@ -326,6 +335,14 @@ impl AppState {
             Box::new(NoopSleepBlocker),
             prioritizer,
         ))
+    }
+
+    /// Construct an in-memory `AppState` over a caller-supplied install probe so
+    /// tests can control which launch targets exist without touching real drives.
+    pub fn in_memory_with_install_probe(probe: Box<dyn InstallProbe>) -> AppResult<Self> {
+        let mut state = AppState::in_memory()?;
+        state.install_probe = probe;
+        Ok(state)
     }
 
     /// Poison the launch-registry mutex so error paths can be exercised in tests.

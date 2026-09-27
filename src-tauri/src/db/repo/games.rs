@@ -6,7 +6,7 @@
 
 use rusqlite::{params, Connection, OptionalExtension, Row};
 
-use crate::domain::{Game, MonitorMode};
+use crate::domain::{Game, MissingReason, MonitorMode};
 use crate::error::{AppError, AppResult};
 
 /// Fields required to create a game.
@@ -45,7 +45,22 @@ fn map_game(row: &Row<'_>) -> rusqlite::Result<Game> {
         created_at: row.get("created_at")?,
         total_playtime_seconds: row.get("total_playtime_seconds")?,
         last_played_at: row.get("last_played_at")?,
+        missing_reason: parse_missing_reason(row.get("missing_reason")?)?,
+        last_seen_installed_at: row.get("last_seen_installed_at")?,
     })
+}
+
+fn parse_missing_reason(raw: Option<String>) -> rusqlite::Result<Option<MissingReason>> {
+    raw.map(|value| {
+        MissingReason::from_db_str(&value).ok_or_else(|| {
+            rusqlite::Error::InvalidColumnType(
+                0,
+                "missing_reason".into(),
+                rusqlite::types::Type::Text,
+            )
+        })
+    })
+    .transpose()
 }
 
 fn parse_group_ids(raw: Option<String>) -> Vec<i64> {
@@ -89,7 +104,9 @@ SELECT
       THEN MAX(0, CAST(strftime('%s', s.ended_at) AS INTEGER) - CAST(strftime('%s', s.started_at) AS INTEGER))
       ELSE 0 END
   ), 0) AS total_playtime_seconds,
-  MAX(s.started_at) AS last_played_at
+  MAX(s.started_at) AS last_played_at,
+  g.missing_reason,
+  g.last_seen_installed_at
 FROM games g
 LEFT JOIN play_sessions s ON s.game_id = g.id
 ";
@@ -134,9 +151,10 @@ pub fn get(conn: &Connection, id: i64) -> AppResult<Game> {
 
 /// Resolve the game to use for "Play Now".
 ///
-/// Prefers the cached `settings.last_played_game_id` when it points to a live
-/// game row. If the setting is missing or stale (for example the game was
-/// deleted), falls back to the game with the most recent `play_sessions.started_at`.
+/// Prefers the cached `settings.last_played_game_id` when it points to a live,
+/// installed game row. If the setting is missing or stale (for example the game
+/// was deleted or is not installed), falls back to the installed game with the
+/// most recent `play_sessions.started_at`.
 pub fn get_play_now(conn: &Connection) -> AppResult<Option<Game>> {
     let mut stmt = conn.prepare("SELECT value FROM settings WHERE key = 'last_played_game_id'")?;
     let cached_id = stmt
@@ -147,7 +165,9 @@ pub fn get_play_now(conn: &Connection) -> AppResult<Option<Game>> {
 
     if let Some(game_id) = cached_id {
         if let Ok(game) = get(conn, game_id) {
-            return Ok(Some(game));
+            if game.missing_reason.is_none() {
+                return Ok(Some(game));
+            }
         }
     }
 
@@ -156,6 +176,7 @@ pub fn get_play_now(conn: &Connection) -> AppResult<Option<Game>> {
             "SELECT s.game_id
              FROM play_sessions s
              INNER JOIN games g ON g.id = s.game_id
+             WHERE g.missing_reason IS NULL
              ORDER BY s.started_at DESC, s.id DESC
              LIMIT 1",
             [],
@@ -245,4 +266,83 @@ pub fn script_ids(conn: &Connection, game_id: i64) -> AppResult<Vec<i64>> {
     let mut stmt =
         conn.prepare("SELECT script_id FROM game_scripts WHERE game_id = ?1 ORDER BY script_id")?;
     super::collect_ids(&mut stmt, params![game_id])
+}
+
+/// The fields install checks need for one game.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct InstallTarget {
+    /// Game id.
+    pub id: i64,
+    /// Display name, for user-facing messages.
+    pub name: String,
+    /// Launch target as stored.
+    pub launch_target: String,
+    /// Currently stored missing reason (`None` = installed).
+    pub missing_reason: Option<MissingReason>,
+}
+
+fn map_install_target(row: &Row<'_>) -> rusqlite::Result<InstallTarget> {
+    Ok(InstallTarget {
+        id: row.get("id")?,
+        name: row.get("name")?,
+        launch_target: row.get("launch_target")?,
+        missing_reason: parse_missing_reason(row.get("missing_reason")?)?,
+    })
+}
+
+/// Every game's install-check fields, ordered by id.
+pub fn install_targets(conn: &Connection) -> AppResult<Vec<InstallTarget>> {
+    let mut stmt =
+        conn.prepare("SELECT id, name, launch_target, missing_reason FROM games ORDER BY id")?;
+    super::collect_rows(&mut stmt, [], map_install_target)
+}
+
+/// One game's install-check fields, or `None` when the game does not exist.
+pub fn install_target(conn: &Connection, id: i64) -> AppResult<Option<InstallTarget>> {
+    Ok(conn
+        .query_row(
+            "SELECT id, name, launch_target, missing_reason FROM games WHERE id = ?1",
+            params![id],
+            map_install_target,
+        )
+        .optional()?)
+}
+
+/// A compare-and-set write of one game's install state.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct InstallUpdate {
+    /// Game id.
+    pub id: i64,
+    /// The launch target that was checked. The write is skipped when the stored
+    /// target no longer matches (the user relinked the game mid-check).
+    pub launch_target: String,
+    /// New missing reason (`None` = installed).
+    pub missing_reason: Option<MissingReason>,
+    /// When set, stored as `last_seen_installed_at`; `None` keeps the old value.
+    pub seen_at: Option<String>,
+}
+
+/// Apply install-state writes in one transaction. Returns the ids actually written.
+pub fn apply_install_statuses(conn: &Connection, updates: &[InstallUpdate]) -> AppResult<Vec<i64>> {
+    let tx = conn.unchecked_transaction()?;
+    let mut written = Vec::new();
+    for update in updates {
+        let changed = tx.execute(
+            "UPDATE games SET
+               missing_reason = ?2,
+               last_seen_installed_at = COALESCE(?3, last_seen_installed_at)
+             WHERE id = ?1 AND launch_target = ?4",
+            params![
+                update.id,
+                update.missing_reason.map(MissingReason::as_db_str),
+                update.seen_at,
+                update.launch_target,
+            ],
+        )?;
+        if changed > 0 {
+            written.push(update.id);
+        }
+    }
+    tx.commit()?;
+    Ok(written)
 }

@@ -57,6 +57,13 @@ export async function scrollRouteOutletToTop(page: Page): Promise<void> {
   })
 }
 
+/** Scroll the library so the install-state segment row sits at the top of the viewport. */
+export async function scrollInstallSegmentsIntoView(page: Page): Promise<void> {
+  await page
+    .getByRole('radiogroup', { name: 'Install state' })
+    .evaluate((node) => node.scrollIntoView({ block: 'start' }))
+}
+
 /** Set the app theme by toggling `data-theme` on the document element. */
 export async function setTheme(page: Page, theme: Theme): Promise<void> {
   await page.evaluate((t) => document.documentElement.setAttribute('data-theme', t), theme)

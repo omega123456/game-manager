@@ -8,16 +8,18 @@ import { AppCloseGuard } from '@/features/launch/app-close-guard'
 import { LaunchBanner } from '@/features/launch/launch-banner'
 import { useLaunchEvents } from '@/features/launch/use-launch-events'
 import { useDlssLibraryScanSync } from '@/lib/queries/use-dlss'
+import { useStartupInstallRecheck } from '@/lib/queries/use-games'
 
 /**
  * App shell: a CSS grid with a fixed 256px sidebar column and a content column
  * holding the TopBar, the live LaunchBanner slot, and the routed outlet. The
- * launch lifecycle and DLSS library-scan event subscriptions are established
- * here, once, at mount.
+ * launch lifecycle and DLSS library-scan event subscriptions, and the startup
+ * install recheck, are established here, once, at mount.
  */
 export function AppLayout(): React.JSX.Element {
   useLaunchEvents()
   useDlssLibraryScanSync()
+  useStartupInstallRecheck()
 
   const mainRef = useRef<HTMLElement | null>(null)
 

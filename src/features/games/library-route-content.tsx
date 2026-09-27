@@ -14,7 +14,17 @@ import { CurrentlyPlayingHero } from '@/features/games/currently-playing-hero'
 import { GameDetailModal } from '@/features/games/game-detail-modal'
 import { LibraryGrid } from '@/features/games/library-grid'
 import { LibraryToolbar } from '@/features/games/library-toolbar'
-import { LibraryEmptyState, LibraryLoadingState } from '@/features/games/library-states'
+import {
+  isGameInstalled,
+  matchesInstallFilter,
+  type InstallFilter,
+} from '@/features/games/install-state'
+import {
+  LibraryEmptyState,
+  LibraryLoadingState,
+  type LibraryEmptyVariant,
+} from '@/features/games/library-states'
+import { useManualInstallRecheck } from '@/features/games/use-manual-install-recheck'
 import type { LibrarySortKey } from '@/features/games/library-types'
 import type { Game, Group } from '@/types/domain'
 import type { GameDlssState } from '@/types/dlss'
@@ -53,6 +63,8 @@ export function LibraryRouteContent(): React.JSX.Element {
   const setSelectedGameId = useUiStore((s) => s.setSelectedGameId)
   const [sortKey, setSortKey] = useState<LibrarySortKey>('recent')
   const [groupFilter, setGroupFilter] = useState<'all' | number>('all')
+  const [installFilter, setInstallFilter] = useState<InstallFilter>('installed')
+  const { recheck, isRechecking } = useManualInstallRecheck()
 
   const gamesQuery = useGamesQuery()
   const groupsQuery = useGroupsQuery()
@@ -62,37 +74,74 @@ export function LibraryRouteContent(): React.JSX.Element {
   const activeLaunchGameId = useLaunchStore((s) => (s.phase === 'idle' ? null : s.gameId))
   const normalizedSearch = searchQuery.trim().toLocaleLowerCase()
 
-  const visibleGames = useMemo(() => {
+  const { visibleGames, installedCount, notInstalledCount, otherSegmentMatches } = useMemo(() => {
     const games = gamesQuery.data ?? []
-    const groupFiltered =
-      groupFilter === 'all' ? games : games.filter((game) => game.groupIds.includes(groupFilter))
+    const matchesFilters = (game: Game): boolean => {
+      if (groupFilter !== 'all' && !game.groupIds.includes(groupFilter)) {
+        return false
+      }
+      if (!normalizedSearch) {
+        return true
+      }
+      const haystack = [
+        game.name,
+        game.launchTarget,
+        game.monitorProcessName ?? '',
+        game.arguments ?? '',
+      ]
+        .join(' ')
+        .toLocaleLowerCase()
+      return haystack.includes(normalizedSearch)
+    }
 
-    const filtered = normalizedSearch
-      ? groupFiltered.filter((game) => {
-          const haystack = [
-            game.name,
-            game.launchTarget,
-            game.monitorProcessName ?? '',
-            game.arguments ?? '',
-          ]
-            .join(' ')
-            .toLocaleLowerCase()
-          return haystack.includes(normalizedSearch)
-        })
-      : groupFiltered.slice()
+    let installed = 0
+    let otherMatches = 0
+    const filtered: Game[] = []
+    for (const game of games) {
+      if (isGameInstalled(game)) {
+        installed += 1
+      }
+      if (!matchesFilters(game)) {
+        continue
+      }
+      if (matchesInstallFilter(game, installFilter)) {
+        filtered.push(game)
+      } else {
+        otherMatches += 1
+      }
+    }
 
     switch (sortKey) {
       case 'name':
-        return filtered.sort(compareByName)
+        filtered.sort(compareByName)
+        break
       case 'playtime':
-        return filtered.sort(compareByPlaytime)
+        filtered.sort(compareByPlaytime)
+        break
       case 'recent':
       default:
-        return filtered.sort(compareByRecent)
+        filtered.sort(compareByRecent)
     }
-  }, [gamesQuery.data, groupFilter, normalizedSearch, sortKey])
+    return {
+      visibleGames: filtered,
+      installedCount: installed,
+      notInstalledCount: games.length - installed,
+      otherSegmentMatches: otherMatches,
+    }
+  }, [gamesQuery.data, groupFilter, installFilter, normalizedSearch, sortKey])
 
   const totalGameCount = gamesQuery.data?.length ?? 0
+  const segmentGameCount = installFilter === 'installed' ? installedCount : notInstalledCount
+  const emptyVariant: LibraryEmptyVariant =
+    totalGameCount === 0
+      ? 'empty'
+      : normalizedSearch
+        ? 'search'
+        : installFilter === 'notInstalled' && notInstalledCount === 0
+          ? 'nothingMissing'
+          : installFilter === 'installed' && installedCount === 0
+            ? 'noneInstalled'
+            : 'empty'
 
   const dlssStateByGameId = useMemo(() => {
     const map = new Map<number, GameDlssState>()
@@ -116,8 +165,15 @@ export function LibraryRouteContent(): React.JSX.Element {
       <div className="flex min-h-full w-full flex-col gap-6 p-6 lg:p-8">
         <CurrentlyPlayingHero />
         <LibraryToolbar
-          gameCount={totalGameCount}
+          gameCount={segmentGameCount}
           visibleCount={visibleGames.length}
+          installFilter={installFilter}
+          installedCount={installedCount}
+          notInstalledCount={notInstalledCount}
+          otherSegmentMatches={normalizedSearch ? otherSegmentMatches : 0}
+          onInstallFilterChange={setInstallFilter}
+          onRecheckInstalls={recheck}
+          isRecheckingInstalls={isRechecking}
           searchQuery={searchQuery}
           sortKey={sortKey}
           groups={groupsQuery.data ?? EMPTY_GROUPS}
@@ -131,7 +187,11 @@ export function LibraryRouteContent(): React.JSX.Element {
         <section className="space-y-4" aria-busy={gamesQuery.isLoading}>
           {gamesQuery.isLoading ? <LibraryLoadingState /> : null}
           {!gamesQuery.isLoading && visibleGames.length === 0 ? (
-            <LibraryEmptyState hasSearch={normalizedSearch.length > 0} onAddGame={openAddGame} />
+            <LibraryEmptyState
+              variant={emptyVariant}
+              onAddGame={openAddGame}
+              onShowNotInstalled={() => setInstallFilter('notInstalled')}
+            />
           ) : null}
           {!gamesQuery.isLoading && visibleGames.length > 0 ? (
             <LibraryGrid

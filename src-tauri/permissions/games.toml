@@ -51,3 +51,8 @@ commands.allow = ["get_resolved_scripts"]
 identifier = "allow-get-latest-launch-run"
 description = "Allows the frontend to read the latest retained launch execution pipeline via get_latest_launch_run."
 commands.allow = ["get_latest_launch_run"]
+
+[[permission]]
+identifier = "allow-recheck-installs"
+description = "Allows the frontend to re-check every game's launch target via recheck_installs."
+commands.allow = ["recheck_installs"]

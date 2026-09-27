@@ -21,18 +21,18 @@ import {
 } from '@/components/ui/dialog'
 import { Icon } from '@/components/ui/icon'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { getLibraryMeta } from '@/features/games/library-format'
 import { GameEditForm } from '@/features/games/game-edit-form'
 import { GameDetailGroupsTab } from '@/features/games/game-detail-groups-tab'
 import { GameDetailScriptsTab } from '@/features/games/game-detail-scripts-tab'
+import { DlssUnsupportedCallout } from '@/features/dlss/dlss-unsupported-callout'
 import { GameDetailDlssTab } from '@/features/dlss/game-detail-dlss-tab'
-import { toCoverImageUrl } from '@/lib/asset-url'
+import { GameDetailOverview } from '@/features/games/game-detail-overview'
+import { isGameInstalled } from '@/features/games/install-state'
+import { NotInstalledBadge } from '@/features/games/not-installed-badge'
 import { logFrontend } from '@/lib/app-log-commands'
 import { useDeleteGameMutation, useGameQuery } from '@/lib/queries/use-games'
 import { cn } from '@/lib/utils'
 import { useUiStore } from '@/stores/ui-store'
-import { useLaunchStore } from '@/stores/launch-store'
-import { launchGameById } from '@/features/launch/launch-controller'
 
 type GameDetailTab = 'overview' | 'edit' | 'groups' | 'scripts' | 'dlss'
 
@@ -76,10 +76,9 @@ function GameDetailModalInner({ selectedGameId }: GameDetailModalInnerProps): Re
   const [dlssFooterHost, setDlssFooterHost] = useState<HTMLDivElement | null>(null)
   const gameQuery = useGameQuery(selectedGameId)
   const deleteGameMutation = useDeleteGameMutation()
-  const isLaunchActive = useLaunchStore((state) => state.phase !== 'idle')
 
   const game = gameQuery.data
-  const meta = game ? getLibraryMeta(game.totalPlaytimeSeconds, game.lastPlayedAt) : null
+  const installed = game ? isGameInstalled(game) : true
 
   async function handleDelete(): Promise<void> {
     if (!selectedGameId) return
@@ -110,7 +109,10 @@ function GameDetailModalInner({ selectedGameId }: GameDetailModalInnerProps): Re
               <p className="text-xs font-semibold uppercase tracking-[0.24em] text-muted-foreground">
                 Game detail
               </p>
-              <DialogTitle className="text-2xl">{game?.name ?? 'Loading game…'}</DialogTitle>
+              <div className="flex flex-wrap items-center gap-3">
+                <DialogTitle className="text-2xl">{game?.name ?? 'Loading game…'}</DialogTitle>
+                {installed ? null : <NotInstalledBadge />}
+              </div>
               <DialogDescription>
                 Tune launch details, group membership, script inheritance, and the resolved
                 execution preview in one place.
@@ -174,7 +176,7 @@ function GameDetailModalInner({ selectedGameId }: GameDetailModalInnerProps): Re
         <div className="flex min-h-0 flex-1 flex-col">
           <div className="min-h-0 flex-1 overflow-y-auto px-6 py-6">
             <TabsContent value="overview" className="mt-0">
-              {gameQuery.isLoading || !game || !meta ? (
+              {gameQuery.isLoading || !game ? (
                 <div
                   className="grid gap-6 lg:grid-cols-[19rem_1fr]"
                   data-testid="game-detail-loading"
@@ -194,120 +196,7 @@ function GameDetailModalInner({ selectedGameId }: GameDetailModalInnerProps): Re
                   </div>
                 </div>
               ) : (
-                <div
-                  className="grid gap-6 lg:grid-cols-[19rem_1fr]"
-                  data-testid="game-detail-overview"
-                >
-                  <div className="self-start overflow-hidden rounded-[1.8rem] border border-border bg-card shadow-sm">
-                    <div className="aspect-3/4 overflow-hidden bg-surface-high">
-                      {toCoverImageUrl(game.imagePath) ? (
-                        <img
-                          src={toCoverImageUrl(game.imagePath) ?? undefined}
-                          alt={`${game.name} cover art`}
-                          className="h-full w-full object-cover"
-                        />
-                      ) : (
-                        <div className="flex h-full items-center justify-center bg-linear-to-br from-primary/20 via-transparent to-secondary/15 text-primary">
-                          <Icon name="photo" className="text-[52px]" />
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="space-y-6">
-                    <section className="overflow-hidden rounded-[1.8rem] border border-border bg-surface-container">
-                      <div className="border-b border-border bg-linear-to-r from-primary/20 via-secondary/10 to-transparent px-6 py-5">
-                        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-                          <div className="space-y-2">
-                            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">
-                              Launch profile
-                            </p>
-                            <h2 className="font-heading text-3xl font-bold tracking-tight text-foreground">
-                              {game.name}
-                            </h2>
-                            <p className="max-w-2xl text-sm text-muted-foreground">
-                              Launch runs this game's resolved script pipeline. Track live status in
-                              the banner and the currently-playing hero.
-                            </p>
-                          </div>
-                          <Button
-                            type="button"
-                            disabled={isLaunchActive}
-                            onClick={() => launchGameById(game.id, game.name)}
-                            data-testid="game-detail-launch"
-                          >
-                            <Icon name="play_circle" className="text-[18px]" />
-                            {isLaunchActive ? 'Launch in progress…' : 'Launch Game'}
-                          </Button>
-                        </div>
-                      </div>
-                      <div className="space-y-4 px-6 py-5">
-                        <div className="rounded-[1.4rem] border border-border bg-background/70 p-4">
-                          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-                            Launch target
-                          </p>
-                          <p className="mt-2 break-all text-sm text-foreground">
-                            {game.launchTarget}
-                          </p>
-                          {game.arguments ? (
-                            <>
-                              <p className="mt-4 text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-                                Arguments
-                              </p>
-                              <p className="mt-2 break-all text-sm text-foreground">
-                                {game.arguments}
-                              </p>
-                            </>
-                          ) : null}
-                        </div>
-                        <div
-                          className={cn(
-                            'rounded-[1.4rem] border p-4',
-                            game.monitorMode === 'named'
-                              ? 'border-primary/40 bg-primary/10'
-                              : 'border-border bg-background/70'
-                          )}
-                        >
-                          <div className="flex items-center gap-3">
-                            <span className="flex h-10 w-10 items-center justify-center rounded-full bg-background/80 text-primary">
-                              <Icon
-                                name={game.monitorMode === 'named' ? 'rocket_launch' : 'device_hub'}
-                                className="text-[20px]"
-                              />
-                            </span>
-                            <div>
-                              <p className="text-sm font-semibold text-foreground">
-                                {game.monitorMode === 'named'
-                                  ? 'Launcher-aware monitoring'
-                                  : 'Direct executable monitoring'}
-                              </p>
-                              <p className="text-sm text-muted-foreground">
-                                {game.monitorMode === 'named'
-                                  ? `Watching ${game.monitorProcessName ?? 'the selected executable'} after the launcher starts.`
-                                  : 'Tracking the launched process tree with zero extra setup.'}
-                              </p>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    </section>
-
-                    <section className="grid gap-4 md:grid-cols-2">
-                      <StatCard
-                        label="Total playtime"
-                        value={meta.playtime}
-                        icon="timer"
-                        tone="primary"
-                      />
-                      <StatCard
-                        label="Last played"
-                        value={meta.lastPlayed}
-                        icon="history"
-                        tone="secondary"
-                      />
-                    </section>
-                  </div>
-                </div>
+                <GameDetailOverview game={game} />
               )}
             </TabsContent>
 
@@ -324,10 +213,18 @@ function GameDetailModalInner({ selectedGameId }: GameDetailModalInnerProps): Re
             </TabsContent>
 
             <TabsContent value="dlss" className="mt-0">
-              {game ? <GameDetailDlssTab gameId={game.id} footerHost={dlssFooterHost} /> : null}
+              {game && installed ? (
+                <GameDetailDlssTab gameId={game.id} footerHost={dlssFooterHost} />
+              ) : null}
+              {game && !installed ? (
+                <DlssUnsupportedCallout
+                  title="DLSS detection needs the game installed"
+                  description="Locate the executable, then reopen this tab."
+                />
+              ) : null}
             </TabsContent>
           </div>
-          {activeTab === 'dlss' && game ? (
+          {activeTab === 'dlss' && game && installed ? (
             <div
               className="shrink-0 border-t border-border bg-background/95 px-6 py-4"
               data-testid="game-detail-dlss-footer-shell"
@@ -363,37 +260,5 @@ function GameDetailModalInner({ selectedGameId }: GameDetailModalInnerProps): Re
         </AlertDialogContent>
       </AlertDialog>
     </DialogContent>
-  )
-}
-
-interface StatCardProps {
-  label: string
-  value: string
-  icon: string
-  tone: 'primary' | 'secondary' | 'default'
-}
-
-function StatCard({ label, value, icon, tone }: StatCardProps): React.JSX.Element {
-  return (
-    <div
-      className={cn(
-        'rounded-[1.5rem] border p-4 shadow-sm',
-        tone === 'primary' && 'border-primary/25 bg-primary/10',
-        tone === 'secondary' && 'border-secondary/25 bg-secondary/10',
-        tone === 'default' && 'border-border bg-card'
-      )}
-    >
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-            {label}
-          </p>
-          <p className="mt-3 font-heading text-2xl font-bold text-foreground">{value}</p>
-        </div>
-        <span className="flex h-10 w-10 items-center justify-center rounded-full bg-background/80 text-primary">
-          <Icon name={icon} className="text-[20px]" />
-        </span>
-      </div>
-    </div>
   )
 }

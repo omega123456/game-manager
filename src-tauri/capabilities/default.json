@@ -14,6 +14,7 @@
     "allow-list-logs",
     "allow-list-games",
     "allow-get-game",
+    "allow-recheck-installs",
     "allow-get-play-now-game",
     "allow-create-game",
     "allow-update-game",

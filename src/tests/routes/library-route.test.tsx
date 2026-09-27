@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it } from 'vitest'
 
 import { AppRoutes } from '@/routes/app-routes'
+import { useToastStore } from '@/stores/toast-store'
 import { useUiStore } from '@/stores/ui-store'
 import { ipc } from '@/tests/ipc-mock'
 import { renderWithProviders, resetUiStore } from '@/tests/helpers/render-app'
@@ -223,5 +224,165 @@ describe('LibraryRoute', () => {
     expect(within(dialog).getByRole('tab', { name: 'Overview' })).toBeInTheDocument()
     expect(useUiStore.getState().activeOverlay).toBe('detail')
     expect(useUiStore.getState().selectedGameId).toBe(1)
+  })
+
+  describe('install segments', () => {
+    const CONTROL: Game = {
+      id: 5,
+      name: 'Control',
+      launchTarget: 'E:/Games/Control/Control.exe',
+      monitorMode: 'tree',
+      groupIds: [1],
+      scriptIds: [],
+      totalPlaytimeSeconds: 600,
+      createdAt: '2026-01-01T00:00:00Z',
+      missingReason: 'driveMissing',
+    }
+
+    beforeEach(() => {
+      useToastStore.setState({ toasts: [] })
+      ipc.override('list_games', () => [...GAMES, CONTROL])
+    })
+
+    function gridCardNames(): (string | null)[] {
+      return within(screen.getByTestId('library-grid'))
+        .getAllByRole('button', { name: /Open / })
+        .map((button) => button.getAttribute('aria-label'))
+    }
+
+    it('shows installed games by default and moves missing games to their own segment', async () => {
+      const user = userEvent.setup()
+      renderWithProviders(<AppRoutes />, { route: '/library' })
+
+      await screen.findByText('Alan Wake 2')
+      expect(screen.getByRole('radio', { name: 'Installed, 3' })).toHaveAttribute(
+        'aria-checked',
+        'true'
+      )
+      expect(gridCardNames()).not.toContain('Open Control, not installed')
+      expect(screen.getByText('3 installed games')).toBeInTheDocument()
+
+      await user.click(screen.getByRole('radio', { name: 'Not installed, 1' }))
+
+      await waitFor(() => expect(gridCardNames()).toEqual(['Open Control, not installed']))
+      expect(screen.getByText('1 not installed game')).toBeInTheDocument()
+    })
+
+    it('points a search at matches in the other segment', async () => {
+      const user = userEvent.setup()
+      renderWithProviders(<AppRoutes />, { route: '/library' })
+
+      await screen.findByText('Alan Wake 2')
+      await user.type(screen.getByRole('searchbox', { name: 'Search games' }), 'control')
+
+      expect(await screen.findByText('No games match this search')).toBeInTheDocument()
+      const hint = screen.getByTestId('library-other-segment-hint')
+      expect(hint).toHaveTextContent('+1 more in Not installed')
+
+      await user.click(hint)
+
+      await waitFor(() => expect(gridCardNames()).toEqual(['Open Control, not installed']))
+      expect(screen.queryByTestId('library-other-segment-hint')).not.toBeInTheDocument()
+    })
+
+    it('points a search from the not installed segment back to installed matches', async () => {
+      const user = userEvent.setup()
+      renderWithProviders(<AppRoutes />, { route: '/library' })
+
+      await user.click(await screen.findByRole('radio', { name: 'Not installed, 1' }))
+      await user.type(screen.getByRole('searchbox', { name: 'Search games' }), 'alan')
+
+      const hint = await screen.findByTestId('library-other-segment-hint')
+      expect(hint).toHaveTextContent('+1 more in Installed')
+      expect(screen.getByText('0 of 1 not installed games')).toBeInTheDocument()
+
+      await user.click(hint)
+
+      await waitFor(() => expect(gridCardNames()).toEqual(['Open Alan Wake 2']))
+    })
+
+    it('says nothing is missing when every game is installed', async () => {
+      const user = userEvent.setup()
+      ipc.override('list_games', () => GAMES)
+      renderWithProviders(<AppRoutes />, { route: '/library' })
+
+      await screen.findByText('Alan Wake 2')
+      await user.click(screen.getByRole('radio', { name: 'Not installed, 0' }))
+
+      const empty = await screen.findByTestId('library-empty')
+      expect(empty).toHaveAttribute('data-variant', 'nothingMissing')
+      expect(within(empty).getByRole('heading', { name: 'Nothing missing' })).toBeInTheDocument()
+      expect(within(empty).queryByRole('button')).not.toBeInTheDocument()
+    })
+
+    it('offers the not installed segment when nothing is installed', async () => {
+      const user = userEvent.setup()
+      ipc.override('list_games', () => [CONTROL])
+      renderWithProviders(<AppRoutes />, { route: '/library' })
+
+      const empty = await screen.findByTestId('library-empty')
+      expect(empty).toHaveAttribute('data-variant', 'noneInstalled')
+
+      await user.click(within(empty).getByRole('button', { name: 'Show not installed games' }))
+
+      await waitFor(() => expect(gridCardNames()).toEqual(['Open Control, not installed']))
+    })
+
+    it('rechecks installs on demand and reports the result', async () => {
+      const user = userEvent.setup()
+      ipc.override('recheck_installs', () => ({
+        checked: 4,
+        missingGameIds: [5],
+        changedGameIds: [],
+        restoredGameIds: [],
+      }))
+      renderWithProviders(<AppRoutes />, { route: '/library' })
+
+      await screen.findByText('Alan Wake 2')
+      const button = screen.getByRole('button', { name: /Recheck installs|Checking installs/ })
+      await waitFor(() => expect(button).toBeEnabled())
+      await user.click(button)
+
+      await waitFor(() =>
+        expect(useToastStore.getState().toasts.map((toast) => toast.title)).toContain(
+          '1 game not installed'
+        )
+      )
+    })
+
+    it('reports when every game was found', async () => {
+      const user = userEvent.setup()
+      renderWithProviders(<AppRoutes />, { route: '/library' })
+
+      await screen.findByText('Alan Wake 2')
+      const button = screen.getByRole('button', { name: /Recheck installs|Checking installs/ })
+      await waitFor(() => expect(button).toBeEnabled())
+      await user.click(button)
+
+      await waitFor(() =>
+        expect(useToastStore.getState().toasts.map((toast) => toast.title)).toContain(
+          'All games found'
+        )
+      )
+    })
+
+    it('surfaces a failed manual recheck', async () => {
+      const user = userEvent.setup()
+      renderWithProviders(<AppRoutes />, { route: '/library' })
+
+      await screen.findByText('Alan Wake 2')
+      const button = screen.getByRole('button', { name: /Recheck installs|Checking installs/ })
+      await waitFor(() => expect(button).toBeEnabled())
+      ipc.override('recheck_installs', () => {
+        throw new Error('db locked')
+      })
+      await user.click(button)
+
+      await waitFor(() =>
+        expect(useToastStore.getState().toasts.map((toast) => toast.title)).toContain(
+          'Could not check installs.'
+        )
+      )
+    })
   })
 })

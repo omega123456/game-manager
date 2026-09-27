@@ -459,3 +459,87 @@ async fn apply_to_all_records_per_game_failures() {
     assert_eq!(batch.succeeded, 0);
     assert!(!batch.results[0].ok);
 }
+
+/// Mark a game as not installed without going through an install check.
+fn mark_not_installed(st: &AppState, game_id: i64, launch_target: &str) {
+    st.with_db(|c| {
+        games::apply_install_statuses(
+            c,
+            &[games::InstallUpdate {
+                id: game_id,
+                launch_target: launch_target.to_string(),
+                missing_reason: Some(game_manager_lib::domain::MissingReason::FileMissing),
+                seen_at: None,
+            }],
+        )
+    })
+    .unwrap();
+}
+
+#[tokio::test]
+async fn mass_apply_skips_not_installed_games_even_with_stale_detection() {
+    let app_data = TempDir::new().unwrap();
+    let installed_dir = TempDir::new().unwrap();
+    let missing_dir = TempDir::new().unwrap();
+    let st = state_with_app_data(app_data.path());
+
+    let installed_exe = installed_dir.path().join("game.exe");
+    std::fs::write(&installed_exe, b"x").unwrap();
+    let installed_dll = installed_dir.path().join("nvngx_dlss.dll");
+    let missing_dll = missing_dir.path().join("nvngx_dlss.dll");
+    std::fs::write(&installed_dll, b"original").unwrap();
+    std::fs::write(&missing_dll, b"original").unwrap();
+
+    let content = b"new-content";
+    let md5 = game_manager_lib::dlss::detect::md5_hex(content);
+    seed_storage_and_manifest(app_data.path(), &md5, content);
+
+    let installed_id = st
+        .with_db(|c| games::create(c, &new_game(installed_exe.to_str().unwrap())))
+        .unwrap();
+    let missing_target = missing_dir.path().join("gone.exe");
+    let missing_target = missing_target.to_str().unwrap();
+    let missing_id = st
+        .with_db(|c| games::create(c, &new_game(missing_target)))
+        .unwrap();
+    seed_sr_detection(&st, installed_id, &installed_dll);
+    // A detection cached before the game was marked not installed.
+    seed_sr_detection(&st, missing_id, &missing_dll);
+    mark_not_installed(&st, missing_id, missing_target);
+
+    assert_eq!(
+        count_applicable_impl(&st, DllType::SuperResolution).unwrap(),
+        1
+    );
+    let batch = apply_to_all_impl(&st, DllType::SuperResolution, "3.7", &NoopApplyProgressSink)
+        .await
+        .unwrap();
+
+    assert_eq!(batch.total, 1);
+    assert_eq!(batch.results[0].game_id, installed_id);
+    assert_eq!(std::fs::read(&installed_dll).unwrap(), content);
+    assert_eq!(std::fs::read(&missing_dll).unwrap(), b"original");
+}
+
+#[tokio::test]
+async fn single_apply_refuses_a_not_installed_game() {
+    let app_data = TempDir::new().unwrap();
+    let st = state_with_app_data(app_data.path());
+    let target = r"C:\Games\Gone\gone.exe";
+    let game_id = st.with_db(|c| games::create(c, &new_game(target))).unwrap();
+    mark_not_installed(&st, game_id, target);
+
+    let err = apply_to_game_impl(
+        &st,
+        game_id,
+        DllType::SuperResolution,
+        SwapTarget::SystemDefault,
+    )
+    .await
+    .unwrap_err();
+
+    assert_eq!(
+        err.to_string(),
+        "the game isn't installed; relink its executable first"
+    );
+}

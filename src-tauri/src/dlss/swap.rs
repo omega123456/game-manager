@@ -93,6 +93,32 @@ fn destination_path(
     }
 }
 
+/// Ids of games whose launch target is missing (not installed). Such games are
+/// never DLL swap targets, even if a folder override still resolves or a stale
+/// detection lingers in the session cache.
+fn not_installed_game_ids(state: &AppState) -> DlssResult<std::collections::HashSet<i64>> {
+    Ok(state
+        .with_db(crate::db::repo::games::install_targets)
+        .map_err(DlssError::from)?
+        .into_iter()
+        .filter(|target| target.missing_reason.is_some())
+        .map(|target| target.id)
+        .collect())
+}
+
+/// Ids of installed games with `dll_type` currently detected.
+fn applicable_game_ids(state: &AppState, dll_type: DllType) -> DlssResult<Vec<i64>> {
+    let not_installed = not_installed_game_ids(state)?;
+    Ok(state
+        .dlss_detection_snapshot()
+        .into_iter()
+        .filter(|(game_id, detection)| {
+            !not_installed.contains(game_id) && pick(&detection.summary, dll_type).is_some()
+        })
+        .map(|(game_id, _)| game_id)
+        .collect())
+}
+
 /// Borrow the detected DLL for `dll_type` from a session detection summary.
 fn pick(summary: &detect::DetectionSummary, dll_type: DllType) -> &Option<DetectedDll> {
     match dll_type {
@@ -156,6 +182,11 @@ pub async fn apply_to_game_impl(
     dll_type: DllType,
     target: SwapTarget,
 ) -> DlssResult<GameDlssState> {
+    if not_installed_game_ids(state)?.contains(&game_id) {
+        return Err(DlssError::Invalid(
+            "the game isn't installed; relink its executable first".to_string(),
+        ));
+    }
     let dest = destination_path(state, game_id, dll_type)?.ok_or_else(|| {
         DlssError::Invalid("could not resolve the game's install folder".to_string())
     })?;
@@ -184,12 +215,7 @@ pub async fn apply_to_all_impl(
     version: &str,
     sink: &dyn ApplyProgressSink,
 ) -> DlssResult<BatchApplyResult> {
-    let applicable: Vec<i64> = state
-        .dlss_detection_snapshot()
-        .into_iter()
-        .filter(|(_, detection)| pick(&detection.summary, dll_type).is_some())
-        .map(|(game_id, _)| game_id)
-        .collect();
+    let applicable = applicable_game_ids(state, dll_type)?;
 
     let mut batch = BatchApplyResult {
         total: applicable.len() as u32,
@@ -236,13 +262,8 @@ pub async fn apply_to_all_impl(
     Ok(batch)
 }
 
-/// Count games where `dll_type` is currently detected (drives the button label
-/// + confirm). A cheap cache read, implemented in Phase 1.
+/// Count installed games where `dll_type` is currently detected (drives the
+/// button label + confirm). A cache read plus one small DB query.
 pub fn count_applicable_impl(state: &AppState, dll_type: DllType) -> DlssResult<u32> {
-    let count = state
-        .dlss_detection_snapshot()
-        .iter()
-        .filter(|(_, detection)| pick(&detection.summary, dll_type).is_some())
-        .count() as u32;
-    Ok(count)
+    Ok(applicable_game_ids(state, dll_type)?.len() as u32)
 }

@@ -10,6 +10,7 @@ pub mod art;
 pub mod dlss;
 pub mod games;
 pub mod groups;
+pub mod install;
 pub mod launch;
 pub mod logging;
 pub mod scripts;

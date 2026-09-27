@@ -31,11 +31,14 @@ export interface UiState {
   selectedGameId: number | null
   /** Library/global search query, driven by the TopBar search input. */
   searchQuery: string
+  /** Whether this session's startup install recheck has been started. */
+  startupInstallRecheckStarted: boolean
   setTheme: (theme: ThemePreference) => void
   setAccent: (accent: AccentKey) => void
   setActiveOverlay: (overlay: ActiveOverlay) => void
   setSelectedGameId: (gameId: number | null) => void
   setSearchQuery: (query: string) => void
+  markStartupInstallRecheckStarted: () => void
 }
 
 export const useUiStore = create<UiState>((set) => ({
@@ -44,9 +47,11 @@ export const useUiStore = create<UiState>((set) => ({
   activeOverlay: 'none',
   selectedGameId: null,
   searchQuery: '',
+  startupInstallRecheckStarted: false,
   setTheme: (theme) => set({ theme }),
   setAccent: (accent) => set({ accent }),
   setActiveOverlay: (activeOverlay) => set({ activeOverlay }),
   setSelectedGameId: (selectedGameId) => set({ selectedGameId }),
   setSearchQuery: (searchQuery) => set({ searchQuery }),
+  markStartupInstallRecheckStarted: () => set({ startupInstallRecheckStarted: true }),
 }))

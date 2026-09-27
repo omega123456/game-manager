@@ -26,38 +26,71 @@ export function LibraryLoadingState(): React.JSX.Element {
   )
 }
 
+/** Which empty library situation to explain. */
+export type LibraryEmptyVariant = 'empty' | 'search' | 'nothingMissing' | 'noneInstalled'
+
 export interface LibraryEmptyStateProps {
-  hasSearch: boolean
+  variant: LibraryEmptyVariant
   onAddGame: () => void
+  /** Switches the library to the Not installed segment (`noneInstalled` only). */
+  onShowNotInstalled?: () => void
+}
+
+const EMPTY_COPY: Record<LibraryEmptyVariant, { icon: string; title: string; body: string }> = {
+  empty: {
+    icon: 'photo_library',
+    title: 'Your library is empty',
+    body: 'Start by adding a game. The full wizard lands next, but the entry point is wired now.',
+  },
+  search: {
+    icon: 'search_off',
+    title: 'No games match this search',
+    body: 'Try a broader search from the top bar or clear it to see your full library.',
+  },
+  nothingMissing: {
+    icon: 'check_circle',
+    title: 'Nothing missing',
+    body: "Every game in your library is installed. Games land here automatically if their launch target can't be found.",
+  },
+  noneInstalled: {
+    icon: 'link_off',
+    title: 'Nothing installed right now',
+    body: "None of your games' launch targets can be found. If they're on a drive that isn't connected, reconnect it and recheck installs.",
+  },
 }
 
 export function LibraryEmptyState({
-  hasSearch,
+  variant,
   onAddGame,
+  onShowNotInstalled,
 }: LibraryEmptyStateProps): React.JSX.Element {
+  const copy = EMPTY_COPY[variant]
   return (
     <section
       className="rounded-[1.75rem] border border-dashed border-border bg-surface-low px-6 py-12 text-center"
       data-testid="library-empty"
+      data-variant={variant}
     >
       <div className="mx-auto flex max-w-md flex-col items-center gap-4">
         <span className="flex h-16 w-16 items-center justify-center rounded-full bg-primary/10 text-primary">
-          <Icon name={hasSearch ? 'search_off' : 'photo_library'} className="text-[32px]" />
+          <Icon name={copy.icon} className="text-[32px]" />
         </span>
         <div className="space-y-2">
-          <h2 className="font-heading text-2xl font-bold text-foreground">
-            {hasSearch ? 'No games match this search' : 'Your library is empty'}
-          </h2>
-          <p className="text-sm text-muted-foreground">
-            {hasSearch
-              ? 'Try a broader search from the top bar or clear it to see your full library.'
-              : 'Start by adding a game. The full wizard lands next, but the entry point is wired now.'}
-          </p>
+          <h2 className="font-heading text-2xl font-bold text-foreground">{copy.title}</h2>
+          <p className="text-sm text-muted-foreground">{copy.body}</p>
         </div>
-        <Button type="button" onClick={onAddGame}>
-          <Icon name="add_circle" className="text-[18px]" />
-          Add Game
-        </Button>
+        {variant === 'empty' || variant === 'search' ? (
+          <Button type="button" onClick={onAddGame}>
+            <Icon name="add_circle" className="text-[18px]" />
+            Add Game
+          </Button>
+        ) : null}
+        {variant === 'noneInstalled' && onShowNotInstalled ? (
+          <Button type="button" variant="outline" onClick={onShowNotInstalled}>
+            <Icon name="link_off" className="text-[18px]" />
+            Show not installed games
+          </Button>
+        ) : null}
       </div>
     </section>
   )

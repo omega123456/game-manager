@@ -106,4 +106,18 @@ describe('launch-controller', () => {
     expect(ipc.calls('cancel_launch')).toHaveLength(0)
     expect(useLaunchStore.getState().cancelling).toBe(false)
   })
+
+  it('calls onFailed after a rejected launch', async () => {
+    ipc.override('launch_game', () => {
+      throw new Error("Control isn't installed: launch target not found (C:/Games/Control.exe).")
+    })
+    let failed = 0
+
+    launchGameById(9, 'Control', () => {
+      failed += 1
+    })
+
+    await waitFor(() => expect(failed).toBe(1))
+    expect(useToastStore.getState().toasts[0].tone).toBe('error')
+  })
 })

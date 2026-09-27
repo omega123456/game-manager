@@ -1,6 +1,8 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
+import { TooltipProvider } from '@/components/ui/tooltip'
 import { GameCard } from '@/features/games/game-card'
 import * as libraryFormat from '@/features/games/library-format'
 import { useLaunchStore } from '@/stores/launch-store'
@@ -243,5 +245,65 @@ describe('GameCard', () => {
     expect(longBadge).toHaveClass('overflow-hidden')
     expect(longBadge.querySelector('span.truncate')).toHaveTextContent(longName)
     expect(screen.getByText('2 more…')).toBeInTheDocument()
+  })
+
+  describe('when not installed', () => {
+    const MISSING: Game = {
+      ...BASE_GAME,
+      imagePath: 'https://images.example.test/aw2.png',
+      missingReason: 'fileMissing',
+    }
+
+    function renderMissing(props: Partial<React.ComponentProps<typeof GameCard>> = {}) {
+      return render(
+        <TooltipProvider delayDuration={0}>
+          <GameCard game={MISSING} groups={GROUPS} {...props} />
+        </TooltipProvider>
+      )
+    }
+
+    it('shows the badge, greys the cover and names the state for assistive tech', () => {
+      renderMissing()
+
+      expect(screen.getByTestId('not-installed-badge')).toHaveTextContent('Not installed')
+      expect(screen.getByRole('button', { name: 'Open Alan Wake 2, not installed' })).toBeVisible()
+      const cover = screen.getByRole('img', { name: 'Alan Wake 2 cover art' })
+      fireEvent.load(cover)
+      expect(cover).toHaveClass('grayscale', 'opacity-60')
+      expect(screen.getByTestId('game-card')).toHaveAttribute('data-install-state', 'not-installed')
+    })
+
+    it('greys the placeholder when there is no cover art', () => {
+      renderMissing({ game: { ...MISSING, imagePath: undefined } })
+
+      expect(screen.queryByRole('img')).not.toBeInTheDocument()
+      expect(screen.getByTestId('not-installed-badge')).toBeInTheDocument()
+    })
+
+    it('drops the playing pip and DLSS pills', () => {
+      renderMissing({
+        isPlaying: true,
+        dlssState: { gameId: 1, superResolution: { version: '3.7.10', path: 'a' }, stale: false },
+      })
+
+      expect(screen.queryByTestId('game-card-playing-pip')).not.toBeInTheDocument()
+      expect(screen.queryByTestId('dlss-pills')).not.toBeInTheDocument()
+      expect(screen.getByTestId('game-card')).not.toHaveClass('ring-2')
+    })
+
+    it('still opens and explains the next step in a tooltip', async () => {
+      const user = userEvent.setup()
+      let opened: number | null = null
+      renderMissing({ onOpen: (id) => (opened = id) })
+
+      const button = screen.getByRole('button', { name: 'Open Alan Wake 2, not installed' })
+      await user.hover(button)
+      expect(
+        await screen.findByRole('tooltip', { name: 'Not installed. Open to relink or edit.' })
+      ).toBeInTheDocument()
+
+      await user.click(button)
+      expect(opened).toBe(1)
+    })
   })
 })

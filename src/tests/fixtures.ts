@@ -51,6 +51,12 @@ export const IPC_FIXTURES: Record<string, IpcHandler> = {
   set_game_scripts: (args) => args?.scriptIds ?? [],
   get_resolved_scripts: () => [],
   get_latest_launch_run: () => null,
+  recheck_installs: () => ({
+    checked: 0,
+    missingGameIds: [],
+    changedGameIds: [],
+    restoredGameIds: [],
+  }),
 
   // --- Groups. Phase D1 introduces the backend + wrappers; defaults keep the
   //     harness quiet until tests override specific flows. ---

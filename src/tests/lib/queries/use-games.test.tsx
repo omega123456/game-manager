@@ -13,14 +13,18 @@ import {
   useGamesQuery,
   useLatestLaunchRunQuery,
   usePlayNowGameQuery,
+  useRecheckInstallsMutation,
   useResolvedScriptsQuery,
   useSetGameGroupsMutation,
   useSetGameScriptsMutation,
+  useStartupInstallRecheck,
   useUpdateGameMutation,
 } from '@/lib/queries/use-games'
 import { useGroupsQuery } from '@/lib/queries/use-groups'
 import { GAMES_QUERY_KEY, GROUPS_QUERY_KEY, PLAY_NOW_QUERY_KEY } from '@/lib/queries/query-keys'
 import { useLaunchStore } from '@/stores/launch-store'
+import { useUiStore } from '@/stores/ui-store'
+import { resetUiStore } from '@/tests/helpers/render-app'
 import { ipc } from '../../ipc-mock'
 
 const GAME_ROW = {
@@ -356,5 +360,88 @@ describe('game mutations', () => {
 
     expect(client.getQueryData(GAMES_QUERY_KEY)).toEqual([previousGame])
     expect(client.getQueryData(gameDetailQueryKey(1))).toEqual(previousGame)
+  })
+})
+
+describe('install recheck', () => {
+  const NO_CHANGES = { checked: 1, missingGameIds: [], changedGameIds: [], restoredGameIds: [] }
+
+  beforeEach(() => {
+    resetUiStore()
+  })
+
+  it('seeds the detail cache with the saved game on update', async () => {
+    const saved = { ...GAME_ROW, id: 3, launchTarget: 'D:/Games/AW.exe' }
+    ipc.override('update_game', () => saved)
+    const { client, Wrapper } = createWrapper()
+    client.setQueryData(gameDetailQueryKey(3), { ...GAME_ROW, id: 3, missingReason: 'fileMissing' })
+
+    const { result } = renderHook(() => useUpdateGameMutation(), { wrapper: Wrapper })
+    await result.current.mutateAsync({
+      id: 3,
+      input: { name: GAME_ROW.name, launchTarget: 'D:/Games/AW.exe', monitorMode: 'tree' },
+    })
+
+    expect(client.getQueryData(gameDetailQueryKey(3))).toEqual(saved)
+  })
+
+  it('leaves caches alone when no install state changed', async () => {
+    ipc.override('recheck_installs', () => NO_CHANGES)
+    const { client, Wrapper } = createWrapper()
+    client.setQueryData(GAMES_QUERY_KEY, [GAME_ROW])
+
+    const { result } = renderHook(() => useRecheckInstallsMutation(), { wrapper: Wrapper })
+    await expect(result.current.mutateAsync()).resolves.toEqual(NO_CHANGES)
+
+    expect(client.getQueryState(GAMES_QUERY_KEY)?.isInvalidated).toBe(false)
+  })
+
+  it('invalidates the library and changed games when install state changed', async () => {
+    ipc.override('recheck_installs', () => ({
+      ...NO_CHANGES,
+      missingGameIds: [1],
+      changedGameIds: [1],
+    }))
+    const { client, Wrapper } = createWrapper()
+    client.setQueryData(GAMES_QUERY_KEY, [GAME_ROW])
+    client.setQueryData(gameDetailQueryKey(1), GAME_ROW)
+    client.setQueryData(gameDetailQueryKey(2), { ...GAME_ROW, id: 2 })
+
+    const { result } = renderHook(() => useRecheckInstallsMutation(), { wrapper: Wrapper })
+    await result.current.mutateAsync()
+
+    expect(client.getQueryState(GAMES_QUERY_KEY)?.isInvalidated).toBe(true)
+    expect(client.getQueryState(gameDetailQueryKey(1))?.isInvalidated).toBe(true)
+  })
+
+  it('runs the startup recheck once per session, across remounts', async () => {
+    ipc.override('recheck_installs', () => NO_CHANGES)
+    const { Wrapper } = createWrapper()
+
+    const first = renderHook(() => useStartupInstallRecheck(), { wrapper: Wrapper })
+    await waitFor(() => expect(ipc.calls('recheck_installs')).toHaveLength(1))
+    first.unmount()
+    renderHook(() => useStartupInstallRecheck(), { wrapper: Wrapper })
+
+    await waitFor(() => expect(useUiStore.getState().startupInstallRecheckStarted).toBe(true))
+    expect(ipc.calls('recheck_installs')).toHaveLength(1)
+  })
+
+  it('logs a failed startup recheck without surfacing it', async () => {
+    ipc.override('recheck_installs', () => {
+      throw new Error('probe exploded')
+    })
+    const { Wrapper } = createWrapper()
+
+    renderHook(() => useStartupInstallRecheck(), { wrapper: Wrapper })
+
+    await waitFor(() =>
+      expect(ipc.calls('log_frontend')).toContainEqual(
+        expect.objectContaining({
+          level: 'warn',
+          message: 'Startup install recheck failed.',
+        })
+      )
+    )
   })
 })

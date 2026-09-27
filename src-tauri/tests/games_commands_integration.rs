@@ -12,8 +12,11 @@ use game_manager_lib::domain::{
 };
 use game_manager_lib::state::AppState;
 
+mod common;
+
+/// Every launch target exists, so games stay installed unless a test says otherwise.
 fn state() -> AppState {
-    AppState::in_memory().unwrap()
+    common::state_with_probe(&common::FakeInstallProbe::all_present())
 }
 
 fn game_input(name: &str) -> GameUpsertInput {

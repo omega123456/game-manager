@@ -5,8 +5,11 @@ import { Button } from '@/components/ui/button'
 import { Icon } from '@/components/ui/icon'
 import { Input } from '@/components/ui/input'
 import { Switch } from '@/components/ui/switch'
+import { isGameInstalled } from '@/features/games/install-state'
 import { toCoverImageUrl } from '@/lib/asset-url'
 import { logFrontend } from '@/lib/app-log-commands'
+import { normalizeDialogPath } from '@/lib/dialog-path'
+import { cn } from '@/lib/utils'
 import { importLocalArt } from '@/lib/ipc/art-commands'
 import { useUpdateGameMutation } from '@/lib/queries/use-games'
 import type { Game, MonitorMode } from '@/types/domain'
@@ -36,13 +39,6 @@ function createInitialState(game: Game): GameEditState {
   }
 }
 
-function normalizeDialogPath(value: string | string[] | null): string | null {
-  if (Array.isArray(value)) {
-    return typeof value[0] === 'string' ? value[0] : null
-  }
-  return typeof value === 'string' ? value : null
-}
-
 function getDialogErrorMessage(error: unknown): string {
   const message = error instanceof Error ? error.message : String(error)
   return message.trim() ? message : 'Could not open the file picker.'
@@ -60,6 +56,10 @@ function deriveProcessName(path: string): string | null {
 export function GameEditForm({ game, onSaved }: GameEditFormProps): React.JSX.Element {
   const { mutateAsync: updateGame } = useUpdateGameMutation()
   const [form, setForm] = useState<GameEditState>(() => createInitialState(game))
+  // Only warn about the stored target; once the user edits it, the autosave
+  // re-checks the new path and the prop updates.
+  const launchTargetMissing =
+    !isGameInstalled(game) && form.launchTarget.trim() === game.launchTarget
   const [validationError, setValidationError] = useState<string | null>(null)
   const [browseError, setBrowseError] = useState<string | null>(null)
   const nameInputRef = useRef<HTMLInputElement | null>(null)
@@ -265,10 +265,29 @@ export function GameEditForm({ game, onSaved }: GameEditFormProps): React.JSX.El
             </Field>
           </div>
 
-          <Field label="Launch target" htmlFor="detail-launch-target">
+          <Field
+            label="Launch target"
+            htmlFor="detail-launch-target"
+            message={
+              launchTargetMissing ? (
+                <p
+                  id="detail-launch-target-message"
+                  className="flex items-start gap-1.5 text-sm text-warning"
+                  data-testid="launch-target-missing-message"
+                >
+                  <Icon name="link_off" className="mt-0.5 shrink-0 text-[16px]" />
+                  This file can't be found. Browse to where the game is now. It moves back to
+                  Installed as soon as the new path is saved.
+                </p>
+              ) : null
+            }
+          >
             <div className="flex flex-col gap-3 sm:flex-row">
               <Input
                 id="detail-launch-target"
+                aria-invalid={launchTargetMissing || undefined}
+                aria-describedby={launchTargetMissing ? 'detail-launch-target-message' : undefined}
+                className={cn(launchTargetMissing && 'border-warning ring-2 ring-warning/20')}
                 value={form.launchTarget}
                 onChange={(event) =>
                   setForm((current) => ({ ...current, launchTarget: event.target.value }))
@@ -379,16 +398,23 @@ export function GameEditForm({ game, onSaved }: GameEditFormProps): React.JSX.El
 interface FieldProps {
   label: string
   htmlFor: string
+  /** Optional status line rendered below the labelled control. */
+  message?: React.ReactNode
   children: React.ReactNode
 }
 
-function Field({ label, htmlFor, children }: FieldProps): React.JSX.Element {
+function Field({ label, htmlFor, message, children }: FieldProps): React.JSX.Element {
+  // Keep one wrapper whether or not a message is shown, so toggling the message
+  // never remounts the control (which would drop focus mid-typing).
   return (
-    <label className="cursor-pointer space-y-2.5" htmlFor={htmlFor}>
-      <span className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-        {label}
-      </span>
-      {children}
-    </label>
+    <div className="space-y-2">
+      <label className="block cursor-pointer space-y-2.5" htmlFor={htmlFor}>
+        <span className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+          {label}
+        </span>
+        {children}
+      </label>
+      {message}
+    </div>
   )
 }

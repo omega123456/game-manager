@@ -6,6 +6,7 @@ import { AppRoutes } from '@/routes/app-routes'
 import { renderWithProviders, resetUiStore } from '@/tests/helpers/render-app'
 import { ipc, overrideIpcCommands } from '@/tests/ipc-mock'
 import { useLaunchStore } from '@/stores/launch-store'
+import { useToastStore } from '@/stores/toast-store'
 import type { Game } from '@/types/domain'
 
 const BASE_GAME: Game = {
@@ -710,5 +711,202 @@ describe('GameDetailModal', () => {
     expect(await screen.findByText('foreign key constraint')).toBeInTheDocument()
     expect(ipc.calls('log_frontend').length).toBeGreaterThan(0)
     expect(screen.getByRole('alertdialog')).toBeInTheDocument()
+  })
+})
+
+describe('GameDetailModal for a game that is not installed', () => {
+  beforeEach(() => {
+    resetUiStore()
+    useLaunchStore.getState().reset()
+    useToastStore.setState({ toasts: [] })
+  })
+
+  const MISSING: Partial<Game> = {
+    launchTarget: 'C:/Games/AlanWake2.exe',
+    missingReason: 'fileMissing',
+    lastSeenInstalledAt: '2026-08-12T10:00:00Z',
+    arguments: '-dx12',
+    monitorMode: 'named',
+    monitorProcessName: 'AlanWake2.exe',
+  }
+
+  /** Install mocks where saving a new launch target marks the game installed again. */
+  function installMissingGame(overrides: Partial<Game> = {}) {
+    const mocks = installGameMocks({ ...MISSING, ...overrides })
+    ipc.override('update_game', (args) => {
+      const input = args?.input as Record<string, unknown>
+      const current = mocks.getGame()
+      const relinked = input.launchTarget !== current.launchTarget
+      const next: Game = {
+        ...current,
+        name: String(input.name),
+        launchTarget: String(input.launchTarget),
+        missingReason: relinked ? undefined : current.missingReason,
+      }
+      ipc.override('get_game', () => next)
+      ipc.override('list_games', () => [next])
+      return next
+    })
+    return mocks
+  }
+
+  async function openMissingGame(user: ReturnType<typeof userEvent.setup>) {
+    renderWithProviders(<AppRoutes />, { route: '/library' })
+    await user.click(await screen.findByRole('radio', { name: 'Not installed, 1' }))
+    await user.click(await screen.findByRole('button', { name: 'Open Alan Wake 2, not installed' }))
+    return screen.findByRole('dialog')
+  }
+
+  it('explains the missing file and offers to locate it instead of launching', async () => {
+    installMissingGame()
+    const user = userEvent.setup()
+
+    const dialog = await openMissingGame(user)
+
+    expect(within(dialog).getByTestId('not-installed-badge')).toBeInTheDocument()
+    const banner = await within(dialog).findByTestId('not-installed-banner')
+    expect(banner).toHaveTextContent("This game's launch target can't be found.")
+    expect(within(banner).queryByRole('button')).not.toBeInTheDocument()
+    expect(within(dialog).queryByTestId('game-detail-launch')).not.toBeInTheDocument()
+    expect(within(dialog).getByRole('button', { name: 'Locate executable…' })).toBeEnabled()
+    expect(within(dialog).getByTestId('game-detail-launch-target')).toHaveClass('line-through')
+    expect(within(dialog).getByText('Last seen installed: 12 Aug 2026')).toBeInTheDocument()
+    expect(within(dialog).getByRole('img', { name: 'Alan Wake 2 cover art' })).toHaveClass(
+      'grayscale'
+    )
+  })
+
+  it('relinks the game with its full settings from Locate executable', async () => {
+    installMissingGame()
+    ipc.override('plugin:dialog|open', () => 'D:/Games/AlanWake2/AlanWake2.exe')
+    const user = userEvent.setup()
+
+    const dialog = await openMissingGame(user)
+    await user.click(within(dialog).getByRole('button', { name: 'Locate executable…' }))
+
+    await waitFor(() =>
+      expect(ipc.calls('update_game')).toEqual([
+        {
+          id: 1,
+          input: {
+            name: 'Alan Wake 2',
+            launchTarget: 'D:/Games/AlanWake2/AlanWake2.exe',
+            monitorMode: 'named',
+            monitorProcessName: 'AlanWake2.exe',
+            arguments: '-dx12',
+            imagePath: 'https://images.example.test/alan-wake-2.png',
+          },
+        },
+      ])
+    )
+    expect(await within(dialog).findByTestId('game-detail-launch')).toBeInTheDocument()
+    expect(within(dialog).queryByTestId('not-installed-banner')).not.toBeInTheDocument()
+    expect(useToastStore.getState().toasts.map((toast) => toast.title)).toContain(
+      'Alan Wake 2 relinked'
+    )
+  })
+
+  it('does nothing when the picker is cancelled', async () => {
+    installMissingGame()
+    const user = userEvent.setup()
+
+    const dialog = await openMissingGame(user)
+    await user.click(within(dialog).getByRole('button', { name: 'Locate executable…' }))
+
+    await waitFor(() =>
+      expect(within(dialog).getByRole('button', { name: 'Locate executable…' })).toBeEnabled()
+    )
+    expect(ipc.calls('update_game')).toHaveLength(0)
+  })
+
+  it('reports a relink that fails to save', async () => {
+    installMissingGame()
+    ipc.override('plugin:dialog|open', () => 'D:/Games/AlanWake2/AlanWake2.exe')
+    ipc.override('update_game', () => {
+      throw new Error('database is locked')
+    })
+    const user = userEvent.setup()
+
+    const dialog = await openMissingGame(user)
+    await user.click(within(dialog).getByRole('button', { name: 'Locate executable…' }))
+
+    await waitFor(() =>
+      expect(useToastStore.getState().toasts.map((toast) => toast.title)).toContain(
+        'Could not relink the game.'
+      )
+    )
+    expect(within(dialog).getByTestId('not-installed-banner')).toBeInTheDocument()
+  })
+
+  it('names a disconnected drive and offers a recheck', async () => {
+    installMissingGame({ launchTarget: 'E:/Games/AlanWake2.exe', missingReason: 'driveMissing' })
+    const user = userEvent.setup()
+
+    const dialog = await openMissingGame(user)
+    const banner = await within(dialog).findByTestId('not-installed-banner')
+    expect(banner).toHaveTextContent("Drive E: isn't connected.")
+    const recheck = within(banner).getByRole('button', { name: 'Recheck' })
+    await waitFor(() => expect(recheck).toBeEnabled())
+    const before = ipc.calls('recheck_installs').length
+
+    await user.click(recheck)
+
+    await waitFor(() => expect(ipc.calls('recheck_installs')).toHaveLength(before + 1))
+  })
+
+  it('names a disconnected network share', async () => {
+    installMissingGame({
+      launchTarget: '\\\\nas\\games\\AlanWake2.exe',
+      missingReason: 'driveMissing',
+    })
+    const user = userEvent.setup()
+
+    const dialog = await openMissingGame(user)
+
+    expect(await within(dialog).findByTestId('not-installed-banner')).toHaveTextContent(
+      "Share \\\\nas\\games isn't connected."
+    )
+  })
+
+  it('warns on the Edit tab until the launch target is changed', async () => {
+    installMissingGame()
+    const user = userEvent.setup()
+
+    const dialog = await openMissingGame(user)
+    await user.click(within(dialog).getByRole('tab', { name: 'Edit' }))
+
+    const input = await within(dialog).findByLabelText('Launch target')
+    expect(input).toHaveAttribute('aria-invalid', 'true')
+    expect(within(dialog).getByTestId('launch-target-missing-message')).toBeInTheDocument()
+
+    await user.type(input, 'x')
+
+    expect(within(dialog).queryByTestId('launch-target-missing-message')).not.toBeInTheDocument()
+    expect(input).not.toHaveAttribute('aria-invalid')
+  })
+
+  it('notes on the Scripts tab that scripts wait for a reinstall', async () => {
+    installMissingGame()
+    const user = userEvent.setup()
+
+    const dialog = await openMissingGame(user)
+    await user.click(within(dialog).getByRole('tab', { name: 'Scripts' }))
+
+    expect(await within(dialog).findByTestId('scripts-not-installed-note')).toHaveTextContent(
+      'These scripts run the next time the game launches.'
+    )
+  })
+
+  it('replaces the DLSS tab with an explanation', async () => {
+    installMissingGame()
+    const user = userEvent.setup()
+
+    const dialog = await openMissingGame(user)
+    await user.click(within(dialog).getByRole('tab', { name: 'DLSS' }))
+
+    expect(
+      await within(dialog).findByText('DLSS detection needs the game installed')
+    ).toBeInTheDocument()
+    expect(within(dialog).queryByTestId('game-detail-dlss-footer-shell')).not.toBeInTheDocument()
   })
 })

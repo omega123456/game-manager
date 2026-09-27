@@ -8,6 +8,7 @@
 
 use serde::Deserialize;
 
+use crate::commands::install::check_install_now_impl;
 use crate::db::repo::{games, launch_runs, scripts};
 use crate::domain::{Game, LaunchRun, MonitorMode, ResolvedScript, ScriptKind};
 use crate::error::{AppError, AppResult};
@@ -101,24 +102,42 @@ pub fn get_play_now_game_impl(state: &AppState) -> AppResult<Option<Game>> {
     state.with_db(games::get_play_now)
 }
 
-/// Create a game, returning the hydrated row with aggregates.
+/// Create a game, check whether its launch target exists, and return the
+/// hydrated row with aggregates.
 pub fn create_game_impl(state: &AppState, input: GameUpsertInput) -> AppResult<Game> {
     let new_game = normalize_input(input)?;
-    state.with_db(|conn| {
-        let id = games::create(conn, &new_game)?;
-        games::get(conn, id)
-    })
+    let id = state.with_db(|conn| games::create(conn, &new_game))?;
+    check_install_now_impl(state, id)?;
+    state.with_db(|conn| games::get(conn, id))
 }
 
 /// Update a game and return the hydrated row.
 pub fn update_game_impl(state: &AppState, id: i64, input: GameUpsertInput) -> AppResult<Game> {
+    update_game_tracked_impl(state, id, input).map(|(game, _)| game)
+}
+
+/// Update a game and return the hydrated row plus whether its launch target
+/// changed. A changed target is checked on disk immediately; an unchanged one
+/// is not (the edit form autosaves the whole game on every edit).
+pub fn update_game_tracked_impl(
+    state: &AppState,
+    id: i64,
+    input: GameUpsertInput,
+) -> AppResult<(Game, bool)> {
     let updated = normalize_input(input)?;
-    state.with_db(|conn| {
+    let previous_target = state.with_db(|conn| {
+        let previous = games::install_target(conn, id)?;
         if !games::update(conn, id, &updated)? {
             return Err(AppError::other(format!("game {id} not found")));
         }
-        games::get(conn, id)
-    })
+        Ok(previous.map(|target| target.launch_target))
+    })?;
+    let target_changed = previous_target.as_deref() != Some(updated.launch_target.as_str());
+    if target_changed {
+        check_install_now_impl(state, id)?;
+    }
+    let game = state.with_db(|conn| games::get(conn, id))?;
+    Ok((game, target_changed))
 }
 
 /// Delete a game by id.
@@ -190,6 +209,21 @@ pub fn get_play_now_game(state: tauri::State<'_, AppState>) -> AppResult<Option<
     get_play_now_game_impl(&state)
 }
 
+/// Scan a game for DLSS DLLs when it is installed, logging (not failing) errors.
+#[cfg(not(coverage))]
+fn scan_dlss_if_installed(state: &AppState, game: &Game, context: &str) {
+    if game.missing_reason.is_some() {
+        return;
+    }
+    if let Err(err) = crate::dlss::detect::scan_game_impl(state, game.id) {
+        tracing::warn!(
+            category = "dlss",
+            game_id = game.id,
+            "DLSS scan of {context} game failed: {err}"
+        );
+    }
+}
+
 /// Thin `#[tauri::command]` wrapper delegating to [`create_game_impl`], then
 /// scanning the new game for DLSS DLLs so its session detection (and the library
 /// pills) are available immediately — no restart or management-page visit needed.
@@ -197,17 +231,13 @@ pub fn get_play_now_game(state: tauri::State<'_, AppState>) -> AppResult<Option<
 #[tauri::command]
 pub fn create_game(state: tauri::State<'_, AppState>, input: GameUpsertInput) -> AppResult<Game> {
     let game = create_game_impl(&state, input)?;
-    if let Err(err) = crate::dlss::detect::scan_game_impl(&state, game.id) {
-        tracing::warn!(
-            category = "dlss",
-            game_id = game.id,
-            "DLSS scan of newly added game failed: {err}"
-        );
-    }
+    scan_dlss_if_installed(&state, &game, "newly added");
     Ok(game)
 }
 
-/// Thin `#[tauri::command]` wrapper delegating to [`update_game_impl`].
+/// Thin `#[tauri::command]` wrapper delegating to [`update_game_tracked_impl`].
+/// When the launch target changed, the game's DLSS detection is refreshed so it
+/// never describes the previous install folder.
 #[cfg(not(coverage))]
 #[tauri::command]
 pub fn update_game(
@@ -215,7 +245,12 @@ pub fn update_game(
     id: i64,
     input: GameUpsertInput,
 ) -> AppResult<Game> {
-    update_game_impl(&state, id, input)
+    let (game, target_changed) = update_game_tracked_impl(&state, id, input)?;
+    if target_changed {
+        state.dlss_detection_remove(game.id);
+        scan_dlss_if_installed(&state, &game, "relinked");
+    }
+    Ok(game)
 }
 
 /// Thin `#[tauri::command]` wrapper delegating to [`delete_game_impl`], then

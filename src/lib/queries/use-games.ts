@@ -1,3 +1,4 @@
+import { useEffect } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
 import {
@@ -8,6 +9,7 @@ import {
   getPlayNowGame,
   getResolvedScripts,
   listGames,
+  recheckInstalls,
   setGameGroups,
   setGameScripts,
   updateGame,
@@ -21,8 +23,10 @@ import {
   PLAY_NOW_QUERY_KEY,
   SCRIPT_EXECUTION_QUERY_KEY,
 } from '@/lib/queries/query-keys'
+import { logFrontend } from '@/lib/app-log-commands'
 import { useLaunchStore } from '@/stores/launch-store'
-import type { Game } from '@/types/domain'
+import { useUiStore } from '@/stores/ui-store'
+import type { Game, InstallRecheckSummary } from '@/types/domain'
 
 /**
  * Sentinel game id baked into query keys while a real id is unavailable. Paired
@@ -102,7 +106,14 @@ export function useLatestLaunchRunQuery(gameId: number | null | undefined) {
   return query
 }
 
-function invalidateGames(queryClient: ReturnType<typeof useQueryClient>, gameId?: number) {
+/** Mutation key shared by every install recheck, so UI can show a pending state. */
+export const RECHECK_INSTALLS_MUTATION_KEY = ['games', 'recheck-installs'] as const
+
+/** Invalidate every cache derived from the game library (and one game's detail). */
+export function invalidateGameQueries(
+  queryClient: ReturnType<typeof useQueryClient>,
+  gameId?: number
+): void {
   void queryClient.invalidateQueries({ queryKey: GAMES_QUERY_KEY })
   void queryClient.invalidateQueries({ queryKey: PLAY_NOW_QUERY_KEY })
   // Adding/removing/editing a game changes the set the backend scans for DLSS,
@@ -130,7 +141,7 @@ export function useCreateGameMutation() {
   return useMutation({
     mutationFn: (input: SaveGameInput) => createGame(input),
     onSuccess: (game: Game) => {
-      invalidateGames(queryClient, game.id)
+      invalidateGameQueries(queryClient, game.id)
     },
   })
 }
@@ -141,9 +152,54 @@ export function useUpdateGameMutation() {
   return useMutation({
     mutationFn: ({ id, input }: { id: number; input: SaveGameInput }) => updateGame(id, input),
     onSuccess: (game: Game) => {
-      invalidateGames(queryClient, game.id)
+      // Seed the detail cache with the saved row before refetching, so a view
+      // that remounts in between (e.g. the Edit tab after "Locate executable…")
+      // starts from the new launch target instead of the stale one.
+      queryClient.setQueryData(gameDetailQueryKey(game.id), game)
+      invalidateGameQueries(queryClient, game.id)
     },
   })
+}
+
+/**
+ * Re-check every game's launch target. Caches are only refreshed when some
+ * game's install state actually changed.
+ */
+export function useRecheckInstallsMutation() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationKey: RECHECK_INSTALLS_MUTATION_KEY,
+    mutationFn: recheckInstalls,
+    onSuccess: (summary: InstallRecheckSummary) => {
+      for (const gameId of summary.changedGameIds) {
+        invalidateGameQueries(queryClient, gameId)
+      }
+    },
+  })
+}
+
+/**
+ * Run one install recheck per app session, at startup. The session flag lives
+ * in the UI store and is set before the mutation fires, so a remount (React
+ * StrictMode, route changes) never triggers a second startup check.
+ */
+export function useStartupInstallRecheck(): void {
+  const { mutate } = useRecheckInstallsMutation()
+  useEffect(() => {
+    const { startupInstallRecheckStarted, markStartupInstallRecheckStarted } = useUiStore.getState()
+    if (startupInstallRecheckStarted) {
+      return
+    }
+    markStartupInstallRecheckStarted()
+    mutate(undefined, {
+      onError: (error: unknown) => {
+        logFrontend('warn', 'Startup install recheck failed.', {
+          category: 'games.install',
+          details: error instanceof Error ? error.message : String(error),
+        })
+      },
+    })
+  }, [mutate])
 }
 
 /** Delete a game and refresh the list cache. */
@@ -152,7 +208,7 @@ export function useDeleteGameMutation() {
   return useMutation({
     mutationFn: (id: number) => deleteGame(id),
     onSuccess: (_value, id) => {
-      invalidateGames(queryClient, id)
+      invalidateGameQueries(queryClient, id)
       // The DB cascade removes the game's game_groups rows; refresh groups so
       // member lists and counts drop the deleted game.
       void queryClient.invalidateQueries({ queryKey: GROUPS_QUERY_KEY })
@@ -188,7 +244,7 @@ export function useSetGameGroupsMutation() {
       }
     },
     onSuccess: (_groupIds, { gameId }) => {
-      invalidateGames(queryClient, gameId)
+      invalidateGameQueries(queryClient, gameId)
       void queryClient.invalidateQueries({ queryKey: GROUPS_QUERY_KEY })
     },
   })
@@ -222,7 +278,7 @@ export function useSetGameScriptsMutation() {
       }
     },
     onSuccess: (_scriptIds, { gameId }) => {
-      invalidateGames(queryClient, gameId)
+      invalidateGameQueries(queryClient, gameId)
     },
   })
 }
