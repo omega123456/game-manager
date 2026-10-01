@@ -157,7 +157,17 @@ pub fn set_global_preset_with(drs: &dyn NvapiDrs, kind: PresetKind, value: u32) 
             PRESET_VALUE_RECOMMENDED => (PRESET_PROFILE_MODE_RECOMMENDED, PRESET_VALUE_RECOMMENDED),
             _ => (PRESET_PROFILE_MODE_CUSTOM, value),
         };
-        drs.set_base_setting(profile_mode_id, profile_mode)?;
+        // Older drivers don't know the NVIDIA App profile-mode setting; the
+        // preset selection alone is still honored there.
+        match drs.set_base_setting(profile_mode_id, profile_mode) {
+            Err(DlssError::SettingNotFound(detail)) => tracing::info!(
+                category = "dlss",
+                profile_mode_id,
+                %detail,
+                "nvapi preset write: driver lacks preset profile mode setting; skipping"
+            ),
+            other => other?,
+        }
         drs.set_base_setting(setting_id(kind), selection)
     } else {
         drs.set_base_setting(setting_id(kind), value)

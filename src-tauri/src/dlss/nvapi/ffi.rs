@@ -347,6 +347,9 @@ mod windows_impl {
         match code {
             status::INVALID_USER_PRIVILEGE => DlssError::Privilege,
             status::NOT_SUPPORTED => DlssError::Unsupported,
+            status::SETTING_NOT_FOUND => {
+                DlssError::SettingNotFound(format!("nvapi {context} failed (status {code})"))
+            }
             other => {
                 tracing::warn!(category = "dlss", "nvapi {context} failed: status {other}");
                 DlssError::Invalid(format!("nvapi {context} failed (status {other})"))

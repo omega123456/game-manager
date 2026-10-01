@@ -50,6 +50,10 @@ pub enum DlssError {
     #[error("io error: {0}")]
     Io(String),
 
+    /// The installed driver does not recognize an NVAPI DRS setting id.
+    #[error("{0}")]
+    SettingNotFound(String),
+
     /// A parse/validation failure (manifest JSON, MD5 mismatch, zip contents).
     #[error("{0}")]
     Invalid(String),

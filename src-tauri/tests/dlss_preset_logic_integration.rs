@@ -44,6 +44,8 @@ struct FakeDriver {
     available_values: Vec<u32>,
     /// Optional forced error for every call.
     error: Option<fn() -> DlssError>,
+    /// Setting id the driver does not recognize on write.
+    unknown_setting: Option<u32>,
 }
 
 impl FakeDriver {
@@ -57,6 +59,14 @@ impl FakeDriver {
             fail_reload: false,
             available_values: Vec::new(),
             error: None,
+            unknown_setting: None,
+        }
+    }
+
+    fn with_unknown_setting(self, setting_id: u32) -> Self {
+        Self {
+            unknown_setting: Some(setting_id),
+            ..self
         }
     }
 
@@ -130,6 +140,7 @@ impl FakeDriver {
             fail_reload: false,
             available_values: Vec::new(),
             error: Some(error),
+            unknown_setting: None,
         }
     }
 
@@ -196,6 +207,11 @@ impl NvapiDriver for FakeDriver {
     fn set_setting(&self, profile: usize, setting_id: u32, value: u32) -> Result<(), DlssError> {
         if let Some(err) = self.error {
             return Err(err());
+        }
+        if self.unknown_setting == Some(setting_id) {
+            return Err(DlssError::SettingNotFound(
+                "nvapi set_setting failed (status -160)".to_string(),
+            ));
         }
         let mut settings = self.settings.lock().unwrap();
         let entry = DrsDwordSetting {
@@ -623,6 +639,23 @@ fn global_preset_set_default_clears_dlss_profile_mode_and_selection() {
     presets::set_global_preset_with(&drs, PresetKind::Dlss, 0).unwrap();
     let value = presets::get_global_preset_with(&drs, PresetKind::Dlss).unwrap();
     assert_eq!(value, 0);
+}
+
+#[test]
+fn global_preset_set_skips_profile_mode_unknown_to_driver() {
+    let drs = orchestrator(
+        FakeDriver::new(1, vec![]).with_unknown_setting(SETTING_ID_DLSS_SR_PRESET_PROFILE),
+    );
+    presets::set_global_preset_with(&drs, PresetKind::Dlss, 0xB).unwrap();
+    let value = presets::get_global_preset_with(&drs, PresetKind::Dlss).unwrap();
+    assert_eq!(value, 0xB);
+}
+
+#[test]
+fn global_preset_set_propagates_unknown_selection_setting() {
+    let drs = orchestrator(FakeDriver::new(1, vec![]).with_unknown_setting(SETTING_ID_DLSS_SR));
+    let err = presets::set_global_preset_with(&drs, PresetKind::Dlss, 0xB).unwrap_err();
+    assert!(matches!(err, DlssError::SettingNotFound(_)));
 }
 
 #[test]
