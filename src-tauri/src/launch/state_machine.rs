@@ -13,7 +13,7 @@
 //! emits a `launch://error`, but the pipeline never halts. Cancellation (via the
 //! shared [`CancelToken`]) aborts the wait-for-start/-end and skips the game's
 //! own After phase, while still recording the session end and running On-Exit
-//! cleanup.
+//! cleanup (even when cancelled before the process was detected).
 
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -329,6 +329,16 @@ pub async fn run_launch(
             id
         }
         StartOutcome::Cancelled => {
+            // Before scripts already ran; still run On-Exit cleanup to undo them.
+            lifecycle.emit_phase(LaunchPhase::OnExit, None, None);
+            run_phase_logged(
+                state,
+                &mut lifecycle,
+                LaunchPhase::OnExit,
+                &resolved,
+                &scripts_by_id,
+            )
+            .await;
             mark_pending_records_not_reached(state, &lifecycle);
             let ended_at = now_rfc3339();
             mark_run_status(

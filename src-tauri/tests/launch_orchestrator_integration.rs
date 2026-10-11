@@ -9,7 +9,7 @@ use game_manager_lib::commands::launch::run_launch_impl;
 use game_manager_lib::db::repo::{games, launch_runs, scripts, sessions};
 use game_manager_lib::domain::{
     Interpreter, LaunchPhase, LaunchRunStatus, LogLevel, MonitorMode, PhaseConfig, PhaseMode,
-    ScriptExecutionStatus, ScriptKind,
+    ScriptExecutionStatus, ScriptKind, ScriptPhase,
 };
 use game_manager_lib::launch::cancel::CancelToken;
 use game_manager_lib::launch::events::{
@@ -422,6 +422,22 @@ async fn cancel_before_start_aborts_without_session() {
     let game_id = state
         .with_db(|conn| games::create(conn, &new_game("CancelEarly")))
         .unwrap();
+    let script_id = state
+        .with_db(|conn| {
+            scripts::create(
+                conn,
+                &normal(
+                    "Tri",
+                    inline("Write-Output 'before'"),
+                    inline("Write-Output 'after'"),
+                    inline("Write-Output 'onexit'"),
+                ),
+            )
+        })
+        .unwrap();
+    state
+        .with_db(|conn| games::set_scripts(conn, game_id, &[script_id]))
+        .unwrap();
 
     // A monitor that would wait a long time for start; cancel pre-empts it.
     let monitor: Arc<dyn Monitor> = Arc::new(StubMonitor::with_delays(
@@ -468,10 +484,26 @@ async fn cancel_before_start_aborts_without_session() {
         .expect("latest run");
     assert_eq!(latest_run.status, LaunchRunStatus::Cancelled);
     assert!(latest_run.play_session_id.is_none());
-    assert!(latest_run
-        .script_records
-        .iter()
-        .all(|record| record.status == ScriptExecutionStatus::NotReached));
+    // Before ran, After was never reached, On-Exit cleanup still ran.
+    let status_of = |phase: ScriptPhase| {
+        latest_run
+            .script_records
+            .iter()
+            .find(|record| record.phase == phase)
+            .map(|record| record.status)
+    };
+    assert_eq!(
+        status_of(ScriptPhase::Before),
+        Some(ScriptExecutionStatus::Succeeded)
+    );
+    assert_eq!(
+        status_of(ScriptPhase::After),
+        Some(ScriptExecutionStatus::NotReached)
+    );
+    assert_eq!(
+        status_of(ScriptPhase::OnExit),
+        Some(ScriptExecutionStatus::Succeeded)
+    );
 }
 
 #[tokio::test]
