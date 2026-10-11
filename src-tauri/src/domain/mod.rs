@@ -447,6 +447,8 @@ pub struct Script {
     pub description: Option<String>,
     /// Mutually-exclusive kind.
     pub kind: ScriptKind,
+    /// Whether the script runs; only honoured for global scripts.
+    pub enabled: bool,
     /// Priority 1–10 (used by normal/global; ignored for utility).
     pub priority: i64,
     /// Before-launch phase (normal/global).

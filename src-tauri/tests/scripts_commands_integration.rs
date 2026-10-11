@@ -7,8 +7,8 @@
 
 use game_manager_lib::commands::scripts::{
     create_script_impl, delete_script_impl, get_script_impl, list_scripts_impl,
-    set_script_dependencies_impl, set_script_kind_impl, update_script_impl, PhaseInput,
-    ScriptUpsertInput,
+    set_script_dependencies_impl, set_script_enabled_impl, set_script_kind_impl,
+    update_script_impl, PhaseInput, ScriptUpsertInput,
 };
 use game_manager_lib::domain::{Interpreter, PhaseMode, ScriptKind};
 use game_manager_lib::state::AppState;
@@ -244,6 +244,28 @@ fn update_missing_script_errors() {
     let state = state();
     let err = update_script_impl(&state, 9, normal_input("X")).expect_err("missing");
     assert_eq!(err.to_string(), "script 9 not found");
+}
+
+#[test]
+fn set_script_enabled_toggles_without_changing_kind() {
+    let state = state();
+    let created = create_script_impl(&state, normal_input("Toggle")).unwrap();
+    assert!(created.enabled, "new scripts default to enabled");
+    let global = set_script_kind_impl(&state, created.id, ScriptKind::Global).unwrap();
+
+    let disabled = set_script_enabled_impl(&state, global.id, false).unwrap();
+    assert!(!disabled.enabled);
+    assert_eq!(disabled.kind, ScriptKind::Global);
+    assert!(!get_script_impl(&state, global.id).unwrap().enabled);
+
+    let enabled = set_script_enabled_impl(&state, global.id, true).unwrap();
+    assert!(enabled.enabled);
+}
+
+#[test]
+fn set_script_enabled_errors_for_missing_script() {
+    let err = set_script_enabled_impl(&state(), 9999, false).expect_err("missing script");
+    assert!(err.to_string().contains("not found"));
 }
 
 #[test]

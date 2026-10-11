@@ -361,6 +361,16 @@ pub fn set_script_kind_impl(state: &AppState, id: i64, kind: ScriptKind) -> AppR
     })
 }
 
+/// Enable or disable a script without changing its kind.
+pub fn set_script_enabled_impl(state: &AppState, id: i64, enabled: bool) -> AppResult<Script> {
+    state.with_db(|conn| {
+        if !scripts::set_enabled(conn, id, enabled)? {
+            return Err(AppError::other(format!("script {id} not found")));
+        }
+        scripts::get(conn, id)
+    })
+}
+
 /// Thin `#[tauri::command]` wrapper delegating to [`list_scripts_impl`].
 #[cfg(not(coverage))]
 #[tauri::command]
@@ -423,4 +433,15 @@ pub fn set_script_kind(
     kind: ScriptKind,
 ) -> AppResult<Script> {
     set_script_kind_impl(&state, id, kind)
+}
+
+/// Thin `#[tauri::command]` wrapper delegating to [`set_script_enabled_impl`].
+#[cfg(not(coverage))]
+#[tauri::command]
+pub fn set_script_enabled(
+    state: tauri::State<'_, AppState>,
+    id: i64,
+    enabled: bool,
+) -> AppResult<Script> {
+    set_script_enabled_impl(&state, id, enabled)
 }

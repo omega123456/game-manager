@@ -9,11 +9,12 @@ import { useToastStore } from '@/stores/toast-store'
 import { emptyPhase } from '@/features/scripts/script-form-types'
 import type { Script } from '@/types/domain'
 
-function script(id: number, name: string, kind: Script['kind']): Script {
+function script(id: number, name: string, kind: Script['kind'], enabled = true): Script {
   return {
     id,
     name,
     kind,
+    enabled,
     priority: 5,
     beforeLaunch: emptyPhase(),
     afterLaunch: emptyPhase(),
@@ -48,23 +49,39 @@ describe('GlobalScriptsSection', () => {
     expect(screen.queryByRole('switch', { name: 'Run Overlay globally' })).not.toBeInTheDocument()
   })
 
-  it('toggles a global script back to normal via set_script_kind', async () => {
+  it('disables a global script without changing its kind', async () => {
     overrideIpcCommands({
       list_scripts: () => [script(1, 'Overlay', 'global')],
-      set_script_kind: (args) => ({ ...script(1, 'Overlay', 'global'), kind: args?.kind }),
+      set_script_enabled: (args) => script(1, 'Overlay', 'global', args?.enabled as boolean),
     })
     const user = userEvent.setup()
     renderWithProviders(<GlobalScriptsSection />)
 
     await user.click(await screen.findByRole('switch', { name: 'Run Overlay globally' }))
-    await waitFor(() => expect(ipc.calls('set_script_kind')).toHaveLength(1))
-    expect(ipc.calls('set_script_kind')[0]).toEqual({ id: 1, kind: 'normal' })
+    await waitFor(() => expect(ipc.calls('set_script_enabled')).toHaveLength(1))
+    expect(ipc.calls('set_script_enabled')[0]).toEqual({ id: 1, enabled: false })
+    expect(ipc.calls('set_script_kind')).toHaveLength(0)
   })
 
-  it('toasts when the kind update fails', async () => {
+  it('keeps disabled global scripts listed and re-enables them', async () => {
+    overrideIpcCommands({
+      list_scripts: () => [script(1, 'Overlay', 'global', false)],
+      set_script_enabled: (args) => script(1, 'Overlay', 'global', args?.enabled as boolean),
+    })
+    const user = userEvent.setup()
+    renderWithProviders(<GlobalScriptsSection />)
+
+    const toggle = await screen.findByRole('switch', { name: 'Run Overlay globally' })
+    expect(toggle).not.toBeChecked()
+    await user.click(toggle)
+    await waitFor(() => expect(ipc.calls('set_script_enabled')).toHaveLength(1))
+    expect(ipc.calls('set_script_enabled')[0]).toEqual({ id: 1, enabled: true })
+  })
+
+  it('toasts when the enabled update fails', async () => {
     overrideIpcCommands({
       list_scripts: () => [script(1, 'Overlay', 'global')],
-      set_script_kind: () => {
+      set_script_enabled: () => {
         throw new Error('db locked')
       },
     })
@@ -74,7 +91,7 @@ describe('GlobalScriptsSection', () => {
     await user.click(await screen.findByRole('switch', { name: 'Run Overlay globally' }))
     await waitFor(() =>
       expect(
-        useToastStore.getState().toasts.some((t) => t.title === 'Could not update global flag')
+        useToastStore.getState().toasts.some((t) => t.title === 'Could not update global script')
       ).toBe(true)
     )
     expect(ipc.calls('log_frontend').length).toBeGreaterThan(0)

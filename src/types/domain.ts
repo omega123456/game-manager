@@ -83,6 +83,8 @@ export interface Script {
   name: string
   description?: string
   kind: ScriptKind
+  /** Whether the script runs; only honoured for global scripts. */
+  enabled: boolean
   priority: number
   beforeLaunch: PhaseConfig
   afterLaunch: PhaseConfig

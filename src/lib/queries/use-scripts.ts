@@ -6,6 +6,7 @@ import {
   getScript,
   listScripts,
   setScriptDependencies,
+  setScriptEnabled,
   setScriptKind,
   updateScript,
   type SaveScriptInput,
@@ -97,6 +98,18 @@ export function useSetScriptKindMutation() {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: ({ id, kind }: { id: number; kind: ScriptKind }) => setScriptKind(id, kind),
+    onSuccess: (script: Script) => {
+      invalidateScripts(queryClient, script.id)
+    },
+  })
+}
+
+/** Enable or disable a script without changing its kind, then refresh caches. */
+export function useSetScriptEnabledMutation() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, enabled }: { id: number; enabled: boolean }) =>
+      setScriptEnabled(id, enabled),
     onSuccess: (script: Script) => {
       invalidateScripts(queryClient, script.id)
     },

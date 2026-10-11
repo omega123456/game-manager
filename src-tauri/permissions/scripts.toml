@@ -36,3 +36,8 @@ commands.allow = ["set_script_dependencies"]
 identifier = "allow-set-script-kind"
 description = "Allows the frontend to change a script's kind via set_script_kind."
 commands.allow = ["set_script_kind"]
+
+[[permission]]
+identifier = "allow-set-script-enabled"
+description = "Allows the frontend to enable or disable a script via set_script_enabled."
+commands.allow = ["set_script_enabled"]

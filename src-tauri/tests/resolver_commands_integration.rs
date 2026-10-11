@@ -222,6 +222,28 @@ fn resolved_scripts_skip_utility_scripts_assigned_to_groups() {
 }
 
 #[test]
+fn resolved_scripts_skip_disabled_global_scripts() {
+    let state = state();
+    let game = create_game_impl(&state, game_input("Disabled Global")).unwrap();
+
+    let (enabled_id, disabled_id) = state
+        .with_db(|conn| {
+            let enabled_id =
+                scripts::create(conn, &global_script("On Global", 5, true, false, false))?;
+            let disabled_id =
+                scripts::create(conn, &global_script("Off Global", 5, true, false, false))?;
+            scripts::set_enabled(conn, disabled_id, false)?;
+            Ok((enabled_id, disabled_id))
+        })
+        .unwrap();
+
+    let resolved = get_resolved_scripts_impl(&state, game.id).unwrap();
+    assert_eq!(resolved.len(), 1);
+    assert_eq!(resolved[0].script_id, enabled_id);
+    assert!(resolved.iter().all(|entry| entry.script_id != disabled_id));
+}
+
+#[test]
 fn resolved_scripts_error_for_missing_game() {
     let state = state();
     let err = get_resolved_scripts_impl(&state, 9999).expect_err("missing game");

@@ -10,6 +10,7 @@ export const SCRIPT_ROWS: Script[] = [
     name: 'HDR Toggle',
     description: 'Enables HDR before launch and restores on exit.',
     kind: 'global',
+    enabled: true,
     priority: 8,
     beforeLaunch: { mode: 'inline', inline: 'Enable-HDR', interpreter: 'powershell' },
     afterLaunch: NONE,
@@ -22,6 +23,7 @@ export const SCRIPT_ROWS: Script[] = [
     id: 2,
     name: 'Auto-Save Manager',
     kind: 'normal',
+    enabled: true,
     priority: 7,
     beforeLaunch: { mode: 'path', path: 'C:/Commands/autosave.ps1' },
     afterLaunch: NONE,
@@ -34,6 +36,7 @@ export const SCRIPT_ROWS: Script[] = [
     id: 4,
     name: 'Gamma Sweep',
     kind: 'normal',
+    enabled: true,
     priority: 6,
     beforeLaunch: { mode: 'inline', inline: 'Run-Gamma', interpreter: 'powershell' },
     afterLaunch: NONE,
@@ -47,6 +50,7 @@ export const SCRIPT_ROWS: Script[] = [
     name: 'SaveLib',
     description: 'Shared helper functions.',
     kind: 'utility',
+    enabled: true,
     priority: 5,
     beforeLaunch: NONE,
     afterLaunch: NONE,
@@ -77,5 +81,9 @@ export const scriptsFixtures: Record<string, PlaywrightFixtureHandler> = {
   set_script_kind: (args) => {
     const existing = SCRIPT_ROWS.find((script) => script.id === args?.id) ?? SCRIPT_ROWS[0]
     return { ...existing, kind: args?.kind }
+  },
+  set_script_enabled: (args) => {
+    const existing = SCRIPT_ROWS.find((script) => script.id === args?.id) ?? SCRIPT_ROWS[0]
+    return { ...existing, enabled: args?.enabled }
   },
 }

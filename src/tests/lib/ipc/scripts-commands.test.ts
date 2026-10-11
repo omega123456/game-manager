@@ -6,6 +6,7 @@ import {
   getScript,
   listScripts,
   setScriptDependencies,
+  setScriptEnabled,
   setScriptKind,
   updateScript,
   type SaveScriptInput,
@@ -20,6 +21,7 @@ const UTILITY: Script = {
   id: 3,
   name: 'SaveLib',
   kind: 'utility',
+  enabled: true,
   priority: 5,
   beforeLaunch: NONE,
   afterLaunch: NONE,
@@ -80,5 +82,15 @@ describe('scripts-commands', () => {
     ipc.override('set_script_kind', (args) => ({ ...UTILITY, id: args?.id, kind: args?.kind }))
     await expect(setScriptKind(3, 'global')).resolves.toMatchObject({ kind: 'global' })
     expect(ipc.calls('set_script_kind')).toEqual([{ id: 3, kind: 'global' }])
+  })
+
+  it('sets the script enabled flag', async () => {
+    ipc.override('set_script_enabled', (args) => ({
+      ...UTILITY,
+      id: args?.id,
+      enabled: args?.enabled,
+    }))
+    await expect(setScriptEnabled(3, false)).resolves.toMatchObject({ enabled: false })
+    expect(ipc.calls('set_script_enabled')).toEqual([{ id: 3, enabled: false }])
   })
 })

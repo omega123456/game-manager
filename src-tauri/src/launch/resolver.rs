@@ -170,7 +170,7 @@ pub fn resolve_for_game(conn: &Connection, game_id: i64) -> AppResult<Vec<Resolv
 
     for script in all_scripts
         .iter()
-        .filter(|script| script.kind == ScriptKind::Global)
+        .filter(|script| script.kind == ScriptKind::Global && script.enabled)
     {
         let next = CandidateEntry {
             script: script.clone(),

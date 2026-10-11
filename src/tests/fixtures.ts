@@ -82,6 +82,7 @@ export const IPC_FIXTURES: Record<string, IpcHandler> = {
   delete_script: () => undefined,
   set_script_dependencies: (args) => args?.dependsOn ?? [],
   set_script_kind: (args) => ({ id: args?.id, kind: args?.kind }),
+  set_script_enabled: (args) => ({ id: args?.id, enabled: args?.enabled }),
 
   // --- Launch. Phase E1 introduces the orchestrator + wrappers; defaults keep
   //     the harness quiet. Progress arrives via `launch://*` events (use

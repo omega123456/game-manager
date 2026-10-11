@@ -64,6 +64,7 @@ fn map_script(row: &Row<'_>) -> rusqlite::Result<Script> {
         name: row.get("name")?,
         description: row.get("description")?,
         kind,
+        enabled: row.get("enabled")?,
         priority: row.get("priority")?,
         before_launch: map_phase(
             row,
@@ -248,6 +249,15 @@ pub fn set_kind(conn: &Connection, id: i64, kind: ScriptKind) -> AppResult<bool>
     let changed = conn.execute(
         "UPDATE scripts SET kind = ?2 WHERE id = ?1",
         params![id, kind.as_db_str()],
+    )?;
+    Ok(changed > 0)
+}
+
+/// Update only a script's enabled flag. Returns whether a row changed.
+pub fn set_enabled(conn: &Connection, id: i64, enabled: bool) -> AppResult<bool> {
+    let changed = conn.execute(
+        "UPDATE scripts SET enabled = ?2 WHERE id = ?1",
+        params![id, enabled],
     )?;
     Ok(changed > 0)
 }

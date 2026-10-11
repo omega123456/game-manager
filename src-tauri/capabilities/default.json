@@ -37,6 +37,7 @@
     "allow-delete-script",
     "allow-set-script-dependencies",
     "allow-set-script-kind",
+    "allow-set-script-enabled",
     "allow-search-art",
     "allow-fetch-metadata",
     "allow-cache-art-candidate",

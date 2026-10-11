@@ -215,6 +215,7 @@ pub fn run() {
             commands::scripts::delete_script,
             commands::scripts::set_script_dependencies,
             commands::scripts::set_script_kind,
+            commands::scripts::set_script_enabled,
             commands::art::search_art,
             commands::art::fetch_metadata,
             commands::art::cache_art_candidate,

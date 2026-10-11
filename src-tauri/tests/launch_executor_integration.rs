@@ -29,6 +29,7 @@ fn script(id: i64, name: &str, kind: ScriptKind) -> Script {
         name: name.to_string(),
         description: None,
         kind,
+        enabled: true,
         priority: 5,
         before_launch: none(),
         after_launch: none(),

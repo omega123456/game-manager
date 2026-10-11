@@ -51,3 +51,8 @@ export function setScriptDependencies(scriptId: number, dependsOn: number[]): Pr
 export function setScriptKind(id: number, kind: ScriptKind): Promise<Script> {
   return invoke<Script>('set_script_kind', { id, kind })
 }
+
+/** Enable or disable a script without changing its kind; returns the hydrated row. */
+export function setScriptEnabled(id: number, enabled: boolean): Promise<Script> {
+  return invoke<Script>('set_script_enabled', { id, enabled })
+}

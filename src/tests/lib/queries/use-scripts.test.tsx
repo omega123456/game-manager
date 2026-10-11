@@ -9,6 +9,7 @@ import {
   useScriptQuery,
   useScriptsQuery,
   useSetScriptDependenciesMutation,
+  useSetScriptEnabledMutation,
   useSetScriptKindMutation,
   useUpdateScriptMutation,
 } from '@/lib/queries/use-scripts'
@@ -22,6 +23,7 @@ const SCRIPT_ROW: Script = {
   id: 1,
   name: 'Auto-Save',
   kind: 'normal',
+  enabled: true,
   priority: 7,
   beforeLaunch: { mode: 'inline', inline: 'Write-Host hi', interpreter: 'powershell' },
   afterLaunch: { mode: 'none' },
@@ -142,5 +144,17 @@ describe('script mutations', () => {
     await result.current.mutateAsync({ id: 1, kind: 'global' })
     await waitFor(() => expect(result.current.isSuccess).toBe(true))
     expect(ipc.calls('set_script_kind')).toEqual([{ id: 1, kind: 'global' }])
+  })
+
+  it('sets the enabled flag', async () => {
+    ipc.override('set_script_enabled', (args) => ({
+      ...SCRIPT_ROW,
+      id: args?.id,
+      enabled: args?.enabled,
+    }))
+    const { result } = renderHook(() => useSetScriptEnabledMutation(), { wrapper: wrapper() })
+    await result.current.mutateAsync({ id: 1, enabled: false })
+    await waitFor(() => expect(result.current.isSuccess).toBe(true))
+    expect(ipc.calls('set_script_enabled')).toEqual([{ id: 1, enabled: false }])
   })
 })
